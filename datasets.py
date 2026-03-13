@@ -100,19 +100,30 @@ class RAN_Dataset():
             right_size=self.test_fraction,
             shuffle=False,
         )
-        train = train.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        train_buffer_size: tf.Tensor | int = tf.data.experimental.cardinality(train)
+        if train_buffer_size == tf.data.UNKNOWN_CARDINALITY:
+            train_buffer_size = self.batch_size * 10
+        elif train_buffer_size == tf.data.INFINITE_CARDINALITY:
+            raise ValueError("Train dataset has infinite cardinality")
+        train = train.shuffle(
+            buffer_size= train_buffer_size,
+            seed=self.seed,
+            reshuffle_each_iteration=True,
+        ).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         return DatasetSplits(train, test)
 
     def generate_gaussian_dataset(self,
         n_samples: int = 10 ** 6,
         smearing: float = 1.0,
-        ) -> None:
+        ) -> DatasetSplits:
         """
         Generate a Gaussian dataset.
         Arguments:
             n_samples (int)
             smearing (float)
+        Returns:
+            DatasetSplits
         """
         cache_path: Path = self._cache_path(n_samples, smearing)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -140,4 +151,4 @@ class RAN_Dataset():
         
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)
-        return
+        return self.splits

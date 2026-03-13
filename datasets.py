@@ -13,9 +13,11 @@ class DatasetSplits(NamedTuple):
     Named tuple representing dataset splits.
     Fields:
         train (tf.data.Dataset)
+        val (tf.data.Dataset)
         test (tf.data.Dataset)
     """
     train: tf.data.Dataset
+    val: tf.data.Dataset
     test: tf.data.Dataset
 
 class RAN_Dataset():
@@ -25,7 +27,7 @@ class RAN_Dataset():
         batch_size (int)
         seed (int): Random seed.
         cache_dir (str | Path)
-        train_fraction (float)
+        val_fraction (float)
         test_fraction (float)
     Attributes:
         dataset (tf.data.Dataset)
@@ -38,6 +40,7 @@ class RAN_Dataset():
         batch_size: int = 128,
         seed: int = 42,
         cache_dir: str | Path = ".cache",
+        val_fraction: float = 0.1,
         test_fraction: float = 0.2,
     ) -> None:
         self.batch_size = batch_size
@@ -46,7 +49,12 @@ class RAN_Dataset():
 
         if test_fraction < 0 or test_fraction > 1:
             raise ValueError("test_fraction must be between 0 and 1")
+        if val_fraction < 0 or val_fraction > 1:
+            raise ValueError("val_fraction must be between 0 and 1")
+        if val_fraction + test_fraction >= 1:
+            raise ValueError("val_fraction + test_fraction must be < 1")
 
+        self.val_fraction = val_fraction
         self.test_fraction = test_fraction
         self.dataset: tf.data.Dataset | None = None
         self.splits: DatasetSplits | None = None
@@ -93,11 +101,19 @@ class RAN_Dataset():
         return dataset
 
     def _split_dataset(self, dataset: tf.data.Dataset) -> DatasetSplits:
-        train: tf.data.Dataset
+        non_test: tf.data.Dataset
         test: tf.data.Dataset
-        train, test = split_dataset(
+        non_test, test = split_dataset(
             dataset,
             right_size=self.test_fraction,
+            shuffle=False,
+        )
+        val_of_non_test: float = self.val_fraction / (1.0 - self.test_fraction)
+        train: tf.data.Dataset
+        val: tf.data.Dataset
+        train, val = split_dataset(
+            non_test,
+            right_size=val_of_non_test,
             shuffle=False,
         )
         train_buffer_size: tf.Tensor | int = tf.data.experimental.cardinality(train)
@@ -106,12 +122,13 @@ class RAN_Dataset():
         elif train_buffer_size == tf.data.INFINITE_CARDINALITY:
             raise ValueError("Train dataset has infinite cardinality")
         train = train.shuffle(
-            buffer_size= train_buffer_size,
+            buffer_size=train_buffer_size,
             seed=self.seed,
             reshuffle_each_iteration=True,
         ).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        val = val.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        return DatasetSplits(train, test)
+        return DatasetSplits(train, val, test)
 
     def generate_gaussian_dataset(self,
         n_samples: int = 10 ** 6,

@@ -1,5 +1,6 @@
 import tensorflow as tf
 import keras
+import numpy as np
 
 from datasets import RAN_Dataset, DatasetSplits
 from models import build_generator, build_discriminator
@@ -67,11 +68,11 @@ def _eval_step(
     z: tf.Tensor,
     x: tf.Tensor,
     y: tf.Tensor,
-) -> tuple[float, float]:
-    w = _compute_weights(g, z, y)
-    d_out = tf.squeeze(d(x, training=False), axis=-1)
-    d_loss = float(_weighted_bce(d_out, y, w))
-    g_loss = -d_loss
+) -> tuple[np.double, np.double]:
+    w: tf.Tensor = _compute_weights(g, z, y)
+    d_out: tf.Tensor = tf.squeeze(d(x, training=False), axis=-1)
+    d_loss: np.double = _weighted_bce(d_out, y, w).numpy()
+    g_loss: np.double = -d_loss
     return d_loss, g_loss
 
 
@@ -80,16 +81,20 @@ def _eval_dataset(
     d: keras.Model,
     dataset: tf.data.Dataset,
 ) -> tuple[float, float]:
-    d_vals: list[float] = []
-    g_vals: list[float] = []
+    d_sum: float = 0.0
+    g_sum: float = 0.0
+    n_batches: int = 0
     for features, y in dataset:
-        z = tf.cast(features["z"], tf.float32)
-        x = tf.cast(features["x"], tf.float32)
-        y_f = tf.cast(tf.squeeze(y, axis=-1), tf.float32)
+        z: tf.Tensor = tf.cast(features["z"], tf.double)
+        x: tf.Tensor = tf.cast(features["x"], tf.double)
+        y_f: tf.Tensor = tf.cast(tf.squeeze(y, axis=-1), tf.double)
+        g_l: np.double
+        d_l: np.double
         d_l, g_l = _eval_step(g, d, z, x, y_f)
-        d_vals.append(d_l)
-        g_vals.append(-g_l)
-    return sum(d_vals) / len(d_vals), sum(g_vals) / len(g_vals)
+        d_sum += d_l
+        g_sum -= g_l
+        n_batches += 1
+    return d_sum / n_batches, g_sum / n_batches
 
 
 def train(
@@ -102,51 +107,69 @@ def train(
     smearing: float = 1.0,
     patience: int = 5,
     min_delta: float = 1e-4,
-) -> tuple[keras.Model, keras.Model, DatasetSplits, dict[str, list[float]]]:
-    splits = RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
-        n_samples=n_samples, smearing=smearing,
+) -> tuple[keras.Model, keras.Model, DatasetSplits, dict[str, list[float | np.floating]]]:
+    """Train the generator and discriminator.
+    Arguments:
+        n_epochs (int)
+        n_disc_steps (int)
+        lr_g (float)
+        lr_d (float)
+        batch_size (int)
+        n_samples (int)
+        smearing (float)
+        patience (int)
+        min_delta (float)
+    Returns:
+        tuple[
+            g (keras.Model): Generator model.
+            d (keras.Model): Discriminator model.
+            splits (DatasetSplits)
+            history (dict[str, list[float | np.floating]]): Training history.
+        ]
+    """
+    splits: DatasetSplits = RAN_Dataset(
+        batch_size=batch_size
+        ).generate_gaussian_dataset(
+        n_samples=n_samples,
+        smearing=smearing,
     )
-    g = build_generator()
-    d = build_discriminator()
-    opt_g = keras.optimizers.Adam(learning_rate=lr_g)
-    opt_d = keras.optimizers.Adam(learning_rate=lr_d)
-
-    history: dict[str, list[float]] = {
-        "train_d": [], "train_g": [], "val_d": [], "val_g": [],
-    }
-
-    best_val_d = -float("inf")
+    g: keras.Model = build_generator()
+    d: keras.Model = build_discriminator()
+    opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
+    opt_d: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_d)
+    history: dict[str, list[float | np.floating]] = { "train_d": [], "train_g": [], "val_d": [], "val_g": [], }
+    best_val_d: float = -np.inf
     best_g_weights: list | None = None
     best_d_weights: list | None = None
-    wait = 0
+    wait: int = 0
 
     for epoch in range(n_epochs):
-        d_losses: list[float] = []
-        g_losses: list[float] = []
+        d_losses: list[np.double] = []
+        g_losses: list[np.double] = []
         for step, (features, y) in enumerate(splits.train):
-            z = tf.cast(features["z"], tf.float32)
-            x = tf.cast(features["x"], tf.float32)
-            y_f = tf.cast(tf.squeeze(y, axis=-1), tf.float32)
+            z: tf.Tensor = tf.cast(features["z"], tf.double)
+            x: tf.Tensor = tf.cast(features["x"], tf.double)
+            y_f: tf.Tensor = tf.cast(tf.squeeze(y, axis=-1), tf.double)
 
-            d_loss = _disc_step(g, d, opt_d, z, x, y_f)
-            d_losses.append(float(d_loss))
+            d_loss: tf.Tensor = _disc_step(g, d, opt_d, z, x, y_f)
+            d_losses.append(d_loss.numpy())
 
             if step % n_disc_steps == 0:
-                g_loss = _gen_step(g, d, opt_g, z, x, y_f)
-                g_losses.append(float(-g_loss))
+                g_loss: tf.Tensor = _gen_step(g, d, opt_g, z, x, y_f)
+                g_losses.append(-g_loss.numpy())
 
-        mean_td = sum(d_losses) / len(d_losses)
-        mean_tg = sum(g_losses) / len(g_losses)
-        mean_vd, mean_vg = _eval_dataset(g, d, splits.val)
+        mean_td: np.floating = np.mean(d_losses)
+        mean_tg: np.floating = np.mean(g_losses)
+        mean_val: tuple[float, float] = _eval_dataset(g, d, splits.val)
 
         history["train_d"].append(mean_td)
         history["train_g"].append(mean_tg)
-        history["val_d"].append(mean_vd)
-        history["val_g"].append(mean_vg)
+        history["val_d"].append(mean_val[0])
+        history["val_g"].append(mean_val[1])
 
         # Early stopping: higher val D = better convergence toward log(2)
-        if mean_vd > best_val_d + min_delta:
-            best_val_d = mean_vd
+        if mean_val[0] > best_val_d + min_delta:
+            best_val_d = mean_val[0]
             best_g_weights = [w.numpy().copy() for w in g.trainable_variables]
             best_d_weights = [w.numpy().copy() for w in d.trainable_variables]
             wait = 0
@@ -156,20 +179,20 @@ def train(
         print(
             f"Epoch {epoch + 1:3d}/{n_epochs}"
             f"  D: {mean_td:.4f}  G: {mean_tg:.4f}"
-            f"  | Val D: {mean_vd:.4f}  G: {mean_vg:.4f}"
+            f"  | Val D: {mean_val[0]:.4f}  G: {mean_val[1]:.4f}"
             f"  (patience {wait}/{patience})"
         )
 
         if wait >= patience:
             print(f"Early stopping at epoch {epoch + 1}")
-            for var, val in zip(g.trainable_variables, best_g_weights):
+            for var, val in zip(g.trainable_variables, best_g_weights or []):
                 var.assign(val)
-            for var, val in zip(d.trainable_variables, best_d_weights):
+            for var, val in zip(d.trainable_variables, best_d_weights or []):
                 var.assign(val)
             break
 
     # Final test evaluation
-    test_d, test_g = _eval_dataset(g, d, splits.test)
-    print(f"Test  D: {test_d:.4f}  G: {test_g:.4f}")
+    test: tuple[float, float] = _eval_dataset(g, d, splits.test)
+    print(f"Test  D: {test[0]:.4f}  G: {test[1]:.4f}")
 
     return g, d, splits, history

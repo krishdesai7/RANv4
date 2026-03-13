@@ -15,6 +15,11 @@ mpl.rcParams["font.serif"] = "Cochineal"
 mpl.rcParams["font.size"] = 18
 mpl.rcParams["text.usetex"] = True
 mpl.rcParams["axes.grid"] = True
+mpl.rcParams["grid.color"] = "0.85"
+mpl.rcParams["grid.linewidth"] = 0.5
+mpl.rcParams["grid.alpha"] = 0.6
+mpl.rcParams["grid.linestyle"] = "--"
+mpl.rcParams["lines.markerfacecolor"] = "none"
 
 def _collect_data(
     dataset: tf.data.Dataset,
@@ -83,6 +88,7 @@ def _hist_ratio_panel(
     ax_r.plot(centres, ratio_comp, color="C1", marker="o")
     ax_r.plot(centres, ratio_rwt, color="black", marker="^",linestyle="--")
     ax_r.axhline(1, color="gray", linewidth=0.5)
+    ax_r.set_ylim(0, 2)
     ax_r.set_ylabel(f"Ratio to {ref_label}")
     ax_r.set_xlabel(xlabel)
 
@@ -189,12 +195,12 @@ def plot_losses(
     val_d: npt.NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
     train_g: npt.NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
     val_g: npt.NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
-    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":")
-    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--")
-    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":")
-    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--")
-    ax.axhline(np.log(2), color="gray", linestyle="-", linewidth=1,
-               label=f"log(2) = {np.log(2):.4f}")
+    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw = 1)
+    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw = 3, alpha = 0.5)
+    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw = 1)
+    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw = 3, alpha = 0.5)
+    ax.axhline(np.log(2), color="gray", linestyle="-", linewidth=2,
+               zorder=10, label=r"$\log(2)$")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("WeightedBCE")
     ax.set_title("Training History")

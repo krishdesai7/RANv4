@@ -1,5 +1,8 @@
+from train import train
+
+
 def main():
-    print("Hello from ranv4!")
+    g, d = train()
 
 
 if __name__ == "__main__":

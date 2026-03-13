@@ -414,12 +414,14 @@ name = "ranv4"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "keras" },
     { name = "numpy" },
     { name = "tensorflow" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "keras", specifier = ">=3.13.2" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "tensorflow", specifier = ">=2.21.0" },
 ]

@@ -1,51 +1,78 @@
-from collections.abc import Iterator
-import numpy as np
-import numpy.typing as npt
-import tensorflow as tf
+from typing import NamedTuple
 from pathlib import Path
 import hashlib, json
+
+import numpy as np
+import numpy.typing as npt
+
+import tensorflow as tf
+from keras.utils import split_dataset
+
+class DatasetSplits(NamedTuple):
+    """
+    Named tuple representing dataset splits.
+    Fields:
+        train (tf.data.Dataset)
+        test (tf.data.Dataset)
+    """
+    train: tf.data.Dataset
+    test: tf.data.Dataset
 
 class RAN_Dataset():
     """
     Dataset class for RAN.
     Arguments:
         batch_size (int)
-        shuffle (bool)
         seed (int): Random seed.
         cache_dir (str | Path)
+        train_fraction (float)
+        test_fraction (float)
     Attributes:
         dataset (tf.data.Dataset)
+        splits (DatasetSplits)
+
     Methods:
         generate_gaussian_dataset
     """
     def __init__(self,
         batch_size: int = 128,
-        shuffle: bool = True,
         seed: int = 42,
         cache_dir: str | Path = ".cache",
+        test_fraction: float = 0.2,
     ) -> None:
         self.batch_size = batch_size
-        self.shuffle = shuffle
         self.seed = seed
         self.cache_dir = Path(cache_dir)
+
+        if test_fraction < 0 or test_fraction > 1:
+            raise ValueError("test_fraction must be between 0 and 1")
+
+        self.test_fraction = test_fraction
         self.dataset: tf.data.Dataset | None = None
+        self.splits: DatasetSplits | None = None
     
     def _cache_key(self,
         n_samples: int,
         smearing: float,
+        test_fraction: float,
     ) -> str:
         return hashlib.sha256(
             json.dumps({
                 "n_samples": n_samples,
                 "smearing": smearing,
                 "seed": self.seed,
+                "test_fraction": test_fraction,
             }, sort_keys=True
             ).encode("utf-8")
         ).hexdigest()[:16]
 
     def _cache_path(self, n_samples: int, smearing: float) -> Path:
-        filename: Path = Path(f"gaussian_{self._cache_key(n_samples, smearing)}.npz")
-        return self.cache_dir / filename
+        cache_key: str = self._cache_key(
+            n_samples,
+            smearing,
+            self.test_fraction,
+        )
+        return self.cache_dir / f"gaussian_{cache_key}.npz"
     
     def _build_dataset(
         self,
@@ -58,24 +85,34 @@ class RAN_Dataset():
             "x": x, # Detector level
         }
         dataset: tf.data.Dataset = tf.data.Dataset.from_tensor_slices((features, y))
-        if self.shuffle:
-            dataset = dataset.shuffle(
-                buffer_size=len(y),
-                seed = self.seed,
-                )
-        return dataset.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        dataset = dataset.shuffle(
+            buffer_size=len(y),
+            seed=self.seed,
+            reshuffle_each_iteration=False,
+            )
+        return dataset
+
+    def _split_dataset(self, dataset: tf.data.Dataset) -> DatasetSplits:
+        train: tf.data.Dataset
+        test: tf.data.Dataset
+        train, test = split_dataset(
+            dataset,
+            right_size=self.test_fraction,
+            shuffle=False,
+        )
+        train = train.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        return DatasetSplits(train, test)
 
     def generate_gaussian_dataset(self,
         n_samples: int = 10 ** 6,
         smearing: float = 1.0,
-        ) -> tf.data.Dataset:
+        ) -> None:
         """
         Generate a Gaussian dataset.
         Arguments:
             n_samples (int)
             smearing (float)
-        Returns:
-            tf.data.Dataset
         """
         cache_path: Path = self._cache_path(n_samples, smearing)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -100,11 +137,7 @@ class RAN_Dataset():
             y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
+        
         self.dataset = self._build_dataset(z, x, y)
-        return self.dataset
-
-
-    def __iter__(self) -> Iterator[tuple[dict[str, tf.Tensor], tf.Tensor]]:
-        if self.dataset is None:
-            raise ValueError("Dataset not generated")
-        return iter(self.dataset)
+        self.splits = self._split_dataset(self.dataset)
+        return

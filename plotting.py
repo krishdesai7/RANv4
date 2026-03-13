@@ -3,12 +3,18 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import figure, axes
 
 import tensorflow as tf
 import keras
 
+mpl.rcParams["font.family"] = "serif"
+mpl.rcParams["font.serif"] = "Cochineal"
+mpl.rcParams["font.size"] = 18
+mpl.rcParams["text.usetex"] = True
+mpl.rcParams["axes.grid"] = True
 
 def _collect_data(
     dataset: tf.data.Dataset,
@@ -164,23 +170,29 @@ def plot_particle_level(
 
 
 def plot_losses(
-    history: dict[str, npt.NDArray[np.double]],
+    history: dict[str, list[float | np.floating]],
     save_path: str | Path = "plots/losses.pdf",
 ) -> None:
     """Generate loss curves.
     Arguments:
-        history (dict[str, npt.NDArray[np.double]]): Training history.
+        history (dict[str, list[float | np.floating]]): Training history.
         save_path (str | Path)
     """
+    if isinstance(save_path, str):
+        save_path = Path(save_path)
     epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
 
     fig: figure.Figure
     ax: axes.Axes
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(epochs, history["train_d"], label="Train D", color="C0", ls=":")
-    ax.plot(epochs, history["val_d"], label="Val D", color="C0", ls="--")
-    ax.plot(epochs, history["train_g"], label="Train G", color="C1", ls=":")
-    ax.plot(epochs, history["val_g"], label="Val G", color="C1", ls="--")
+    train_d: npt.NDArray[np.double] = np.array(history["train_d"], dtype=np.double)
+    val_d: npt.NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
+    train_g: npt.NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
+    val_g: npt.NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
+    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":")
+    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--")
+    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":")
+    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--")
     ax.axhline(np.log(2), color="gray", linestyle="-", linewidth=1,
                label=f"log(2) = {np.log(2):.4f}")
     ax.set_xlabel("Epoch")

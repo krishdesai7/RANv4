@@ -94,7 +94,7 @@ def _eval_dataset(
     for features, y in dataset:
         z: tf.Tensor = tf.cast(features["z"], tf.double)
         x: tf.Tensor = tf.cast(features["x"], tf.double)
-        y_f: tf.Tensor = tf.cast(tf.squeeze(y, axis=-1), tf.double)
+        y_f: tf.Tensor = tf.cast(tf.reshape(y, [-1]), tf.double)
         g_l: np.double
         d_l: np.double
         d_l, g_l = _eval_step(g, d, z, x, y_f)
@@ -147,7 +147,7 @@ def train(
         for step, (features, y) in enumerate(splits.train):
             z: tf.Tensor = tf.cast(features["z"], tf.double)
             x: tf.Tensor = tf.cast(features["x"], tf.double)
-            y_f: tf.Tensor = tf.cast(tf.squeeze(y, axis=-1), tf.double)
+            y_f: tf.Tensor = tf.cast(tf.reshape(y, [-1]), tf.double)
 
             d_loss: tf.Tensor = _disc_step(g, d, opt_d, z, x, y_f)
             d_losses.append(d_loss.numpy())

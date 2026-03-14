@@ -34,14 +34,14 @@ def _collect_data(
         ys.append(y)
 
     return (
-        np.concatenate(zs, axis=0).reshape(-1),
-        np.concatenate(xs, axis=0).reshape(-1),
-        np.concatenate(ys, axis=0).reshape(-1),
+        np.concatenate(zs, axis=0),   # (n_events, dim)
+        np.concatenate(xs, axis=0),   # (n_events, dim)
+        np.concatenate(ys, axis=0).reshape(-1),  # (n_events,)
     )
 
 
 def _get_weights(g: keras.Model, z_gen: npt.NDArray) -> npt.NDArray:
-    raw_w = g(z_gen[:, np.newaxis]).numpy().flatten()
+    raw_w = g(z_gen).numpy().flatten()
     return raw_w * len(z_gen) / raw_w.sum()
 
 
@@ -120,21 +120,26 @@ def plot_detector_level(
     z_gen: npt.NDArray[np.double] = z[y == 0]
     w: npt.NDArray[np.double] = _get_weights(g, z_gen)
 
-    bins: npt.NDArray[np.double] = np.linspace(x_data.min(), x_data.max(), 51)
+    save_path = Path(save_path)
+    dim: int = x.shape[1]
+    for i in range(dim):
+        suffix: str = f"_dim{i}" if dim > 1 else ""
+        dim_path: Path = save_path.with_stem(save_path.stem + suffix)
+        bins: npt.NDArray[np.double] = np.linspace(x_data[:, i].min(), x_data[:, i].max(), 51)
 
-    _hist_ratio_panel(
-        ref=x_data,
-        comp=x_sim,
-        rwt_vals=x_sim,
-        rwt_weights=w,
-        bins=bins,
-        ref_label="Data",
-        comp_label="Sim",
-        rwt_label="Reweighted Sim",
-        xlabel="x (detector level)",
-        title="Detector Level",
-        save_path=Path(save_path),
-    )
+        _hist_ratio_panel(
+            ref=x_data[:, i],
+            comp=x_sim[:, i],
+            rwt_vals=x_sim[:, i],
+            rwt_weights=w,
+            bins=bins,
+            ref_label="Data",
+            comp_label="Sim",
+            rwt_label="Reweighted Sim",
+            xlabel=f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)",
+            title=f"Detector Level — Dim {i}" if dim > 1 else "Detector Level",
+            save_path=dim_path,
+        )
 
 
 def plot_particle_level(
@@ -156,23 +161,28 @@ def plot_particle_level(
     z_gen: npt.NDArray[np.double] = z[y == 0]
     w: npt.NDArray[np.double] = _get_weights(g, z_gen)
 
-    lo: float = min(z_true.min(), z_gen.min())
-    hi: float = max(z_true.max(), z_gen.max())
-    bins: npt.NDArray[np.double] = np.linspace(lo, hi, 51)
+    save_path = Path(save_path)
+    dim: int = z.shape[1]
+    for i in range(dim):
+        suffix: str = f"_dim{i}" if dim > 1 else ""
+        dim_path: Path = save_path.with_stem(save_path.stem + suffix)
+        lo: float = min(z_true[:, i].min(), z_gen[:, i].min())
+        hi: float = max(z_true[:, i].max(), z_gen[:, i].max())
+        bins: npt.NDArray[np.double] = np.linspace(lo, hi, 51)
 
-    _hist_ratio_panel(
-        ref=z_true,
-        comp=z_gen,
-        rwt_vals=z_gen,
-        rwt_weights=w,
-        bins=bins,
-        ref_label="Truth",
-        comp_label="Gen",
-        rwt_label="Reweighted Gen",
-        xlabel="z (particle level)",
-        title="Particle Level",
-        save_path=Path(save_path),
-    )
+        _hist_ratio_panel(
+            ref=z_true[:, i],
+            comp=z_gen[:, i],
+            rwt_vals=z_gen[:, i],
+            rwt_weights=w,
+            bins=bins,
+            ref_label="Truth",
+            comp_label="Gen",
+            rwt_label="Reweighted Gen",
+            xlabel=f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)",
+            title=f"Particle Level — Dim {i}" if dim > 1 else "Particle Level",
+            save_path=dim_path,
+        )
 
 
 def plot_losses(

@@ -106,6 +106,7 @@ def _eval_dataset(
 
 def train(
     splits: DatasetSplits,
+    dim: int = 1,
     n_epochs: int = 100,
     n_disc_steps: int = 5,
     lr_g: float = 1e-4,
@@ -116,7 +117,8 @@ def train(
     """Train the generator and discriminator.
     Arguments:
         splits (DatasetSplits)
-        n_epochs (int)  
+        dim (int): Input dimensionality.
+        n_epochs (int)
         n_disc_steps (int)
         lr_g (float)
         lr_d (float)
@@ -129,8 +131,8 @@ def train(
             history (dict[str, list[float | np.floating]]): Training history.
         ]
     """
-    g: keras.Model = build_generator()
-    d: keras.Model = build_discriminator()
+    g: keras.Model = build_generator(dim=dim)
+    d: keras.Model = build_discriminator(dim=dim)
     opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
     opt_d: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_d)
     history: dict[str, list[float | np.floating]] = { "train_d": [], "train_g": [], "val_d": [], "val_g": [], }

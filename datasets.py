@@ -63,6 +63,7 @@ class RAN_Dataset():
         n_samples: int,
         smearing: float,
         test_fraction: float,
+        dim: int,
     ) -> str:
         return hashlib.sha256(
             json.dumps({
@@ -70,15 +71,17 @@ class RAN_Dataset():
                 "smearing": smearing,
                 "seed": self.seed,
                 "test_fraction": test_fraction,
+                "dim": dim,
             }, sort_keys=True
             ).encode("utf-8")
         ).hexdigest()[:16]
 
-    def _cache_path(self, n_samples: int, smearing: float) -> Path:
+    def _cache_path(self, n_samples: int, smearing: float, dim: int) -> Path:
         cache_key: str = self._cache_key(
             n_samples,
             smearing,
             self.test_fraction,
+            dim,
         )
         return self.cache_dir / f"gaussian_{cache_key}.npz"
     
@@ -133,16 +136,18 @@ class RAN_Dataset():
     def generate_gaussian_dataset(self,
         n_samples: int = 10 ** 6,
         smearing: float = 1.0,
+        dim: int = 1,
         ) -> DatasetSplits:
         """
         Generate a Gaussian dataset.
         Arguments:
             n_samples (int)
             smearing (float)
+            dim (int): Number of dimensions.
         Returns:
             DatasetSplits
         """
-        cache_path: Path = self._cache_path(n_samples, smearing)
+        cache_path: Path = self._cache_path(n_samples, smearing, dim)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         if cache_path.exists():
             print(f"Loading dataset from cache: {cache_path}")
@@ -153,13 +158,13 @@ class RAN_Dataset():
         else:
             rng: np.random.Generator = np.random.default_rng(self.seed)
 
-            z_true: npt.NDArray[np.double] = rng.normal(size=(n_samples, 1))
+            z_true: npt.NDArray[np.double] = rng.normal(size=(n_samples, dim))
             x_data: npt.NDArray[np.double] = rng.normal(z_true, smearing)
-            y_nat: npt.NDArray[np.ubyte] = np.ones_like(z_true, dtype=np.ubyte)
+            y_nat: npt.NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
 
-            z_gen: npt.NDArray[np.double] = rng.normal(loc = 0.5, scale=0.9, size=(n_samples, 1))
+            z_gen: npt.NDArray[np.double] = rng.normal(loc=0.5, scale=0.9, size=(n_samples, dim))
             x_sim: npt.NDArray[np.double] = rng.normal(z_gen, smearing)
-            y_MC: npt.NDArray[np.ubyte] = np.zeros_like(z_gen, dtype=np.ubyte)
+            y_MC: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
 
             z: npt.NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
             x: npt.NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
@@ -167,7 +172,7 @@ class RAN_Dataset():
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
             print(f"Generated and saved dataset to cache: {cache_path}")
-        
+
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)
         return self.splits

@@ -14,6 +14,7 @@ def main(
     batch_size: int = 1024,
     n_samples: int = 500_000,
     smearing: float = 0.5,
+    dim: int = 1,
 ) -> None:
     """
     Main entry point.
@@ -24,10 +25,11 @@ def main(
         ).generate_gaussian_dataset(
         n_samples=n_samples,
         smearing=smearing,
+        dim=dim,
     )
     g: keras.Model
     history: dict[str, list[float | np.floating]]
-    g, _, history = train(splits)
+    g, _, history = train(splits, dim=dim)
 
     run_dir: Path = Path("plots") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)

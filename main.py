@@ -77,12 +77,12 @@ def main(
     if load_run is not None:
         run_dir = Path(load_run)
         config = json.loads((run_dir / "config.json").read_text())
-        dataset = config["dataset"]
+        dataset = config.get("dataset", "gaussian")
         n_samples = config["n_samples"]
         batch_size = config["batch_size"]
         dim = config["dim"]
         if dataset == "gaussian":
-            smearing = config["smearing"]
+            smearing = config.get("smearing", smearing)
         else:
             variables = tuple(config["variables"])
 

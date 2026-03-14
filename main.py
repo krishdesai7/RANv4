@@ -12,7 +12,26 @@ from plotting import (
 
 import keras
 import numpy as np
-from scipy.stats import wasserstein_distance_nd
+from scipy.stats import wasserstein_distance, wasserstein_distance_nd
+
+
+def _wd(u: np.ndarray, v: np.ndarray, **kwargs) -> float:
+    """Wasserstein distance: 1D fast path (sorted CDF) or nD (LP solver, subsampled)."""
+    if u.ndim == 1 or u.shape[1] == 1:
+        a = u.ravel()
+        b = v.ravel()
+        w = kwargs.get("v_weights")
+        return wasserstein_distance(a, b, v_weights=w)
+    max_samples = 50_000
+    if len(u) > max_samples:
+        rng = np.random.default_rng(42)
+        idx_u = rng.choice(len(u), max_samples, replace=False)
+        idx_v = rng.choice(len(v), max_samples, replace=False)
+        u = u[idx_u]
+        v = v[idx_v]
+        if "v_weights" in kwargs and kwargs["v_weights"] is not None:
+            kwargs = {**kwargs, "v_weights": kwargs["v_weights"][idx_v]}
+    return wasserstein_distance_nd(u, v, **kwargs)
 
 
 def _evaluate_wasserstein(
@@ -24,10 +43,10 @@ def _evaluate_wasserstein(
     w: np.ndarray = _get_weights(g, z[y == 0])
 
     wd: dict[str, float] = {
-        "detector_before": wasserstein_distance_nd(x[y == 1], x[y == 0]),
-        "detector_after":  wasserstein_distance_nd(x[y == 1], x[y == 0], v_weights=w),
-        "particle_before": wasserstein_distance_nd(z[y == 1], z[y == 0]),
-        "particle_after":  wasserstein_distance_nd(z[y == 1], z[y == 0], v_weights=w),
+        "detector_before": _wd(x[y == 1], x[y == 0]),
+        "detector_after":  _wd(x[y == 1], x[y == 0], v_weights=w),
+        "particle_before": _wd(z[y == 1], z[y == 0]),
+        "particle_after":  _wd(z[y == 1], z[y == 0], v_weights=w),
     }
     return wd
 

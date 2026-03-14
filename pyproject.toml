@@ -9,5 +9,6 @@ dependencies = [
     "keras>=3.13.2",
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
+    "nvidia-cudnn-cu12>=9.20.0.48",
     "tensorflow>=2.21.0",
 ]

@@ -168,12 +168,14 @@ def plot_particle_level(
     test_dataset: tf.data.Dataset,
     g: keras.Model,
     save_path: str | Path = "plots/particle_level.pdf",
+    var_info: list[dict] | None = None,
 ) -> None:
     """Generate particle level plots.
     Arguments:
         test_dataset (tf.data.Dataset): Test dataset.
         g (keras.Model): Generator model.
         save_path (str | Path): Save path.
+        var_info: Per-variable plot config with keys xlim, xlabel, symbol, mu, sigma.
     """
     z: npt.NDArray[np.double]
     y: npt.NDArray[np.ubyte]
@@ -197,22 +199,36 @@ def plot_particle_level(
         ax_r: axes.Axes = all_axes[2 * i + 1]
         ax_r.sharex(ax)
         ax.tick_params(labelbottom=False)
-        lo: float = min(z_true[:, i].min(), z_gen[:, i].min())
-        hi: float = max(z_true[:, i].max(), z_gen[:, i].max())
-        bins: npt.NDArray[np.double] = np.linspace(lo, hi, 51)
+
+        if var_info:
+            cfg = var_info[i]
+            mu, sigma = cfg["mu"], cfg["sigma"]
+            ref = z_true[:, i] * sigma + mu
+            comp = z_gen[:, i] * sigma + mu
+            bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
+            xlabel = cfg["symbol"]
+            title = f'{cfg["xlabel"]} (particle level)'
+        else:
+            ref = z_true[:, i]
+            comp = z_gen[:, i]
+            lo = min(ref.min(), comp.min())
+            hi = max(ref.max(), comp.max())
+            bins = np.linspace(lo, hi, 51)
+            xlabel = f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
+            title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
 
         _hist_ratio_panel(
             ax, ax_r,
-            ref=z_true[:, i],
-            comp=z_gen[:, i],
-            rwt_vals=z_gen[:, i],
+            ref=ref,
+            comp=comp,
+            rwt_vals=comp,
             rwt_weights=w,
             bins=bins,
             ref_label="Truth",
             comp_label="Gen",
             rwt_label="Reweighted Gen",
-            xlabel=f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)",
-            title=f"Particle Level — Dim {i}" if dim > 1 else "Particle Level",
+            xlabel=xlabel,
+            title=title,
         )
     _save_fig(fig, save_path)
 

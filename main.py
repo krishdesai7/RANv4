@@ -47,6 +47,7 @@ def main(
     smearing: float = 0.5,
     dim: int = 1,
     dataset: str = "gaussian",
+    variables: tuple[str, ...] = ("m", "M", "w", "tau21", "zg", "sdm"),
     load_run: str | None = None,
 ) -> None:
     """
@@ -66,6 +67,7 @@ def main(
         splits, dim = load_jet_dataset(
             n_samples=n_samples,
             batch_size=batch_size,
+            variables=variables,
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
@@ -90,6 +92,8 @@ def main(
                   "dim": dim, "dataset": dataset}
         if dataset == "gaussian":
             config["smearing"] = smearing
+        else:
+            config["variables"] = list(variables)
         json.dump(config, (run_dir / "config.json").open("w"), indent=2)
         print(f"Saved run to {run_dir}")
 

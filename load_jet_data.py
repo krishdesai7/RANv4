@@ -21,10 +21,11 @@ def load_jet_dataset(
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
+    variables: tuple[str, ...] = SUBSTRUCTURE_VARIABLES,
 ) -> tuple[DatasetSplits, int]:
     """Load jet substructure data and return DatasetSplits.
 
-    Each of the 6 substructure variables is z-score standardized using
+    Each selected substructure variable is z-score standardized using
     the MC gen-level (z_gen) mean and std. The same parameters are applied
     to all four arrays (z_true, x_data, z_gen, x_sim) to avoid information
     leakage and preserve correlations.
@@ -33,22 +34,23 @@ def load_jet_dataset(
         n_samples: Number of events to use per class (data and MC).
         batch_size: Batch size for tf.data.Dataset.
         cache_dir: Directory containing per-variable .npz files.
+        variables: Which substructure variables to use.
 
     Returns:
         (splits, dim): DatasetSplits and feature dimensionality.
     """
     # Check cache, download if needed
-    missing = [v for v in SUBSTRUCTURE_VARIABLES
+    missing = [v for v in variables
                if not (cache_dir / f"{v}.npz").exists()]
     if missing:
         from download_jet_data import download_jet_data
         print("Cached jet data not found. Downloading from Zenodo...")
         download_jet_data(cache_dir)
 
-    n_features: int = len(SUBSTRUCTURE_VARIABLES)
+    n_features: int = len(variables)
 
     # Check available samples
-    with np.load(cache_dir / f"{SUBSTRUCTURE_VARIABLES[0]}.npz") as f:
+    with np.load(cache_dir / f"{variables[0]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
         raise ValueError(
@@ -62,7 +64,7 @@ def load_jet_dataset(
     x_sim = np.empty((n_samples, n_features), dtype=np.float64)
 
     # Load, subsample, and standardize each variable
-    for i, var in enumerate(SUBSTRUCTURE_VARIABLES):
+    for i, var in enumerate(variables):
         with np.load(cache_dir / f"{var}.npz") as f:
             z_true[:, i] = f["z_true"][:n_samples]
             x_data[:, i] = f["x_data"][:n_samples]

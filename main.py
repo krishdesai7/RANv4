@@ -46,19 +46,29 @@ def main(
     n_samples: int = 500_000,
     smearing: float = 0.5,
     dim: int = 1,
+    dataset: str = "gaussian",
     load_run: str | None = None,
 ) -> None:
     """
     Main entry point.
     """
 
-    splits: DatasetSplits = RAN_Dataset(
-        batch_size=batch_size
-        ).generate_gaussian_dataset(
-        n_samples=n_samples,
-        smearing=smearing,
-        dim=dim,
-    )
+    if dataset == "gaussian":
+        splits: DatasetSplits = RAN_Dataset(
+            batch_size=batch_size
+            ).generate_gaussian_dataset(
+            n_samples=n_samples,
+            smearing=smearing,
+            dim=dim,
+        )
+    elif dataset == "jets":
+        from load_jet_data import load_jet_dataset
+        splits, dim = load_jet_dataset(
+            n_samples=n_samples,
+            batch_size=batch_size,
+        )
+    else:
+        raise ValueError(f"Unknown dataset: {dataset!r}")
 
     if load_run is not None:
         run_dir = Path(load_run)
@@ -76,11 +86,11 @@ def main(
         g.save(run_dir / "generator.keras")
         d.save(run_dir / "discriminator.keras")
         np.savez(run_dir / "history.npz", **{k: np.array(v) for k, v in history.items()})
-        json.dump(
-            {"batch_size": batch_size, "n_samples": n_samples,
-             "smearing": smearing, "dim": dim},
-            (run_dir / "config.json").open("w"), indent=2,
-        )
+        config = {"batch_size": batch_size, "n_samples": n_samples,
+                  "dim": dim, "dataset": dataset}
+        if dataset == "gaussian":
+            config["smearing"] = smearing
+        json.dump(config, (run_dir / "config.json").open("w"), indent=2)
         print(f"Saved run to {run_dir}")
 
     # Wasserstein validation

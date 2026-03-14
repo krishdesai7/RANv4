@@ -5,13 +5,15 @@ import numpy.typing as npt
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib import figure, axes
+from matplotlib import figure, axes, font_manager
 
 import tensorflow as tf
 import keras
 
 mpl.rcParams["font.family"] = "serif"
-mpl.rcParams["font.serif"] = "Cochineal"
+available_fonts: set[str] = {f.name for f in font_manager.fontManager.ttflist}
+if "Cochineal" in available_fonts:
+    mpl.rcParams["font.serif"] = ["Cochineal"]
 mpl.rcParams["font.size"] = 18
 mpl.rcParams["text.usetex"] = False
 mpl.rcParams["axes.grid"] = True
@@ -34,9 +36,9 @@ def _collect_data(
         ys.append(y)
 
     return (
-        np.concatenate(zs, axis=0),   # (n_events, dim)
-        np.concatenate(xs, axis=0),   # (n_events, dim)
-        np.concatenate(ys, axis=0).reshape(-1),  # (n_events,)
+        np.concatenate(zs, axis=0),             # zs: (n_events, dim)
+        np.concatenate(xs, axis=0),             # xs: (n_events, dim)
+        np.concatenate(ys, axis=0).reshape(-1),  # ys: (n_events,)
     )
 
 

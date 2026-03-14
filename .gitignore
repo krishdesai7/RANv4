@@ -6,6 +6,11 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# Virtual environment
 .venv
+
+# Cache
 .cache/
+
+# Output log
+out.log

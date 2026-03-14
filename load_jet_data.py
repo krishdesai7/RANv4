@@ -16,13 +16,22 @@ from datasets import RAN_Dataset, DatasetSplits
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
 
+JET_OBS: dict[str, dict] = {
+    "m":     {"xlim": (0, 75),   "xlabel": "Jet Mass",                       "symbol": r"$m$ [GeV]"},
+    "M":     {"xlim": (0, 80),   "xlabel": "Jet Constituent Multiplicity",   "symbol": r"$M$"},
+    "w":     {"xlim": (0, 0.6),  "xlabel": "Jet Width",                      "symbol": r"$w$"},
+    "tau21": {"xlim": (0, 1.2),  "xlabel": r"$N$-subjettiness Ratio",        "symbol": r"$\tau_{21}^{(\beta=1)}$"},
+    "zg":    {"xlim": (0, 0.5),  "xlabel": "Groomed Jet Momentum Fraction",  "symbol": r"$z_g$"},
+    "sdm":   {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass",             "symbol": r"$\ln\rho$"},
+}
+
 
 def load_jet_dataset(
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
     variables: tuple[str, ...] = SUBSTRUCTURE_VARIABLES,
-) -> tuple[DatasetSplits, int]:
+) -> tuple[DatasetSplits, int, dict[str, tuple[float, float]]]:
     """Load jet substructure data and return DatasetSplits.
 
     Each selected substructure variable is z-score standardized using
@@ -37,7 +46,8 @@ def load_jet_dataset(
         variables: Which substructure variables to use.
 
     Returns:
-        (splits, dim): DatasetSplits and feature dimensionality.
+        (splits, dim, std_params): DatasetSplits, feature dimensionality,
+            and standardization parameters {var_name: (mu, sigma)}.
     """
     # Check cache, download if needed
     missing = [v for v in variables
@@ -64,6 +74,7 @@ def load_jet_dataset(
     x_sim = np.empty((n_samples, n_features), dtype=np.float64)
 
     # Load, subsample, and standardize each variable
+    std_params: dict[str, tuple[float, float]] = {}
     for i, var in enumerate(variables):
         with np.load(cache_dir / f"{var}.npz") as f:
             z_true[:, i] = f["z_true"][:n_samples]
@@ -74,6 +85,7 @@ def load_jet_dataset(
         # Standardize using MC gen-level statistics only
         mu: np.floating = np.mean(z_gen[:, i])
         sigma: np.floating = np.std(z_gen[:, i])
+        std_params[var] = (float(mu), float(sigma))
 
         z_true[:, i] = (z_true[:, i] - mu) / sigma
         x_data[:, i] = (x_data[:, i] - mu) / sigma
@@ -91,4 +103,4 @@ def load_jet_dataset(
     ds = RAN_Dataset(batch_size=batch_size)
     ds.dataset = ds._build_dataset(z, x, y)
     ds.splits = ds._split_dataset(ds.dataset)
-    return ds.splits, n_features
+    return ds.splits, n_features, std_params

@@ -73,6 +73,8 @@ def main(
     Main entry point.
     """
 
+    var_info: list[dict] | None = None
+
     if dataset == "gaussian":
         splits: DatasetSplits = RAN_Dataset(
             batch_size=batch_size
@@ -82,12 +84,16 @@ def main(
             dim=dim,
         )
     elif dataset == "jets":
-        from load_jet_data import load_jet_dataset
-        splits, dim = load_jet_dataset(
+        from load_jet_data import load_jet_dataset, JET_OBS
+        splits, dim, std_params = load_jet_dataset(
             n_samples=n_samples,
             batch_size=batch_size,
             variables=variables,
         )
+        var_info = [
+            {**JET_OBS[v], "mu": std_params[v][0], "sigma": std_params[v][1]}
+            for v in variables
+        ]
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
@@ -122,8 +128,10 @@ def main(
     json.dump(wd, (run_dir / "wasserstein.json").open("w"), indent=2)
 
     # Plots
-    plot_detector_level(splits.test, g, save_path=run_dir / "detector_level.pdf")
-    plot_particle_level(splits.test, g, save_path=run_dir / "particle_level.pdf")
+    plot_detector_level(splits.test, g, save_path=run_dir / "detector_level.pdf",
+                        var_info=var_info)
+    plot_particle_level(splits.test, g, save_path=run_dir / "particle_level.pdf",
+                        var_info=var_info)
     plot_losses(history, save_path=run_dir / "losses.pdf")
 
 

@@ -99,12 +99,14 @@ def plot_detector_level(
     test_dataset: tf.data.Dataset,
     g: keras.Model,
     save_path: str | Path = "plots/detector_level.pdf",
+    var_info: list[dict] | None = None,
 ) -> None:
     """Generate detector level plots.
     Arguments:
         test_dataset (tf.data.Dataset)
         g (keras.Model): Generator model.
         save_path (str | Path)
+        var_info: Per-variable plot config with keys xlim, xlabel, symbol, mu, sigma.
     """
     z: npt.NDArray[np.double]
     x: npt.NDArray[np.double]
@@ -130,20 +132,34 @@ def plot_detector_level(
         ax_r: axes.Axes = all_axes[2 * i + 1]
         ax_r.sharex(ax)
         ax.tick_params(labelbottom=False)
-        bins: npt.NDArray[np.double] = np.linspace(x_data[:, i].min(), x_data[:, i].max(), 51)
+
+        if var_info:
+            cfg = var_info[i]
+            mu, sigma = cfg["mu"], cfg["sigma"]
+            ref = x_data[:, i] * sigma + mu
+            comp = x_sim[:, i] * sigma + mu
+            bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
+            xlabel = cfg["symbol"]
+            title = f'{cfg["xlabel"]} (detector level)'
+        else:
+            ref = x_data[:, i]
+            comp = x_sim[:, i]
+            bins = np.linspace(ref.min(), ref.max(), 51)
+            xlabel = f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)"
+            title = f"Detector Level — Dim {i}" if dim > 1 else "Detector Level"
 
         _hist_ratio_panel(
             ax, ax_r,
-            ref=x_data[:, i],
-            comp=x_sim[:, i],
-            rwt_vals=x_sim[:, i],
+            ref=ref,
+            comp=comp,
+            rwt_vals=comp,
             rwt_weights=w,
             bins=bins,
             ref_label="Data",
             comp_label="Sim",
             rwt_label="Reweighted Sim",
-            xlabel=f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)",
-            title=f"Detector Level — Dim {i}" if dim > 1 else "Detector Level",
+            xlabel=xlabel,
+            title=title,
         )
     _save_fig(fig, save_path)
 

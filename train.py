@@ -2,7 +2,7 @@ import tensorflow as tf
 import keras
 import numpy as np
 
-from datasets import RAN_Dataset, DatasetSplits
+from datasets import DatasetSplits
 from models import build_generator, build_discriminator
 
 EPS = keras.config.epsilon()
@@ -105,41 +105,30 @@ def _eval_dataset(
 
 
 def train(
+    splits: DatasetSplits,
     n_epochs: int = 100,
     n_disc_steps: int = 5,
     lr_g: float = 1e-4,
     lr_d: float = 1e-4,
-    batch_size: int = 1024,
-    n_samples: int = 500_000,
-    smearing: float = 1.0,
     patience: int = 5,
     min_delta: float = 1e-4,
-) -> tuple[keras.Model, keras.Model, DatasetSplits, dict[str, list[float | np.floating]]]:
+) -> tuple[keras.Model, keras.Model, dict[str, list[float | np.floating]]]:
     """Train the generator and discriminator.
     Arguments:
-        n_epochs (int)
+        splits (DatasetSplits)
+        n_epochs (int)  
         n_disc_steps (int)
         lr_g (float)
         lr_d (float)
-        batch_size (int)
-        n_samples (int)
-        smearing (float)
         patience (int)
         min_delta (float)
     Returns:
         tuple[
             g (keras.Model): Generator model.
             d (keras.Model): Discriminator model.
-            splits (DatasetSplits)
             history (dict[str, list[float | np.floating]]): Training history.
         ]
     """
-    splits: DatasetSplits = RAN_Dataset(
-        batch_size=batch_size
-        ).generate_gaussian_dataset(
-        n_samples=n_samples,
-        smearing=smearing,
-    )
     g: keras.Model = build_generator()
     d: keras.Model = build_discriminator()
     opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
@@ -202,4 +191,4 @@ def train(
     test: tuple[float, float] = _eval_dataset(g, d, splits.test)
     print(f"Test  D: {test[0]:.4f}  G: {test[1]:.4f}")
 
-    return g, d, splits, history
+    return g, d, history

@@ -145,6 +145,7 @@ class RAN_Dataset():
         cache_path: Path = self._cache_path(n_samples, smearing)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         if cache_path.exists():
+            print(f"Loading dataset from cache: {cache_path}")
             with np.load(cache_path) as data:
                 z: npt.NDArray[np.double] = data["z"]
                 x: npt.NDArray[np.double] = data["x"]
@@ -156,7 +157,7 @@ class RAN_Dataset():
             x_data: npt.NDArray[np.double] = rng.normal(z_true, smearing)
             y_nat: npt.NDArray[np.ubyte] = np.ones_like(z_true, dtype=np.ubyte)
 
-            z_gen: npt.NDArray[np.double] = rng.normal(loc = 0.5,size=(n_samples, 1))
+            z_gen: npt.NDArray[np.double] = rng.normal(loc = 0.5, scale=0.9, size=(n_samples, 1))
             x_sim: npt.NDArray[np.double] = rng.normal(z_gen, smearing)
             y_MC: npt.NDArray[np.ubyte] = np.zeros_like(z_gen, dtype=np.ubyte)
 
@@ -165,6 +166,7 @@ class RAN_Dataset():
             y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
+            print(f"Generated and saved dataset to cache: {cache_path}")
         
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)

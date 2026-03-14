@@ -73,6 +73,19 @@ def main(
     Main entry point.
     """
 
+    # When loading a saved run, read config from that run
+    if load_run is not None:
+        run_dir = Path(load_run)
+        config = json.loads((run_dir / "config.json").read_text())
+        dataset = config["dataset"]
+        n_samples = config["n_samples"]
+        batch_size = config["batch_size"]
+        dim = config["dim"]
+        if dataset == "gaussian":
+            smearing = config["smearing"]
+        else:
+            variables = tuple(config["variables"])
+
     var_info: list[dict] | None = None
 
     if dataset == "gaussian":
@@ -98,7 +111,6 @@ def main(
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
     if load_run is not None:
-        run_dir = Path(load_run)
         g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
         history: dict[str, list] = {
             k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()

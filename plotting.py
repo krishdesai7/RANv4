@@ -48,6 +48,8 @@ def _get_weights(g: keras.Model, z_gen: npt.NDArray) -> npt.NDArray:
 
 
 def _hist_ratio_panel(
+    ax: axes.Axes,
+    ax_r: axes.Axes,
     ref: npt.NDArray[np.double],
     comp: npt.NDArray[np.double],
     rwt_vals: npt.NDArray[np.double],
@@ -58,17 +60,7 @@ def _hist_ratio_panel(
     rwt_label: str,
     xlabel: str,
     title: str,
-    save_path: Path,
 ) -> None:
-    fig: figure.Figure
-    ax: axes.Axes
-    ax_r: axes.Axes
-    fig, (ax, ax_r) = plt.subplots(
-        2, 1, figsize=(8, 6),
-        gridspec_kw={"height_ratios": [3, 1]},
-        sharex=True,
-    )
-
     h_ref, bins, _ = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
     h_comp, _, _ = ax.hist(comp, bins=bins, alpha=0.35, color="C1", label=comp_label)
     h_rwt, _, _ = ax.hist(
@@ -88,12 +80,14 @@ def _hist_ratio_panel(
     ratio_rwt[safe] = h_rwt[safe] / h_ref[safe]
 
     ax_r.plot(centres, ratio_comp, color="C1", marker="o")
-    ax_r.plot(centres, ratio_rwt, color="black", marker="^",linestyle="--")
+    ax_r.plot(centres, ratio_rwt, color="black", marker="^", linestyle="--")
     ax_r.axhline(1, color="gray", linewidth=0.5)
     ax_r.set_ylim(0, 2)
     ax_r.set_ylabel(f"Ratio to {ref_label}")
     ax_r.set_xlabel(xlabel)
 
+
+def _save_fig(fig: figure.Figure, save_path: Path) -> None:
     fig.tight_layout()
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path)
@@ -124,12 +118,22 @@ def plot_detector_level(
 
     save_path = Path(save_path)
     dim: int = x.shape[1]
+    fig: figure.Figure
+    all_axes: npt.NDArray
+    fig, all_axes = plt.subplots(
+        2 * dim, 1, figsize=(8, 6 * dim),
+        gridspec_kw={"height_ratios": [3, 1] * dim},
+    )
+    all_axes = np.atleast_1d(all_axes)
     for i in range(dim):
-        suffix: str = f"_dim{i}" if dim > 1 else ""
-        dim_path: Path = save_path.with_stem(save_path.stem + suffix)
+        ax: axes.Axes = all_axes[2 * i]
+        ax_r: axes.Axes = all_axes[2 * i + 1]
+        ax_r.sharex(ax)
+        ax.tick_params(labelbottom=False)
         bins: npt.NDArray[np.double] = np.linspace(x_data[:, i].min(), x_data[:, i].max(), 51)
 
         _hist_ratio_panel(
+            ax, ax_r,
             ref=x_data[:, i],
             comp=x_sim[:, i],
             rwt_vals=x_sim[:, i],
@@ -140,8 +144,8 @@ def plot_detector_level(
             rwt_label="Reweighted Sim",
             xlabel=f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)",
             title=f"Detector Level — Dim {i}" if dim > 1 else "Detector Level",
-            save_path=dim_path,
         )
+    _save_fig(fig, save_path)
 
 
 def plot_particle_level(
@@ -165,14 +169,24 @@ def plot_particle_level(
 
     save_path = Path(save_path)
     dim: int = z.shape[1]
+    fig: figure.Figure
+    all_axes: npt.NDArray
+    fig, all_axes = plt.subplots(
+        2 * dim, 1, figsize=(8, 6 * dim),
+        gridspec_kw={"height_ratios": [3, 1] * dim},
+    )
+    all_axes = np.atleast_1d(all_axes)
     for i in range(dim):
-        suffix: str = f"_dim{i}" if dim > 1 else ""
-        dim_path: Path = save_path.with_stem(save_path.stem + suffix)
+        ax: axes.Axes = all_axes[2 * i]
+        ax_r: axes.Axes = all_axes[2 * i + 1]
+        ax_r.sharex(ax)
+        ax.tick_params(labelbottom=False)
         lo: float = min(z_true[:, i].min(), z_gen[:, i].min())
         hi: float = max(z_true[:, i].max(), z_gen[:, i].max())
         bins: npt.NDArray[np.double] = np.linspace(lo, hi, 51)
 
         _hist_ratio_panel(
+            ax, ax_r,
             ref=z_true[:, i],
             comp=z_gen[:, i],
             rwt_vals=z_gen[:, i],
@@ -183,8 +197,8 @@ def plot_particle_level(
             rwt_label="Reweighted Gen",
             xlabel=f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)",
             title=f"Particle Level — Dim {i}" if dim > 1 else "Particle Level",
-            save_path=dim_path,
         )
+    _save_fig(fig, save_path)
 
 
 def plot_losses(

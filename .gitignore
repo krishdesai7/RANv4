@@ -12,5 +12,5 @@ wheels/
 # Cache
 .cache/
 
-# Output log
-out.log
+# Logs
+*.log

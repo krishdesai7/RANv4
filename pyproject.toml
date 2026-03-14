@@ -10,5 +10,6 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
     "nvidia-cudnn-cu12>=9.20.0.48",
+    "scipy>=1.15.0",
     "tensorflow>=2.21.0",
 ]

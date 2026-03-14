@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --qos=interactive
+#SBATCH --qos=regular
 #SBATCH --constraint=gpu
 #SBATCH --gpus=4
 #SBATCH --account=m3246_g

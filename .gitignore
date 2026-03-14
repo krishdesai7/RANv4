@@ -9,8 +9,9 @@ wheels/
 # Virtual environment
 .venv
 
-# Cache
+# Caches
 .cache/
+runs/
 
 # Logs
 *.log

@@ -13,7 +13,7 @@ import keras
 mpl.rcParams["font.family"] = "serif"
 mpl.rcParams["font.serif"] = "Cochineal"
 mpl.rcParams["font.size"] = 18
-mpl.rcParams["text.usetex"] = True
+mpl.rcParams["text.usetex"] = False
 mpl.rcParams["axes.grid"] = True
 mpl.rcParams["grid.color"] = "0.85"
 mpl.rcParams["grid.linewidth"] = 0.5

@@ -9,7 +9,13 @@ dependencies = [
     "keras>=3.13.2",
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
-    "nvidia-cudnn-cu12>=9.20.0.48",
+    "nvidia-cudnn-cu12>=9.20.0.48; sys_platform == 'linux'",
     "scipy>=1.15.0",
     "tensorflow>=2.21.0",
+]
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'linux'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]

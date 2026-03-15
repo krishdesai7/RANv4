@@ -134,10 +134,10 @@ def main(
         json.dump(config, (run_dir / "config.json").open("w"), indent=2)
         print(f"Saved run to {run_dir}")
 
-    # Wasserstein validation
-    wd: dict[str, float] = _evaluate_wasserstein(splits.test, g)
-    _print_wasserstein(wd)
-    json.dump(wd, (run_dir / "wasserstein.json").open("w"), indent=2)
+    # TODO: Wasserstein validation disabled — OOM on cluster
+    # wd: dict[str, float] = _evaluate_wasserstein(splits.test, g)
+    # _print_wasserstein(wd)
+    # json.dump(wd, (run_dir / "wasserstein.json").open("w"), indent=2)
 
     # Plots
     plot_detector_level(splits.test, g, save_path=run_dir / "detector_level.pdf",

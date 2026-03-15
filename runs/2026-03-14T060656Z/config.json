@@ -1,0 +1,6 @@
+{
+  "batch_size": 1024,
+  "n_samples": 500000,
+  "smearing": 0.5,
+  "dim": 5
+}

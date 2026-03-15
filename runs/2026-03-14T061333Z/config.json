@@ -1,0 +1,7 @@
+{
+  "batch_size": 1024,
+  "n_samples": 500000,
+  "dim": 6,
+  "dataset": "gaussian",
+  "smearing": 0.5
+}

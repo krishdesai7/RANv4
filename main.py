@@ -1,3 +1,6 @@
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 from datetime import datetime, timezone
 from pathlib import Path
 import json

@@ -31,7 +31,7 @@ def load_jet_dataset(
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
     variables: tuple[str, ...] = SUBSTRUCTURE_VARIABLES,
-) -> tuple[DatasetSplits, int, dict[str, tuple[float, float]]]:
+) -> tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]:
     """Load jet substructure data and return DatasetSplits.
 
     Each selected substructure variable is z-score standardized using
@@ -50,7 +50,7 @@ def load_jet_dataset(
             and standardization parameters {var_name: (mu, sigma)}.
     """
     # Check cache, download if needed
-    missing = [v for v in variables
+    missing: list[str] = [v for v in variables
                if not (cache_dir / f"{v}.npz").exists()]
     if missing:
         from download_jet_data import download_jet_data
@@ -68,13 +68,13 @@ def load_jet_dataset(
         )
 
     # Initialize arrays
-    z_true = np.empty((n_samples, n_features), dtype=np.float64)
-    x_data = np.empty((n_samples, n_features), dtype=np.float64)
-    z_gen = np.empty((n_samples, n_features), dtype=np.float64)
-    x_sim = np.empty((n_samples, n_features), dtype=np.float64)
+    z_true: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    x_data: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    z_gen: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    x_sim: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
 
     # Load, subsample, and standardize each variable
-    std_params: dict[str, tuple[float, float]] = {}
+    std_params: dict[str, tuple[np.double, np.double]] = {}
     for i, var in enumerate(variables):
         with np.load(cache_dir / f"{var}.npz") as f:
             z_true[:, i] = f["z_true"][:n_samples]
@@ -83,18 +83,18 @@ def load_jet_dataset(
             x_sim[:, i] = f["x_sim"][:n_samples]
 
         # Standardize using MC gen-level statistics only
-        mu: np.floating = np.mean(z_gen[:, i])
-        sigma: np.floating = np.std(z_gen[:, i])
-        std_params[var] = (float(mu), float(sigma))
+        mu: np.double = np.mean(z_gen[:, i], dtype=np.double)
+        sigma: np.double = np.std(z_gen[:, i], dtype=np.double)
+        std_params[var] = (mu, sigma)
 
         z_true[:, i] = (z_true[:, i] - mu) / sigma
         x_data[:, i] = (x_data[:, i] - mu) / sigma
         z_gen[:, i] = (z_gen[:, i] - mu) / sigma
         x_sim[:, i] = (x_sim[:, i] - mu) / sigma
 
-    # Combine into dataset format: data (y=1) + MC (y=0)
-    z: npt.NDArray[np.float64] = np.concatenate([z_true, z_gen], axis=0)
-    x: npt.NDArray[np.float64] = np.concatenate([x_data, x_sim], axis=0)
+    # Combine into dataset format: nature (y=1) + MC (y=0)
+    z: npt.NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
+    x: npt.NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
     y: npt.NDArray[np.ubyte] = np.concatenate([
         np.ones(n_samples, dtype=np.ubyte),
         np.zeros(n_samples, dtype=np.ubyte),

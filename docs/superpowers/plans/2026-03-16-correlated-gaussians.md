@@ -483,12 +483,57 @@ class TestGenerateGaussianDataset:
             break
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 2: Write round-trip caching test**
+
+Append to `tests/test_datasets.py`:
+
+```python
+    def test_yaml_and_params_share_cache(self, tmp_path):
+        """YAML path and equivalent params dict must produce the same cache key.
+
+        This tests the full round-trip: generate from YAML, extract the
+        covariance matrices that would be stored in config.json, then
+        regenerate from those stored params. Both should hit the same cache.
+        """
+        cfg = {
+            "mu_mc": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "sigma_mc": [1.0, 1.5],  # vector form
+            "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "sigma_detector": [0.5, 0.8],
+        }
+        path = _write_config(cfg, tmp_path)
+        cache_dir = tmp_path / "cache"
+
+        # First: generate from YAML
+        ds1 = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds1.generate_gaussian_dataset(config_path=path, n_samples=500)
+        cache_files_after_yaml = set(cache_dir.glob("gaussian_*.npz"))
+        assert len(cache_files_after_yaml) == 1
+
+        # Simulate what config.json stores: covariance matrices (post-promotion)
+        # sigma_mc: [1.0, 1.5] -> diag([1.0, 2.25])
+        reload_params = {
+            "mu_mc": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "sigma_mc": [[1.0, 0.0], [0.0, 2.25]],     # promoted
+            "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "sigma_detector": [[0.25, 0.0], [0.0, 0.64]], # promoted
+        }
+        ds2 = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds2.generate_gaussian_dataset(params=reload_params, n_samples=500)
+
+        # No new cache file should have been created
+        cache_files_after_params = set(cache_dir.glob("gaussian_*.npz"))
+        assert cache_files_after_params == cache_files_after_yaml
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `uv run --group dev pytest tests/test_datasets.py -v`
 Expected: FAIL — `generate_gaussian_dataset() got an unexpected keyword argument 'config_path'`
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add tests/test_datasets.py
@@ -639,17 +684,9 @@ git commit -m "Implement multivariate Gaussian generation with Cholesky smearing
 **Files:**
 - Modify: `ran/__main__.py`
 
-- [ ] **Step 1: Replace CLI interface**
+- [ ] **Step 1: Rewrite `main()` function**
 
-Update `main()` in `ran/__main__.py`:
-
-- Remove `smearing`, `dim` parameters
-- Add `config: str | None = None` parameter
-- For Gaussian mode: call `parse_gaussian_config(config)` to get params, infer `dim`
-- Store full params in `config.json` (as nested lists)
-- On `--load_run` for Gaussian: pass stored params via `params` kwarg
-
-Key changes to the function signature:
+Replace the entire `main()` function in `ran/__main__.py`. The full updated function:
 
 ```python
 def main(
@@ -660,66 +697,142 @@ def main(
     variables: tuple[str, ...] = ("m", "M", "w", "tau21", "zg", "sdm"),
     load_run: str | None = None,
 ) -> None:
-```
+    """
+    Main entry point.
+    """
+    run_dir: Path
+    splits: DatasetSplits
+    var_info: list[VarInfo] | None = None
+    gaussian_params: dict | None = None
+    dim: int = 1
 
-In the Gaussian branch:
-
-```python
-if dataset == "gaussian":
+    # When loading a saved run, read config from that run
     if load_run is not None:
-        gaussian_params = config_data.get("gaussian_params")
-        dim = gaussian_params["dim"]
-        # Strip dim before passing — it's metadata, not a config key
-        raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
-        splits = RAN_Dataset(
-            batch_size=batch_size
-        ).generate_gaussian_dataset(
-            params=raw_params,
-            n_samples=n_samples,
+        run_dir = Path(load_run)
+        saved_config: dict[str, Any] = json.loads(
+            (run_dir / "config.json").read_text()
         )
-    else:
-        if config is None:
-            raise ValueError(
-                "Gaussian mode requires --config path/to/config.yaml"
+        dataset = saved_config.get("dataset", "gaussian")
+        n_samples = saved_config["n_samples"]
+        batch_size = saved_config["batch_size"]
+        dim = saved_config["dim"]
+        if dataset == "jets":
+            variables = tuple(saved_config["variables"])
+
+    if dataset == "gaussian":
+        if load_run is not None:
+            # Reload: use stored params from config.json
+            gaussian_params = saved_config["gaussian_params"]
+            dim = gaussian_params["dim"]
+            raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
+            splits = RAN_Dataset(
+                batch_size=batch_size
+            ).generate_gaussian_dataset(
+                params=raw_params,
+                n_samples=n_samples,
             )
-        from ran.data.config import parse_gaussian_config
-        gaussian_params = parse_gaussian_config(config)
-        dim = gaussian_params["dim"]
-        splits = RAN_Dataset(
-            batch_size=batch_size
-        ).generate_gaussian_dataset(
-            config_path=config,
+        else:
+            # Fresh run: parse YAML config
+            if config is None:
+                raise ValueError(
+                    "Gaussian mode requires --config path/to/config.yaml"
+                )
+            from ran.data.config import parse_gaussian_config
+            gaussian_params = parse_gaussian_config(config)
+            dim = gaussian_params["dim"]
+            splits = RAN_Dataset(
+                batch_size=batch_size
+            ).generate_gaussian_dataset(
+                config_path=config,
+                n_samples=n_samples,
+            )
+    elif dataset == "jets":
+        std_params: dict[str, tuple[np.double, np.double]]
+        splits, dim, std_params = load_jet_dataset(
             n_samples=n_samples,
+            batch_size=batch_size,
+            variables=variables,
         )
+        var_info = [
+            VarInfo(
+                xlim=JET_OBS[v]["xlim"],
+                xlabel=JET_OBS[v]["xlabel"],
+                symbol=JET_OBS[v]["symbol"],
+                mu=std_params[v][0],
+                sigma=std_params[v][1],
+            ) for v in variables
+        ]
+    else:
+        raise ValueError(f"Unknown dataset: {dataset!r}")
+
+    if load_run is not None:
+        run_dir = Path(load_run)
+        g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
+        history: dict[str, list] = {
+            k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
+        }
+        print(f"Loaded run from {run_dir}")
+    else:
+        d: keras.Model
+        g, d, history = train(splits, dim=dim)
+
+        run_dir = Path("runs") / datetime.now(timezone.utc).strftime(
+            "%Y-%m-%dT%H%M%SZ"
+        )
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        g.save(run_dir / "generator.keras")
+        d.save(run_dir / "discriminator.keras")
+        np.savez(
+            run_dir / "history.npz",
+            **{k: np.array(v) for k, v in history.items()},  # type: ignore
+        )
+
+        # Save config — Gaussian params stored as covariance matrices
+        # so runs are self-contained and reloadable without original YAML
+        config_out: dict[str, Any] = {
+            "batch_size": batch_size,
+            "n_samples": n_samples,
+            "dim": dim,
+            "dataset": dataset,
+        }
+        if dataset == "gaussian" and gaussian_params is not None:
+            def _to_list(v):
+                return v.tolist() if hasattr(v, "tolist") else v
+
+            config_out["gaussian_params"] = {
+                "dim": dim,
+                "mu_mc": _to_list(gaussian_params["mu_mc"]),
+                "mu_true": _to_list(gaussian_params["mu_true"]),
+                "sigma_mc": _to_list(gaussian_params["cov_mc"]),
+                "sigma_true": _to_list(gaussian_params["cov_true"]),
+                "sigma_detector": _to_list(gaussian_params["cov_detector"]),
+            }
+        else:
+            config_out["variables"] = list(variables)
+        json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
+        print(f"Saved run to {run_dir}")
+
+    # Plots
+    plot_detector_level(
+        splits.test, g, save_path=run_dir / "detector_level.pdf",
+        var_info=var_info,
+    )
+    plot_particle_level(
+        splits.test, g, save_path=run_dir / "particle_level.pdf",
+        var_info=var_info,
+    )
+    plot_losses(history, save_path=run_dir / "losses.pdf")
+
+    # Metrics (run last so failures don't block plots/checkpoints)
+    try:
+        evaluate_run(run_dir, force=True)
+    except Exception as e:
+        print(f"Metric evaluation failed: {e}")
 ```
 
-When saving `config.json`, include `gaussian_params` with arrays as nested lists:
-
-```python
-config_out = {"batch_size": batch_size, "n_samples": n_samples,
-              "dim": dim, "dataset": dataset}
-if dataset == "gaussian":
-    config_out["gaussian_params"] = {
-        "dim": dim,
-        "mu_mc": gaussian_params["mu_mc"].tolist()
-                 if hasattr(gaussian_params["mu_mc"], "tolist")
-                 else gaussian_params["mu_mc"],
-        "mu_true": gaussian_params["mu_true"].tolist()
-                   if hasattr(gaussian_params["mu_true"], "tolist")
-                   else gaussian_params["mu_true"],
-        "sigma_mc": gaussian_params["cov_mc"].tolist()
-                    if hasattr(gaussian_params["cov_mc"], "tolist")
-                    else gaussian_params["cov_mc"],
-        "sigma_true": gaussian_params["cov_true"].tolist()
-                      if hasattr(gaussian_params["cov_true"], "tolist")
-                      else gaussian_params["cov_true"],
-        "sigma_detector": gaussian_params["cov_detector"].tolist()
-                          if hasattr(gaussian_params["cov_detector"], "tolist")
-                          else gaussian_params["cov_detector"],
-    }
-else:
-    config_out["variables"] = list(variables)
-```
+Note: `saved_config` replaces the old `config` variable name to avoid collision
+with the new `config` CLI parameter (the YAML path).
 
 - [ ] **Step 2: Verify Gaussian mode runs**
 

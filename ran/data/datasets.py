@@ -4,9 +4,12 @@ import hashlib, json
 
 import numpy as np
 import numpy.typing as npt
+from scipy.linalg import cholesky
 
 import tensorflow as tf
 from keras.utils import split_dataset
+
+from ran.data.config import parse_gaussian_config, sigma_to_covariance
 
 class DatasetSplits(NamedTuple):
     """
@@ -59,30 +62,23 @@ class RAN_Dataset():
         self.dataset: tf.data.Dataset | None = None
         self.splits: DatasetSplits | None = None
     
-    def _cache_key(self,
-        n_samples: int,
-        smearing: float,
-        test_fraction: float,
-        dim: int,
-    ) -> str:
+    def _cache_key(self, parsed: dict, n_samples: int) -> str:
+        """Hash the promoted covariance matrices for a canonical cache key."""
+        key_data = {
+            "mu_mc": parsed["mu_mc"].tolist(),
+            "mu_true": parsed["mu_true"].tolist(),
+            "cov_mc": parsed["cov_mc"].tolist(),
+            "cov_true": parsed["cov_true"].tolist(),
+            "cov_detector": parsed["cov_detector"].tolist(),
+            "n_samples": n_samples,
+            "seed": self.seed,
+        }
         return hashlib.sha256(
-            json.dumps({
-                "n_samples": n_samples,
-                "smearing": smearing,
-                "seed": self.seed,
-                "test_fraction": test_fraction,
-                "dim": dim,
-            }, sort_keys=True
-            ).encode("utf-8")
+            json.dumps(key_data, sort_keys=True).encode("utf-8")
         ).hexdigest()[:16]
 
-    def _cache_path(self, n_samples: int, smearing: float, dim: int) -> Path:
-        cache_key: str = self._cache_key(
-            n_samples,
-            smearing,
-            self.test_fraction,
-            dim,
-        )
+    def _cache_path(self, parsed: dict, n_samples: int) -> Path:
+        cache_key = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
     
     def _build_dataset(
@@ -134,41 +130,86 @@ class RAN_Dataset():
         return DatasetSplits(train, val, test)
 
     def generate_gaussian_dataset(self,
+        config_path: str | Path | None = None,
+        params: dict | None = None,
         n_samples: int = 10 ** 6,
-        smearing: float = 1.0,
-        dim: int = 1,
-        ) -> DatasetSplits:
+    ) -> DatasetSplits:
         """
-        Generate a Gaussian dataset.
+        Generate a multivariate Gaussian dataset.
         Arguments:
-            n_samples (int)
-            smearing (float)
-            dim (int): Number of dimensions.
+            config_path: Path to a YAML config file.
+            params: Dict with keys mu_mc, mu_true, sigma_mc, sigma_true, sigma_detector.
+            n_samples: Number of samples per class (data and MC).
         Returns:
             DatasetSplits
+        Exactly one of config_path or params must be provided.
         """
-        cache_path: Path = self._cache_path(n_samples, smearing, dim)
+        if (config_path is None) == (params is None):
+            raise ValueError(
+                "Exactly one of config_path or params must be provided"
+            )
+
+        if config_path is not None:
+            parsed = parse_gaussian_config(config_path)
+        else:
+            mu_mc = np.asarray(params["mu_mc"], dtype=np.double).ravel()
+            mu_true = np.asarray(params["mu_true"], dtype=np.double).ravel()
+            dim = mu_mc.shape[0]
+            if mu_true.shape[0] != dim:
+                raise ValueError(
+                    f"mu_true has dim {mu_true.shape[0]}, expected {dim}"
+                )
+            parsed = {
+                "dim": dim,
+                "mu_mc": mu_mc,
+                "mu_true": mu_true,
+                "cov_mc": sigma_to_covariance(params["sigma_mc"], dim),
+                "cov_true": sigma_to_covariance(params["sigma_true"], dim),
+                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),
+            }
+
+        dim: int = parsed["dim"]
+        mu_mc: npt.NDArray[np.double] = parsed["mu_mc"]
+        mu_true: npt.NDArray[np.double] = parsed["mu_true"]
+        cov_mc: npt.NDArray[np.double] = parsed["cov_mc"]
+        cov_true: npt.NDArray[np.double] = parsed["cov_true"]
+        cov_detector: npt.NDArray[np.double] = parsed["cov_detector"]
+
+        cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
         if cache_path.exists():
             print(f"Loading dataset from cache: {cache_path}")
             with np.load(cache_path) as data:
-                z: npt.NDArray[np.double] = data["z"]
-                x: npt.NDArray[np.double] = data["x"]
-                y: npt.NDArray[np.ubyte] = data["y"]
+                z = data["z"]
+                x = data["x"]
+                y = data["y"]
         else:
-            rng: np.random.Generator = np.random.default_rng(self.seed)
+            rng = np.random.default_rng(self.seed)
 
-            z_true: npt.NDArray[np.double] = rng.normal(size=(n_samples, dim))
-            x_data: npt.NDArray[np.double] = rng.normal(z_true, smearing)
-            y_nat: npt.NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
+            z_true = rng.multivariate_normal(
+                mu_true, cov_true, size=n_samples,
+                check_valid='raise', method='svd',
+            )
+            z_gen = rng.multivariate_normal(
+                mu_mc, cov_mc, size=n_samples,
+                check_valid='raise', method='svd',
+            )
 
-            z_gen: npt.NDArray[np.double] = rng.normal(loc=0.5, scale=0.9, size=(n_samples, dim))
-            x_sim: npt.NDArray[np.double] = rng.normal(z_gen, smearing)
-            y_MC: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
+            L_det = cholesky(cov_detector, lower=True)
 
-            z: npt.NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
-            x: npt.NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
-            y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
+            s_data = rng.standard_normal(size=z_true.shape)
+            x_data = z_true + s_data @ L_det.T
+
+            s_sim = rng.standard_normal(size=z_gen.shape)
+            x_sim = z_gen + s_sim @ L_det.T
+
+            y_nat = np.ones(n_samples, dtype=np.ubyte)
+            y_MC = np.zeros(n_samples, dtype=np.ubyte)
+
+            z = np.concatenate((z_true, z_gen), axis=0)
+            x = np.concatenate((x_data, x_sim), axis=0)
+            y = np.concatenate((y_nat, y_MC), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
             print(f"Generated and saved dataset to cache: {cache_path}")

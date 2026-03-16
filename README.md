@@ -47,62 +47,120 @@ NVIDIA cuDNN is included in the dependencies for GPU acceleration. Ensure compat
 ## Usage
 
 ```bash
-# Run with defaults (500k events, batch size 1024, smearing 0.5)
-python main.py
+# Gaussian toy dataset (defaults: 500k events, batch size 1024, smearing 0.5)
+uv run python -m ran
 
-# Customize via CLI flags (powered by python-fire)
-python main.py --n_samples=1000000 --batch_size=2048 --smearing=0.3
+# Jet substructure dataset (all 6 variables)
+uv run python -m ran --dataset jets
+
+# Jet dataset with specific variables
+uv run python -m ran --dataset jets --variables='("m", "w")'
+
+# Customize Gaussian parameters
+uv run python -m ran --n_samples=1000000 --batch_size=2048 --smearing=0.3 --dim=4
+
+# Reload an existing run (regenerate plots/metrics)
+uv run python -m ran --load_run=runs/2026-03-14T061023Z
+
+# SLURM submission
+sbatch submit.sh --dataset jets
 ```
 
 | Flag | Default | Description |
 |---|---|---|
+| `--dataset` | `gaussian` | Dataset type: `gaussian` or `jets` |
 | `--n_samples` | `500000` | Number of events per class (data + MC) |
 | `--batch_size` | `1024` | Training batch size |
 | `--smearing` | `0.5` | Gaussian smearing width (detector resolution) |
+| `--dim` | `1` | Number of Gaussian dimensions |
+| `--variables` | all 6 | Jet substructure variables to use |
+| `--load_run` | `None` | Path to an existing run directory to reload |
 
 The pipeline will:
-1. Generate (or load from cache) a synthetic Gaussian dataset
+1. Generate (or load from cache) the dataset
 2. Split into train / validation / test sets (70 / 10 / 20%)
 3. Train the GAN with early stopping (patience = 5 epochs)
-4. Save publication-quality PDF plots to `plots/<UTC-timestamp>/`
+4. Save models, training history, and plots to `runs/<UTC-timestamp>/`
+5. Compute distance metrics (Wasserstein, Jensen-Shannon) on the test set
+
+### Evaluation
+
+Distance metrics can be computed independently on existing runs:
+
+```bash
+# Evaluate all runs
+uv run python -m ran.evaluate
+
+# Evaluate a single run
+uv run python -m ran.evaluate --run_dir=runs/2026-03-14T061023Z
+
+# Recompute even if metrics.json exists
+uv run python -m ran.evaluate --force
+```
+
+This computes per-dimension 1D Wasserstein distances and Jensen-Shannon divergences at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
 
 ## Project Structure
 
 ```
 RANv4/
-├── main.py          Entry point and pipeline orchestration
-├── models.py        Generator and discriminator architectures
-├── train.py         Adversarial training loop with early stopping
-├── datasets.py      Synthetic data generation, caching, and splitting
-├── plotting.py      Detector-level, particle-level, and loss curve plots
-├── pyproject.toml   Project metadata and dependencies
-└── plots/           Output directory (timestamped subdirectories)
+├── ran/                   Python package
+│   ├── __main__.py        Entry point (python -m ran)
+│   ├── data/
+│   │   ├── datasets.py    DatasetSplits, RAN_Dataset, caching
+│   │   ├── jets.py        Jet substructure loading and standardization
+│   │   └── download.py    One-time Zenodo data download
+│   ├── models.py          Generator and discriminator architectures
+│   ├── train.py           Adversarial training loop with early stopping
+│   ├── plotting.py        Detector-level, particle-level, and loss curve plots
+│   └── evaluate.py        Post-hoc distance metrics (Wasserstein, JS divergence)
+├── submit.sh              SLURM submission script
+├── pyproject.toml         Project metadata and dependencies
+├── runs/                  Output directory (timestamped subdirectories)
+└── .cache/                Cached datasets
 ```
 
-## Synthetic Dataset
+## Datasets
 
-The included Gaussian toy dataset demonstrates the reweighting concept:
+### Gaussian (Synthetic Toy)
 
 | | Distribution | Parameters |
 |---|---|---|
 | **Data (truth)** | Normal | mu=0, sigma=1 |
 | **MC (simulation)** | Normal | mu=0.5, sigma=0.9 |
 
-Both are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level (*z*) and detector-level (*x*) features. The generator must learn weights on *z* such that the *x* distributions agree.
+Both are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level (*z*) and detector-level (*x*) features. Supports arbitrary dimensionality via `--dim`.
 
-Datasets are cached to `.cache/` (keyed by parameters) to avoid regeneration across runs.
+### Jet Substructure (Physics)
+
+Herwig (data) vs Pythia26 (MC) Z+jets at high pT (200 GeV), with Delphes detector simulation. Downloaded from [Zenodo record 3548091](https://zenodo.org/record/3548091).
+
+| Variable | Symbol | Description |
+|---|---|---|
+| `m` | *m* [GeV] | Jet mass |
+| `M` | *M* | Jet constituent multiplicity |
+| `w` | *w* | Jet width |
+| `tau21` | tau\_21 | N-subjettiness ratio |
+| `zg` | z\_g | Groomed jet momentum fraction |
+| `sdm` | ln(rho) | Log soft-drop jet mass |
+
+All variables are z-score standardized using MC gen-level statistics only (no information leakage).
 
 ## Output
 
-Each run produces three plots in `plots/<timestamp>/`:
+Each run produces a timestamped directory under `runs/` containing:
 
-- **`detector_level.pdf`** -- Histogram of detector-level feature *x* comparing data, unweighted MC, and reweighted MC, with a ratio panel
-- **`particle_level.pdf`** -- Same comparison at particle level (*z*): truth vs generated vs reweighted
-- **`losses.pdf`** -- Training curves for generator and discriminator (train + validation), with the log(2) equilibrium target
+- **`generator.keras`** / **`discriminator.keras`** -- Saved model checkpoints
+- **`history.npz`** -- Training loss history
+- **`config.json`** -- Run configuration (reproducibility)
+- **`detector_level.pdf`** -- Histogram comparing data, MC, and reweighted MC at detector level with ratio panel
+- **`particle_level.pdf`** -- Same comparison at particle level
+- **`losses.pdf`** -- Training curves with log(2) equilibrium target
+- **`metrics.json`** -- Wasserstein distances and JS divergences (before/after reweighting)
 
 ## Training Hyperparameters
 
-Configurable in `train.py`:
+Configurable in `ran/train.py`:
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -118,5 +176,6 @@ Configurable in `train.py`:
 - [TensorFlow](https://www.tensorflow.org/) >= 2.21
 - [Keras](https://keras.io/) >= 3.13
 - [NumPy](https://numpy.org/) >= 2.4
+- [SciPy](https://scipy.org/) >= 1.15
 - [Matplotlib](https://matplotlib.org/) >= 3.10
 - [Fire](https://github.com/google/python-fire) >= 0.7

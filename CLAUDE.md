@@ -21,9 +21,40 @@ RANv4 is a Reweighting Algorithm Network that uses adversarial learning to unfol
 
 - Prefer `fd` over `find`, `rg` over `grep`, and `fzf` for fuzzy finding. The Rust-based tools are faster and have better defaults. `find`/`grep` are fine as fallbacks.
 
+## Project Structure
+
+```
+ran/                   Python package
+├── __main__.py        Entry point (python -m ran)
+├── data/
+│   ├── datasets.py    DatasetSplits, RAN_Dataset, caching
+│   ├── jets.py        Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
+│   └── download.py    One-time Zenodo download
+├── models.py          Generator and discriminator architectures
+├── train.py           Adversarial training loop with early stopping
+├── plotting.py        Detector-level, particle-level, and loss curve plots
+└── evaluate.py        Post-hoc distance metrics (Wasserstein, JS divergence)
+
+submit.sh              SLURM submission script
+runs/                  Output directory (timestamped subdirectories)
+.cache/                Cached datasets (gaussian .npz, per-variable jet .npz)
+```
+
+## Running
+
+```bash
+uv run python -m ran                                     # train gaussian (defaults)
+uv run python -m ran --dataset jets                      # train on all 6 jet variables
+uv run python -m ran --load_run=runs/2026-03-14T061023Z  # reload a saved run
+uv run python -m ran.evaluate                            # compute metrics for all runs
+uv run python -m ran.evaluate --run_dir=runs/2026-...    # single run
+sbatch submit.sh --dataset jets                          # SLURM submission
+```
+
 ## Tech Stack
 
 - Python >= 3.13, managed with `uv` (no pip)
 - TensorFlow / Keras for training
 - python-fire for CLI
 - Matplotlib for publication-quality plots
+- scipy for evaluation metrics (Wasserstein distance, Jensen-Shannon divergence)

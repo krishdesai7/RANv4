@@ -35,9 +35,10 @@ def _load_splits(config: dict) -> DatasetSplits:
     dim = config["dim"]
 
     if dataset == "gaussian":
-        smearing = config.get("smearing", 0.5)
+        gaussian_params = config["gaussian_params"]
+        raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
         return RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
-            n_samples=n_samples, smearing=smearing, dim=dim,
+            params=raw_params, n_samples=n_samples,
         )
     elif dataset == "jets":
         from ran.data import load_jet_dataset

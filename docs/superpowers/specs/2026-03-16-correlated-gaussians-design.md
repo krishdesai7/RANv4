@@ -6,7 +6,7 @@ Replace the existing independent-dimension Gaussian dataset generator with a
 fully general multivariate Gaussian generator. Users supply particle-level and
 detector-level distribution parameters (means, covariances) via a YAML config
 file. This is a clean break — the old `--dim`/`--smearing` CLI interface is
-removed.
+removed. Bare `uv run -m ran` without `--config` will error for Gaussian mode.
 
 ## YAML Config Format
 
@@ -21,7 +21,7 @@ sigma_mc:            # (dim,) for diagonal or (dim,dim) for full covariance
 sigma_true:
   - [0.81, -0.702]
   - [-0.702, 1.69]
-sigma_det: [0.5, 0.8]
+sigma_det: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
 ```
 
 ### Sigma interpretation
@@ -30,13 +30,17 @@ sigma_det: [0.5, 0.8]
   matrix is `diag(sigma**2)`.
 - `(dim, dim)` matrix: used as-is as the full covariance matrix.
 
+This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
+`sigma_det`. A `(dim, dim)` `sigma_det` models correlated detector smearing.
+
 ### Validation
 
 - All five keys must be present.
 - `mu_mc` and `mu_true` must be `(dim,)` vectors.
 - Each `sigma_*` must be `(dim,)` or `(dim, dim)`, consistent with `dim`.
 - Covariance matrices are validated by `scipy.linalg.cholesky`, which raises
-  `LinAlgError` if the matrix is not symmetric positive-definite.
+  `LinAlgError` if the matrix is not symmetric positive-definite. The Cholesky
+  factor is computed once and reused for generation (no redundant decomposition).
 
 ## Data Generation
 
@@ -55,7 +59,7 @@ Per-event smearing centered on each event's particle-level value, preserving
 the `(z, x)` pairing. Vectorized via Cholesky decomposition:
 
 ```python
-L = scipy.linalg.cholesky(cov_det, lower=True)
+L = scipy.linalg.cholesky(cov_det, lower=True)  # computed once
 s_data = rng.standard_normal(size=z_true.shape)
 x_data = z_true + s_data @ L.T
 
@@ -72,31 +76,42 @@ that detector response is conditioned on the true particle-level value.
 
 ## Changes to `datasets.py`
 
-### `generate_gaussian_dataset` new signature
+### `generate_gaussian_dataset` dual interface
+
+The method accepts either a YAML file path or pre-parsed parameter dicts. This
+is needed because `--load_run` and `evaluate.py` reconstruct data from stored
+`config.json` arrays (no YAML file available).
 
 ```python
 def generate_gaussian_dataset(self,
-    config_path: str | Path,
+    config_path: str | Path | None = None,
+    params: dict | None = None,
     n_samples: int = 10**6,
 ) -> DatasetSplits:
 ```
 
-- Reads YAML config from `config_path`.
-- Infers `dim` from `mu_mc`.
-- Promotes `(dim,)` sigmas to `diag(sigma**2)`.
-- Generates data as described above.
-- Caching: cache key includes a hash of the full YAML content + `n_samples` +
-  `seed`.
+Exactly one of `config_path` or `params` must be provided. `params` is a dict
+with the five keys (`mu_mc`, `mu_true`, `sigma_mc`, `sigma_true`, `sigma_det`)
+as numpy arrays or nested lists. The YAML path is just a convenience that reads
+and parses into the same `params` dict.
+
+A `parse_gaussian_config(config_path) -> dict` helper reads and validates the
+YAML, returning the params dict. This is also used by `__main__.py` to obtain
+params for storage in `config.json`.
 
 ### Removed parameters
 
-- `smearing: float` — replaced by `sigma_det` in YAML.
-- `dim: int` — inferred from config.
+- `smearing: float` — replaced by `sigma_det` in config.
+- `dim: int` — inferred from `mu_mc`.
 
 ### `_cache_key` / `_cache_path` updates
 
-Cache key computed from a hash of the YAML content string, `n_samples`, and
-`self.seed`. The `smearing`/`dim` parameters are removed from the key.
+Cache key computed from a canonical JSON serialization of the five parsed
+parameter arrays (as sorted nested lists), plus `n_samples` and `self.seed`.
+This is deterministic regardless of whether the entry point was a YAML file or
+stored `config.json` arrays. The old `smearing`/`dim`/`test_fraction` parameters
+are removed from the key. (`test_fraction` was included before but is irrelevant
+since the cache stores pre-split data.)
 
 ## Changes to `__main__.py`
 
@@ -111,18 +126,21 @@ uv run -m ran --load_run runs/2026-03-16T...
 
 - Remove `smearing`, `dim` flags.
 - Add `config` flag (path to YAML). Required when `dataset == "gaussian"`.
+  Running without `--config` in Gaussian mode raises `ValueError`.
 - `dim` is inferred internally, still passed to model builders.
 
 ### `config.json` per run
 
 The saved `config.json` includes the full parsed Gaussian parameters (all five
 arrays serialized as nested lists) so that runs are self-contained and
-reloadable without the original YAML file.
+reloadable without the original YAML file. On `--load_run`, these stored arrays
+are passed directly via the `params` kwarg.
 
 ## Changes to `evaluate.py`
 
-`_load_splits` updated to reconstruct the dataset from the stored parameters in
-`config.json` rather than from `smearing`/`dim`.
+`_load_splits` updated to reconstruct the dataset from the stored parameter
+arrays in `config.json`, passing them via the `params` kwarg to
+`generate_gaussian_dataset`.
 
 ## No changes required
 

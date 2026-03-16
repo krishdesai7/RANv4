@@ -50,7 +50,6 @@ def main(
         else:
             variables = tuple(config["variables"])
 
-
     if dataset == "gaussian":
         splits = RAN_Dataset(
             batch_size=batch_size

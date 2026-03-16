@@ -25,9 +25,11 @@ mpl.rcParams["grid.alpha"] = 0.6
 mpl.rcParams["grid.linestyle"] = "--"
 mpl.rcParams["lines.markerfacecolor"] = "none"
 
+
 def _collect_data(
     dataset: tf.data.Dataset,
-) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
+) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double],
+           npt.NDArray[np.ubyte]]:
     zs: list[npt.NDArray[np.double]] = []
     xs: list[npt.NDArray[np.double]] = []
     ys: list[npt.NDArray[np.ubyte]] = []
@@ -63,8 +65,10 @@ def _hist_ratio_panel(
     xlabel: str,
     title: str,
 ) -> None:
-    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
-    h_comp: tuple = ax.hist(comp, bins=h_ref[1], alpha=0.35, color="C1", label=comp_label)
+    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0",
+                           label=ref_label)
+    h_comp: tuple = ax.hist(comp, bins=h_ref[1], alpha=0.35, color="C1",
+                            label=comp_label)
     h_rwt: tuple = ax.hist(
         rwt_vals, bins=h_ref[1], weights=rwt_weights,
         histtype="step", color="black", linestyle="--", linewidth=1.5,
@@ -77,8 +81,12 @@ def _hist_ratio_panel(
     bin_edges: npt.NDArray[np.double] = h_ref[1]
     centres: npt.NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
     safe: npt.NDArray[np.bool] = h_ref[0] > 0
-    ratio_comp: npt.NDArray[np.double] = np.full_like(h_comp[0], np.nan, dtype=np.double)
-    ratio_rwt: npt.NDArray[np.double] = np.full_like(h_rwt[0], np.nan, dtype=np.double)
+    ratio_comp: npt.NDArray[np.double] = np.full_like(h_comp[0], np.nan,
+                                                      dtype=np.double,
+                                                      )
+    ratio_rwt: npt.NDArray[np.double] = np.full_like(h_rwt[0], np.nan,
+                                                     dtype=np.double,
+                                                     )
     ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
     ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
 
@@ -97,12 +105,14 @@ def _save_fig(fig: figure.Figure, save_path: Path) -> None:
     plt.close(fig)
     print(f"Saved {save_path}")
 
+
 class VarInfo(TypedDict):
     xlim: tuple[float, float]
     xlabel: str
     symbol: str
     mu: float
     sigma: float
+
 
 def plot_detector_level(
     test_dataset: tf.data.Dataset,
@@ -115,7 +125,7 @@ def plot_detector_level(
         test_dataset (tf.data.Dataset)
         g (keras.Model): Generator model.
         save_path (str | Path)
-        var_info: Per-variable plot config with keys xlim, xlabel, symbol, mu, sigma.
+        var_info: Per-variable plot config.
     """
     z: npt.NDArray[np.double]
     x: npt.NDArray[np.double]
@@ -160,8 +170,10 @@ def plot_detector_level(
             ref = x_data[:, i]
             comp = x_sim[:, i]
             bins = np.linspace(ref.min(), ref.max(), 51)
-            xlabel = f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)"
-            title = f"Detector Level — Dim {i}" if dim > 1 else "Detector Level"
+            xlabel = f"$x_{{{i}}}$ (detector level)" if dim > 1\
+                else "x (detector level)"
+            title = f"Detector Level — Dim {i}" if dim > 1\
+                else "Detector Level"
 
         _hist_ratio_panel(
             ax, ax_r,
@@ -190,7 +202,7 @@ def plot_particle_level(
         test_dataset (tf.data.Dataset): Test dataset.
         g (keras.Model): Generator model.
         save_path (str | Path): Save path.
-        var_info: Per-variable plot config with keys xlim, xlabel, symbol, mu, sigma.
+        var_info: Per-variable plot config.
     """
     z: npt.NDArray[np.double]
     y: npt.NDArray[np.ubyte]
@@ -236,8 +248,16 @@ def plot_particle_level(
             lo: float = min(ref.min(), comp.min())
             hi: float = max(ref.max(), comp.max())
             bins = np.linspace(lo, hi, 51)
-            xlabel = f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
-            title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
+            xlabel = (
+                f"$z_{{{i}}}$ (particle level)"
+                if dim > 1
+                else "z (particle level)"
+            )
+            title = (
+                f"Particle Level — Dim {i}"
+                if dim > 1
+                else "Particle Level"
+            )
 
         _hist_ratio_panel(
             ax, ax_r,
@@ -266,19 +286,25 @@ def plot_losses(
     """
     if isinstance(save_path, str):
         save_path = Path(save_path)
-    epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
+    epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]),
+                                               dtype=np.ushort)
 
     fig: figure.Figure
     ax: axes.Axes
     fig, ax = plt.subplots(figsize=(8, 5))
-    train_d: npt.NDArray[np.double] = np.array(history["train_d"], dtype=np.double)
-    val_d: npt.NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
-    train_g: npt.NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
-    val_g: npt.NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
-    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw = 1)
-    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw = 3, alpha = 0.5)
-    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw = 1)
-    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw = 3, alpha = 0.5)
+    train_d: npt.NDArray[np.double] = np.array(
+        history["train_d"], dtype=np.double,
+    )
+    val_d: npt.NDArray[np.double] = np.array(history["val_d"],
+                                             dtype=np.double)
+    train_g: npt.NDArray[np.double] = np.array(history["train_g"],
+                                               dtype=np.double)
+    val_g: npt.NDArray[np.double] = np.array(history["val_g"],
+                                             dtype=np.double)
+    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
+    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
+    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
+    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw=3, alpha=0.5)
     ax.axhline(np.log(2), color="gray", linestyle="-", linewidth=2,
                zorder=10, label=r"$\log(2)$")
     ax.set_xlabel("Epoch")

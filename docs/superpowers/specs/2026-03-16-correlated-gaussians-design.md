@@ -15,13 +15,13 @@ Five required keys. `dim` is inferred from `len(mu_mc)`.
 ```yaml
 mu_mc: [0.0, 1.0]
 mu_true: [0.2, 0.8]
-sigma_mc:            # (dim,) for diagonal or (dim,dim) for full covariance
+sigma_mc: # (dim,) for diagonal or (dim,dim) for full covariance
   - [1.0, -0.54]
   - [-0.54, 2.25]
 sigma_true:
   - [0.81, -0.702]
   - [-0.702, 1.69]
-sigma_det: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
+sigma_detector: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
 ```
 
 ### Sigma interpretation
@@ -31,7 +31,7 @@ sigma_det: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
 - `(dim, dim)` matrix: used as-is as the full covariance matrix.
 
 This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
-`sigma_det`. A `(dim, dim)` `sigma_det` models correlated detector smearing.
+`sigma_detector`. A `(dim, dim)` `sigma_detector` models correlated detector smearing.
 
 ### Validation
 
@@ -39,8 +39,8 @@ This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
 - `mu_mc` and `mu_true` must be `(dim,)` vectors.
 - Each `sigma_*` must be `(dim,)` or `(dim, dim)`, consistent with `dim`.
 - Covariance matrices are validated by `scipy.linalg.cholesky`, which raises
-  `LinAlgError` if the matrix is not symmetric positive-definite. The Cholesky
-  factor is computed once and reused for generation (no redundant decomposition).
+  `LinAlgError` if the matrix is not symmetric or positive-definite. The Cholesky
+  factor is computed once and reused for generation.
 
 ## Data Generation
 
@@ -117,7 +117,7 @@ since the cache stores pre-split data.)
 
 ### CLI interface
 
-```
+```zsh
 uv run -m ran --config params/2d_corr.yaml
 uv run -m ran --config params/2d_corr.yaml --n_samples 1000000
 uv run -m ran --dataset jets --variables m,M,w

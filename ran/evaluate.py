@@ -6,9 +6,9 @@ algorithms: sorted-CDF Wasserstein (O(n log n)) and histogram-based JS
 divergence.
 
 Usage:
-    python evaluate.py                          # all runs in runs/
-    python evaluate.py --run_dir=runs/2026-...  # single run
-    python evaluate.py --force                  # recompute existing
+    python -m ran.evaluate                          # all runs in runs/
+    python -m ran.evaluate --run_dir=runs/2026-...  # single run
+    python -m ran.evaluate --force                  # recompute existing
 """
 
 import os
@@ -22,7 +22,7 @@ import numpy as np
 import numpy.typing as npt
 import keras
 
-from datasets import RAN_Dataset, DatasetSplits
+from ran.data import RAN_Dataset, DatasetSplits
 from scipy.stats import wasserstein_distance
 from scipy.spatial.distance import jensenshannon
 
@@ -40,7 +40,7 @@ def _load_splits(config: dict) -> DatasetSplits:
             n_samples=n_samples, smearing=smearing, dim=dim,
         )
     elif dataset == "jets":
-        from load_jet_data import load_jet_dataset
+        from ran.data import load_jet_dataset
         splits, _, _ = load_jet_dataset(
             n_samples=n_samples, batch_size=batch_size,
             variables=tuple(config["variables"]),

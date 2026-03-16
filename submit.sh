@@ -7,4 +7,4 @@
 #SBATCH --output=slurm-%j.log
 
 cd /global/u1/k/kdesai/RANv4
-uv run python main.py "$@"
+uv run python -m ran "$@"

@@ -7,12 +7,11 @@ from typing import Any
 import json
 import fire
 
-from datasets import DatasetSplits, RAN_Dataset
-from load_jet_data import load_jet_dataset, JET_OBS
-from evaluate import evaluate_run
+from ran.data import DatasetSplits, RAN_Dataset, load_jet_dataset, JET_OBS
+from ran.evaluate import evaluate_run
 
-from train import train
-from plotting import (
+from ran.train import train
+from ran.plotting import (
     plot_detector_level,
     plot_particle_level,
     plot_losses,
@@ -50,7 +49,7 @@ def main(
             smearing: float = config.get("smearing", smearing)
         else:
             variables = tuple(config["variables"])
-    
+
 
     if dataset == "gaussian":
         splits = RAN_Dataset(

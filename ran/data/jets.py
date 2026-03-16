@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from datasets import RAN_Dataset, DatasetSplits
+from ran.data.datasets import RAN_Dataset, DatasetSplits
 
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
@@ -53,7 +53,7 @@ def load_jet_dataset(
     missing: list[str] = [v for v in variables
                if not (cache_dir / f"{v}.npz").exists()]
     if missing:
-        from download_jet_data import download_jet_data
+        from ran.data.download import download_jet_data
         print("Cached jet data not found. Downloading from Zenodo...")
         download_jet_data(cache_dir)
 

@@ -2,8 +2,8 @@ import tensorflow as tf
 import keras
 import numpy as np
 
-from datasets import DatasetSplits
-from models import build_generator, build_discriminator
+from ran.data import DatasetSplits
+from ran.models import build_generator, build_discriminator
 
 EPS = keras.config.epsilon()
 

@@ -62,14 +62,21 @@ class RAN_Dataset():
         self.dataset: tf.data.Dataset | None = None
         self.splits: DatasetSplits | None = None
     
+    @staticmethod
+    def _round_nested(obj, ndigits: int = 10):
+        """Recursively round floats in a nested list/scalar for stable hashing."""
+        if isinstance(obj, list):
+            return [RAN_Dataset._round_nested(v, ndigits) for v in obj]
+        return round(float(obj), ndigits)
+
     def _cache_key(self, parsed: dict, n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
         key_data = {
-            "mu_mc": parsed["mu_mc"].tolist(),
-            "mu_true": parsed["mu_true"].tolist(),
-            "cov_mc": parsed["cov_mc"].tolist(),
-            "cov_true": parsed["cov_true"].tolist(),
-            "cov_detector": parsed["cov_detector"].tolist(),
+            "mu_mc": self._round_nested(parsed["mu_mc"].tolist()),
+            "mu_true": self._round_nested(parsed["mu_true"].tolist()),
+            "cov_mc": self._round_nested(parsed["cov_mc"].tolist()),
+            "cov_true": self._round_nested(parsed["cov_true"].tolist()),
+            "cov_detector": self._round_nested(parsed["cov_detector"].tolist()),
             "n_samples": n_samples,
             "seed": self.seed,
         }

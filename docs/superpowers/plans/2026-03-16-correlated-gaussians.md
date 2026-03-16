@@ -116,6 +116,22 @@ class TestSigmaToCovariance:
         bad = [[1.0, 5.0], [5.0, 1.0]]
         with pytest.raises(np.linalg.LinAlgError):
             sigma_to_covariance(bad, dim=2)
+
+    def test_asymmetric_matrix_raises(self):
+        """An asymmetric matrix should be rejected."""
+        asym = [[1.0, 0.5], [999.0, 2.0]]
+        with pytest.raises(ValueError, match="symmetric"):
+            sigma_to_covariance(asym, dim=2)
+
+    def test_negative_scalar_raises(self):
+        """Negative scalar sigma is physically nonsensical."""
+        with pytest.raises(ValueError, match="negative"):
+            sigma_to_covariance(-1.0, dim=2)
+
+    def test_negative_vector_element_raises(self):
+        """Negative elements in sigma vector should be rejected."""
+        with pytest.raises(ValueError, match="negative"):
+            sigma_to_covariance([1.0, -0.5], dim=2)
 ```
 
 - [ ] **Step 2: Write tests for YAML parsing**
@@ -240,23 +256,30 @@ def sigma_to_covariance(
     cov: npt.NDArray[np.double]
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
         # Scalar
-        cov = float(arr.ravel()[0]) ** 2 * np.eye(dim, dtype=np.double)
+        val = float(arr.ravel()[0])
+        if val < 0:
+            raise ValueError(f"sigma scalar must be non-negative, got {val}")
+        cov = val ** 2 * np.eye(dim, dtype=np.double)
     elif arr.ndim == 1:
         if arr.shape[0] != dim:
             raise ValueError(
                 f"sigma vector has length {arr.shape[0]}, expected dim={dim}"
             )
+        if np.any(arr < 0):
+            raise ValueError("sigma vector elements must be non-negative")
         cov = np.diag(arr ** 2).astype(np.double)
     elif arr.ndim == 2:
         if arr.shape != (dim, dim):
             raise ValueError(
                 f"sigma matrix has shape {arr.shape}, expected ({dim}, {dim})"
             )
+        if not np.allclose(arr, arr.T):
+            raise ValueError("sigma matrix must be symmetric")
         cov = arr
     else:
         raise ValueError(f"sigma must be scalar, 1D, or 2D, got ndim={arr.ndim}")
 
-    # Validate symmetric positive-definite via scipy cholesky
+    # Validate positive-definite via scipy cholesky
     cholesky(cov, lower=True)
     return cov
 
@@ -483,8 +506,8 @@ git commit -m "Add tests for multivariate Gaussian dataset generation"
 
 Replace the existing `_cache_key`, `_cache_path`, and `generate_gaussian_dataset` methods in `ran/data/datasets.py`. The new implementation:
 
-- `_cache_key` takes a `params` dict and `n_samples`, hashes canonical JSON of the five parameter arrays
-- `_cache_path` takes params and n_samples
+- `_cache_key` takes the `parsed` dict (with `cov_*` keys, i.e. post-promotion covariance matrices) and `n_samples`. This ensures the same physical config always produces the same cache key regardless of entry point (YAML vs params dict).
+- `_cache_path` takes parsed dict and n_samples
 - `generate_gaussian_dataset` accepts `config_path` or `params`, uses `parse_gaussian_config` for YAML, calls `rng.multivariate_normal` for particle-level draws and Cholesky smearing for detector-level
 
 ```python
@@ -493,13 +516,14 @@ from scipy.linalg import cholesky
 from ran.data.config import parse_gaussian_config
 
 # Replace _cache_key:
-def _cache_key(self, params: dict, n_samples: int) -> str:
+def _cache_key(self, parsed: dict, n_samples: int) -> str:
+    """Hash the promoted covariance matrices for a canonical cache key."""
     key_data = {
-        "mu_mc": np.asarray(params["mu_mc"]).tolist(),
-        "mu_true": np.asarray(params["mu_true"]).tolist(),
-        "sigma_mc": np.asarray(params["sigma_mc"]).tolist(),
-        "sigma_true": np.asarray(params["sigma_true"]).tolist(),
-        "sigma_detector": np.asarray(params["sigma_detector"]).tolist(),
+        "mu_mc": parsed["mu_mc"].tolist(),
+        "mu_true": parsed["mu_true"].tolist(),
+        "cov_mc": parsed["cov_mc"].tolist(),
+        "cov_true": parsed["cov_true"].tolist(),
+        "cov_detector": parsed["cov_detector"].tolist(),
         "n_samples": n_samples,
         "seed": self.seed,
     }
@@ -508,8 +532,8 @@ def _cache_key(self, params: dict, n_samples: int) -> str:
     ).hexdigest()[:16]
 
 # Replace _cache_path:
-def _cache_path(self, params: dict, n_samples: int) -> Path:
-    cache_key = self._cache_key(params, n_samples)
+def _cache_path(self, parsed: dict, n_samples: int) -> Path:
+    cache_key = self._cache_key(parsed, n_samples)
     return self.cache_dir / f"gaussian_{cache_key}.npz"
 
 # Replace generate_gaussian_dataset:
@@ -550,14 +574,7 @@ def generate_gaussian_dataset(self,
     cov_true: npt.NDArray[np.double] = parsed["cov_true"]
     cov_detector: npt.NDArray[np.double] = parsed["cov_detector"]
 
-    raw_params = params if params is not None else {
-        "mu_mc": mu_mc.tolist(),
-        "mu_true": mu_true.tolist(),
-        "sigma_mc": cov_mc.tolist(),
-        "sigma_true": cov_true.tolist(),
-        "sigma_detector": cov_detector.tolist(),
-    }
-    cache_path: Path = self._cache_path(raw_params, n_samples)
+    cache_path: Path = self._cache_path(parsed, n_samples)
     self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     if cache_path.exists():

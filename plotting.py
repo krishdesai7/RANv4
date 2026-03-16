@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+from typing import TypedDict
 from pathlib import Path
 
 import numpy as np
@@ -54,17 +56,17 @@ def _hist_ratio_panel(
     comp: npt.NDArray[np.double],
     rwt_vals: npt.NDArray[np.double],
     rwt_weights: npt.NDArray[np.double],
-    bins: npt.NDArray[np.double] | np.ushort,
+    bins: Sequence[float] | int,
     ref_label: str,
     comp_label: str,
     rwt_label: str,
     xlabel: str,
     title: str,
 ) -> None:
-    h_ref, bins, _ = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
-    h_comp, _, _ = ax.hist(comp, bins=bins, alpha=0.35, color="C1", label=comp_label)
-    h_rwt, _, _ = ax.hist(
-        rwt_vals, bins=bins, weights=rwt_weights,
+    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
+    h_comp: tuple = ax.hist(comp, bins=h_ref[1], alpha=0.35, color="C1", label=comp_label)
+    h_rwt: tuple = ax.hist(
+        rwt_vals, bins=h_ref[1], weights=rwt_weights,
         histtype="step", color="black", linestyle="--", linewidth=1.5,
         label=rwt_label,
     )
@@ -72,18 +74,19 @@ def _hist_ratio_panel(
     ax.legend()
     ax.set_title(title)
 
-    centres: npt.NDArray[np.double] = (bins[:-1] + bins[1:]) / 2
-    safe: npt.NDArray[np.bool] = h_ref > 0
-    ratio_comp: npt.NDArray[np.double] = np.full_like(h_comp, np.nan, dtype=np.double)
-    ratio_rwt: npt.NDArray[np.double] = np.full_like(h_rwt, np.nan, dtype=np.double)
-    ratio_comp[safe] = h_comp[safe] / h_ref[safe]
-    ratio_rwt[safe] = h_rwt[safe] / h_ref[safe]
+    bin_edges: npt.NDArray[np.double] = h_ref[1]
+    centres: npt.NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
+    safe: npt.NDArray[np.bool] = h_ref[0] > 0
+    ratio_comp: npt.NDArray[np.double] = np.full_like(h_comp[0], np.nan, dtype=np.double)
+    ratio_rwt: npt.NDArray[np.double] = np.full_like(h_rwt[0], np.nan, dtype=np.double)
+    ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
+    ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
 
     ax_r.plot(centres, ratio_comp, color="C1", marker="o")
     ax_r.plot(centres, ratio_rwt, color="black", marker="^", linestyle="--")
     ax_r.axhline(1, color="gray", linewidth=0.5)
     ax_r.set_ylim(0, 2)
-    ax_r.set_ylabel(f"Ratio to {ref_label}")
+    ax_r.set_ylabel(f"Ratio to\n{ref_label}")
     ax_r.set_xlabel(xlabel)
 
 
@@ -94,12 +97,18 @@ def _save_fig(fig: figure.Figure, save_path: Path) -> None:
     plt.close(fig)
     print(f"Saved {save_path}")
 
+class VarInfo(TypedDict):
+    xlim: tuple[float, float]
+    xlabel: str
+    symbol: str
+    mu: float
+    sigma: float
 
 def plot_detector_level(
     test_dataset: tf.data.Dataset,
     g: keras.Model,
     save_path: str | Path = "plots/detector_level.pdf",
-    var_info: list[dict] | None = None,
+    var_info: list[VarInfo] | None = None,
 ) -> None:
     """Generate detector level plots.
     Arguments:
@@ -133,9 +142,15 @@ def plot_detector_level(
         ax_r.sharex(ax)
         ax.tick_params(labelbottom=False)
 
+        ref: npt.NDArray[np.double]
+        comp: npt.NDArray[np.double]
+        bins: npt.NDArray[np.double]
+        xlabel: str
+        title: str
         if var_info:
-            cfg = var_info[i]
-            mu, sigma = cfg["mu"], cfg["sigma"]
+            cfg: VarInfo = var_info[i]
+            mu: float = cfg["mu"]
+            sigma: float = cfg["sigma"]
             ref = x_data[:, i] * sigma + mu
             comp = x_sim[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
@@ -154,7 +169,7 @@ def plot_detector_level(
             comp=comp,
             rwt_vals=comp,
             rwt_weights=w,
-            bins=bins,
+            bins=bins.tolist(),
             ref_label="Data",
             comp_label="Sim",
             rwt_label="Reweighted Sim",
@@ -168,7 +183,7 @@ def plot_particle_level(
     test_dataset: tf.data.Dataset,
     g: keras.Model,
     save_path: str | Path = "plots/particle_level.pdf",
-    var_info: list[dict] | None = None,
+    var_info: list[VarInfo] | None = None,
 ) -> None:
     """Generate particle level plots.
     Arguments:
@@ -190,7 +205,7 @@ def plot_particle_level(
     fig: figure.Figure
     all_axes: npt.NDArray
     fig, all_axes = plt.subplots(
-        2 * dim, 1, figsize=(8, 6 * dim),
+        2 * dim, 1, figsize=(8, 10 * dim),
         gridspec_kw={"height_ratios": [3, 1] * dim},
     )
     all_axes = np.atleast_1d(all_axes)
@@ -200,9 +215,16 @@ def plot_particle_level(
         ax_r.sharex(ax)
         ax.tick_params(labelbottom=False)
 
+        ref: npt.NDArray[np.double]
+        comp: npt.NDArray[np.double]
+        bins: npt.NDArray[np.double]
+        xlabel: str
+        title: str
+
         if var_info:
-            cfg = var_info[i]
-            mu, sigma = cfg["mu"], cfg["sigma"]
+            cfg: VarInfo = var_info[i]
+            mu: float = cfg["mu"]
+            sigma: float = cfg["sigma"]
             ref = z_true[:, i] * sigma + mu
             comp = z_gen[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
@@ -211,8 +233,8 @@ def plot_particle_level(
         else:
             ref = z_true[:, i]
             comp = z_gen[:, i]
-            lo = min(ref.min(), comp.min())
-            hi = max(ref.max(), comp.max())
+            lo: float = min(ref.min(), comp.min())
+            hi: float = max(ref.max(), comp.max())
             bins = np.linspace(lo, hi, 51)
             xlabel = f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
             title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
@@ -223,7 +245,7 @@ def plot_particle_level(
             comp=comp,
             rwt_vals=comp,
             rwt_weights=w,
-            bins=bins,
+            bins=bins.tolist(),
             ref_label="Truth",
             comp_label="Gen",
             rwt_label="Reweighted Gen",

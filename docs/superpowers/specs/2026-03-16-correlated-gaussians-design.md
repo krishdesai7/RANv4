@@ -21,7 +21,7 @@ sigma_mc: # (dim,) for diagonal or (dim,dim) for full covariance
 sigma_true:
   - [0.81, -0.702]
   - [-0.702, 1.69]
-sigma_detectorector: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
+sigma_detector: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
 ```
 
 ### Sigma interpretation
@@ -32,7 +32,7 @@ sigma_detectorector: [0.5, 0.8] # also supports (dim,dim) for correlated detecto
 - **`(dim, dim)` matrix**: used as-is as the full covariance matrix.
 
 This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
-`sigma_detectorector`. A `(dim, dim)` `sigma_detectorector` models correlated detector smearing.
+`sigma_detector`. A `(dim, dim)` `sigma_detector` models correlated detector smearing.
 
 ### Validation
 

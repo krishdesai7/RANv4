@@ -21,7 +21,7 @@ sigma_mc: # (dim,) for diagonal or (dim,dim) for full covariance
 sigma_true:
   - [0.81, -0.702]
   - [-0.702, 1.69]
-sigma_detector: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
+sigma_detectorector: [0.5, 0.8] # also supports (dim,dim) for correlated detector response
 ```
 
 ### Sigma interpretation
@@ -32,7 +32,7 @@ sigma_detector: [0.5, 0.8] # also supports (dim,dim) for correlated detector res
 - **`(dim, dim)` matrix**: used as-is as the full covariance matrix.
 
 This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
-`sigma_detector`. A `(dim, dim)` `sigma_detector` models correlated detector smearing.
+`sigma_detectorector`. A `(dim, dim)` `sigma_detectorector` models correlated detector smearing.
 
 ### Validation
 
@@ -92,7 +92,7 @@ def generate_gaussian_dataset(self,
 ```
 
 Exactly one of `config_path` or `params` must be provided. `params` is a dict
-with the five keys (`mu_mc`, `mu_true`, `sigma_mc`, `sigma_true`, `sigma_det`)
+with the five keys (`mu_mc`, `mu_true`, `sigma_mc`, `sigma_true`, `sigma_detector`)
 as numpy arrays or nested lists. The YAML path is just a convenience that reads
 and parses into the same `params` dict.
 
@@ -102,7 +102,7 @@ params for storage in `config.json`.
 
 ### Removed parameters
 
-- `smearing: float` — replaced by `sigma_det` in config.
+- `smearing: float` — replaced by `sigma_detector` in config.
 - `dim: int` — inferred from `mu_mc`.
 
 ### `_cache_key` / `_cache_path` updates

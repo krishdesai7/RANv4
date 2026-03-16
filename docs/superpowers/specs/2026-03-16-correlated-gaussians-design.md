@@ -26,9 +26,10 @@ sigma_detector: [0.5, 0.8] # also supports (dim,dim) for correlated detector res
 
 ### Sigma interpretation
 
-- `(dim,)` vector: treated as per-dimension standard deviations; covariance
+- **scalar**: `sigma_mc: 1.0` → isotropic covariance `1.0**2 * I`.
+- **`(dim,)` vector**: per-dimension standard deviations; covariance
   matrix is `diag(sigma**2)`.
-- `(dim, dim)` matrix: used as-is as the full covariance matrix.
+- **`(dim, dim)` matrix**: used as-is as the full covariance matrix.
 
 This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
 `sigma_detector`. A `(dim, dim)` `sigma_detector` models correlated detector smearing.
@@ -37,7 +38,7 @@ This applies to all three sigma keys — `sigma_mc`, `sigma_true`, and
 
 - All five keys must be present.
 - `mu_mc` and `mu_true` must be `(dim,)` vectors.
-- Each `sigma_*` must be `(dim,)` or `(dim, dim)`, consistent with `dim`.
+- Each `sigma_*` must be a scalar, `(dim,)`, or `(dim, dim)`, consistent with `dim`.
 - Covariance matrices are validated by `scipy.linalg.cholesky`, which raises
   `LinAlgError` if the matrix is not symmetric or positive-definite. The Cholesky
   factor is computed once and reused for generation.

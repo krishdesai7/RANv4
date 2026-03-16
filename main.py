@@ -9,6 +9,7 @@ import fire
 
 from datasets import DatasetSplits, RAN_Dataset
 from load_jet_data import load_jet_dataset, JET_OBS
+from evaluate import evaluate_run
 
 from train import train
 from plotting import (
@@ -110,6 +111,12 @@ def main(
     plot_particle_level(splits.test, g, save_path=run_dir / "particle_level.pdf",
                         var_info=var_info)
     plot_losses(history, save_path=run_dir / "losses.pdf")
+
+    # Metrics (run last so failures don't block plots/checkpoints)
+    try:
+        evaluate_run(run_dir, force=True)
+    except Exception as e:
+        print(f"Metric evaluation failed: {e}")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ RANv4 is a Reweighting Algorithm Network that uses adversarial learning to unfol
 ran/                   Python package
 ├── __main__.py        Entry point (python -m ran)
 ├── data/
+│   ├── config.py      YAML config parsing, sigma promotion (parse_gaussian_config)
 │   ├── datasets.py    DatasetSplits, RAN_Dataset, caching
 │   ├── jets.py        Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
 │   └── download.py    One-time Zenodo download
@@ -43,12 +44,13 @@ runs/                  Output directory (timestamped subdirectories)
 ## Running
 
 ```bash
-uv run python -m ran                                     # train gaussian (defaults)
-uv run python -m ran --dataset jets                      # train on all 6 jet variables
-uv run python -m ran --load_run=runs/2026-03-14T061023Z  # reload a saved run
-uv run python -m ran.evaluate                            # compute metrics for all runs
-uv run python -m ran.evaluate --run_dir=runs/2026-...    # single run
-sbatch submit.sh --dataset jets                          # SLURM submission
+uv run -m ran --config params/1d_default.yaml              # 1D uncorrelated
+uv run -m ran --config params/2d_correlated.yaml           # 2D with covariance
+uv run -m ran --dataset jets                               # train on all 6 jet variables
+uv run -m ran --load_run=runs/2026-03-14T061023Z           # reload a saved run
+uv run -m ran.evaluate                                     # compute metrics for all runs
+uv run -m ran.evaluate --run_dir=runs/2026-...             # single run
+sbatch submit.sh --dataset jets                            # SLURM submission
 ```
 
 ## Tech Stack

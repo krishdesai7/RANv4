@@ -103,7 +103,7 @@ This computes per-dimension 1D Wasserstein distances and Jensen-Shannon divergen
 
 ## Project Structure
 
-```
+```txt
 RANv4/
 ├── ran/                   Python package
 │   ├── __main__.py        Entry point (python -m ran)
@@ -136,14 +136,14 @@ Both are smeared by additive Gaussian noise to simulate detector resolution, pro
 
 Herwig (data) vs Pythia26 (MC) Z+jets at high pT (200 GeV), with Delphes detector simulation. Downloaded from [Zenodo record 3548091](https://zenodo.org/record/3548091).
 
-| Variable | Symbol    | Description                   |
-| -------- | --------- | ----------------------------- |
-| `m`      | _m_ [GeV] | Jet mass                      |
-| `M`      | _M_       | Jet constituent multiplicity  |
-| `w`      | _w_       | Jet width                     |
-| `tau21`  | tau_21    | N-subjettiness ratio          |
-| `zg`     | z_g       | Groomed jet momentum fraction |
-| `sdm`    | ln(rho)   | Log soft-drop jet mass        |
+| Variable | Symbol      | Description                   |
+| -------- | ----------- | ----------------------------- |
+| `m`      | _m_ \[GeV\] | Jet mass                      |
+| `M`      | _M_         | Jet constituent multiplicity  |
+| `w`      | _w_         | Jet width                     |
+| `tau21`  | tau_21      | N-subjettiness ratio          |
+| `zg`     | z_g         | Groomed jet momentum fraction |
+| `sdm`    | ln(rho)     | Log soft-drop jet mass        |
 
 All variables are z-score standardized using MC gen-level statistics only (no information leakage).
 

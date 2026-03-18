@@ -12,15 +12,15 @@ RANv4 replaces this with a learned reweighting: a **generator** network predicts
 
 The system is a two-player adversarial game over event weights:
 
-| Component | Input | Output | Role |
-|---|---|---|---|
-| **Generator** *g(z)* | Particle-level feature *z* | Per-event weight (softplus) | Predict weights that make MC look like data |
-| **Discriminator** *d(x)* | Detector-level feature *x* | Data vs MC probability (sigmoid) | Distinguish real data from reweighted MC |
+| Component                | Input                      | Output                           | Role                                        |
+| ------------------------ | -------------------------- | -------------------------------- | ------------------------------------------- |
+| **Generator** _g(z)_     | Particle-level feature _z_ | Per-event weight (softplus)      | Predict weights that make MC look like data |
+| **Discriminator** _d(x)_ | Detector-level feature _x_ | Data vs MC probability (sigmoid) | Distinguish real data from reweighted MC    |
 
 **Training loop:**
 
-1. **Discriminator step** -- freeze *g*, update *d* to maximize weighted binary cross-entropy (classify data vs reweighted MC)
-2. **Generator step** -- freeze *d*, update *g* to minimize the same loss (fool the discriminator)
+1. **Discriminator step** -- freeze _g_, update _d_ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
+2. **Generator step** -- freeze _d_, update _g_ to minimize the same loss (fool the discriminator)
 3. Repeat with 5:1 D:G update ratio
 
 Weight normalization ensures the total MC yield is preserved:
@@ -66,17 +66,18 @@ uv run python -m ran --load_run=runs/2026-03-14T061023Z
 sbatch submit.sh --dataset jets
 ```
 
-| Flag | Default | Description |
-|---|---|---|
-| `--dataset` | `gaussian` | Dataset type: `gaussian` or `jets` |
-| `--n_samples` | `500000` | Number of events per class (data + MC) |
-| `--batch_size` | `1024` | Training batch size |
-| `--smearing` | `0.5` | Gaussian smearing width (detector resolution) |
-| `--dim` | `1` | Number of Gaussian dimensions |
-| `--variables` | all 6 | Jet substructure variables to use |
-| `--load_run` | `None` | Path to an existing run directory to reload |
+| Flag           | Default    | Description                                   |
+| -------------- | ---------- | --------------------------------------------- |
+| `--dataset`    | `gaussian` | Dataset type: `gaussian` or `jets`            |
+| `--n_samples`  | `500000`   | Number of events per class (data + MC)        |
+| `--batch_size` | `1024`     | Training batch size                           |
+| `--smearing`   | `0.5`      | Gaussian smearing width (detector resolution) |
+| `--dim`        | `1`        | Number of Gaussian dimensions                 |
+| `--variables`  | all 6      | Jet substructure variables to use             |
+| `--load_run`   | `None`     | Path to an existing run directory to reload   |
 
 The pipeline will:
+
 1. Generate (or load from cache) the dataset
 2. Split into train / validation / test sets (70 / 10 / 20%)
 3. Train the GAN with early stopping (patience = 5 epochs)
@@ -124,25 +125,25 @@ RANv4/
 
 ### Gaussian (Synthetic Toy)
 
-| | Distribution | Parameters |
-|---|---|---|
-| **Data (truth)** | Normal | mu=0, sigma=1 |
-| **MC (simulation)** | Normal | mu=0.5, sigma=0.9 |
+|                     | Distribution | Parameters        |
+| ------------------- | ------------ | ----------------- |
+| **Data (truth)**    | Normal       | mu=0, sigma=1     |
+| **MC (simulation)** | Normal       | mu=0.5, sigma=0.9 |
 
-Both are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level (*z*) and detector-level (*x*) features. Supports arbitrary dimensionality via `--dim`.
+Both are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level (_z_) and detector-level (_x_) features. Supports arbitrary dimensionality via `--dim`.
 
 ### Jet Substructure (Physics)
 
 Herwig (data) vs Pythia26 (MC) Z+jets at high pT (200 GeV), with Delphes detector simulation. Downloaded from [Zenodo record 3548091](https://zenodo.org/record/3548091).
 
-| Variable | Symbol | Description |
-|---|---|---|
-| `m` | *m* [GeV] | Jet mass |
-| `M` | *M* | Jet constituent multiplicity |
-| `w` | *w* | Jet width |
-| `tau21` | tau\_21 | N-subjettiness ratio |
-| `zg` | z\_g | Groomed jet momentum fraction |
-| `sdm` | ln(rho) | Log soft-drop jet mass |
+| Variable | Symbol    | Description                   |
+| -------- | --------- | ----------------------------- |
+| `m`      | _m_ [GeV] | Jet mass                      |
+| `M`      | _M_       | Jet constituent multiplicity  |
+| `w`      | _w_       | Jet width                     |
+| `tau21`  | tau_21    | N-subjettiness ratio          |
+| `zg`     | z_g       | Groomed jet momentum fraction |
+| `sdm`    | ln(rho)   | Log soft-drop jet mass        |
 
 All variables are z-score standardized using MC gen-level statistics only (no information leakage).
 
@@ -162,14 +163,14 @@ Each run produces a timestamped directory under `runs/` containing:
 
 Configurable in `ran/train.py`:
 
-| Parameter | Default | Description |
-|---|---|---|
-| `n_epochs` | 100 | Maximum training epochs |
-| `n_disc_steps` | 5 | Discriminator updates per generator update |
-| `lr_g` | 1e-4 | Generator learning rate (Adam) |
-| `lr_d` | 1e-4 | Discriminator learning rate (Adam) |
-| `patience` | 5 | Early stopping patience (epochs) |
-| `min_delta` | 1e-4 | Minimum improvement for early stopping |
+| Parameter      | Default | Description                                |
+| -------------- | ------- | ------------------------------------------ |
+| `n_epochs`     | 100     | Maximum training epochs                    |
+| `n_disc_steps` | 5       | Discriminator updates per generator update |
+| `lr_g`         | 1e-4    | Generator learning rate (Adam)             |
+| `lr_d`         | 1e-4    | Discriminator learning rate (Adam)         |
+| `patience`     | 5       | Early stopping patience (epochs)           |
+| `min_delta`    | 1e-4    | Minimum improvement for early stopping     |
 
 ## Dependencies
 

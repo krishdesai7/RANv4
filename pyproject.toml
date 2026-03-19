@@ -9,6 +9,7 @@ dependencies = [
     "keras>=3.13.2",
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
+    "omnifold>=0.1.36",
     "pyyaml>=6.0",
     "scipy>=1.15.0",
     "tensorflow>=2.21.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",

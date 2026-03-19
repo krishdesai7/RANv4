@@ -3,13 +3,14 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 from scipy.linalg import cholesky
+from typing import Any, cast
 
 import yaml
 
 
 def sigma_to_covariance(
     sigma: float | list | npt.NDArray,
-    dim: int,
+    dim: np.ubyte,
 ) -> npt.NDArray[np.double]:
     """Promote sigma (scalar, vector, or matrix)
     to a (dim, dim) covariance matrix,
@@ -26,14 +27,14 @@ def sigma_to_covariance(
 
     cov: npt.NDArray[np.double]
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
-        val = float(arr.ravel()[0])
+        val: np.double = arr.ravel()[0]
         if val < 0:
             raise ValueError(f"sigma scalar must be non-negative, got {val}")
-        cov = val ** 2 * np.eye(dim, dtype=np.double)
+        cov = val ** 2 * np.identity(cast(int, dim), dtype=np.double)
     elif arr.ndim == 1:
         if arr.shape[0] != dim:
             raise ValueError(
-                f"sigma vector has length {arr.shape[0]}, expected dim={dim}"
+                f"sigma vector has length {arr.shape[0]}, expected {dim = }"
             )
         if np.any(arr < 0):
             raise ValueError("sigma vector elements must be non-negative")
@@ -41,13 +42,13 @@ def sigma_to_covariance(
     elif arr.ndim == 2:
         if arr.shape != (dim, dim):
             raise ValueError(
-                f"sigma matrix has shape {arr.shape}, expected dim={dim}"
+                f"sigma matrix has shape {arr.shape}, expected {dim = }"
             )
         if not np.allclose(arr, arr.T):
             raise ValueError("sigma matrix must be symmetric")
         cov = arr
     else:
-        raise ValueError(f"sigma must be 0D, 1D, or 2D, got ndim={arr.ndim}")
+        raise ValueError(f"sigma must be 0D, 1D, or 2D, got {arr.ndim = }")
 
     cholesky(cov, lower=True)
     return cov
@@ -57,7 +58,7 @@ REQUIRED_KEYS: set[str] = {"mu_gen", "mu_true",
                            "sigma_gen", "sigma_true", "sigma_detector"}
 
 
-def parse_gaussian_config(config_path: str | Path) -> dict:
+def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
     """Parse a Gaussian YAML config file.
 
     Returns a dict with keys:
@@ -66,7 +67,7 @@ def parse_gaussian_config(config_path: str | Path) -> dict:
     """
     config_path = Path(config_path)
     with open(config_path) as f:
-        raw: dict = yaml.safe_load(f)
+        raw: dict[str, Any] = yaml.safe_load(f)
 
     missing: set[str] = REQUIRED_KEYS - raw.keys()
     if missing:
@@ -77,7 +78,7 @@ def parse_gaussian_config(config_path: str | Path) -> dict:
     mu_true: npt.NDArray[np.double] = np.asarray(raw["mu_true"],
                                                  dtype=np.double).ravel()
 
-    dim: int = mu_gen.shape[0]
+    dim: np.ubyte = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
         raise ValueError(
             f"mu_true has dim {mu_true.shape[0]}, mu_gen has {dim=}"

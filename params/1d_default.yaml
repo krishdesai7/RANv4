@@ -1,5 +1,5 @@
-mu_mc: [0.5]
+mu_gen: [0.5]
 mu_true: [0.0]
-sigma_mc: 0.9
+sigma_gen: 0.9
 sigma_true: 1.0
 sigma_detector: 0.5

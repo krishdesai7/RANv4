@@ -72,9 +72,9 @@ class RAN_Dataset():
     def _cache_key(self, parsed: dict, n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
         key_data = {
-            "mu_mc": self._round_nested(parsed["mu_mc"].tolist()),
+            "mu_gen": self._round_nested(parsed["mu_gen"].tolist()),
             "mu_true": self._round_nested(parsed["mu_true"].tolist()),
-            "cov_mc": self._round_nested(parsed["cov_mc"].tolist()),
+            "cov_gen": self._round_nested(parsed["cov_gen"].tolist()),
             "cov_true": self._round_nested(parsed["cov_true"].tolist()),
             "cov_detector": self._round_nested(parsed["cov_detector"].tolist()),
             "n_samples": n_samples,
@@ -145,7 +145,7 @@ class RAN_Dataset():
         Generate a multivariate Gaussian dataset.
         Arguments:
             config_path: Path to a YAML config file.
-            params: Dict with keys mu_mc, mu_true, sigma_mc, sigma_true, sigma_detector.
+            params: Dict with keys mu_gen, mu_true, sigma_gen, sigma_true, sigma_detector.
             n_samples: Number of samples per class (data and MC).
         Returns:
             DatasetSplits
@@ -159,26 +159,26 @@ class RAN_Dataset():
         if config_path is not None:
             parsed = parse_gaussian_config(config_path)
         else:
-            mu_mc = np.asarray(params["mu_mc"], dtype=np.double).ravel()
+            mu_gen = np.asarray(params["mu_gen"], dtype=np.double).ravel()
             mu_true = np.asarray(params["mu_true"], dtype=np.double).ravel()
-            dim = mu_mc.shape[0]
+            dim = mu_gen.shape[0]
             if mu_true.shape[0] != dim:
                 raise ValueError(
                     f"mu_true has dim {mu_true.shape[0]}, expected {dim}"
                 )
             parsed = {
                 "dim": dim,
-                "mu_mc": mu_mc,
+                "mu_gen": mu_gen,
                 "mu_true": mu_true,
-                "cov_mc": sigma_to_covariance(params["sigma_mc"], dim),
+                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),
                 "cov_true": sigma_to_covariance(params["sigma_true"], dim),
                 "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),
             }
 
         dim: int = parsed["dim"]
-        mu_mc: npt.NDArray[np.double] = parsed["mu_mc"]
+        mu_gen: npt.NDArray[np.double] = parsed["mu_gen"]
         mu_true: npt.NDArray[np.double] = parsed["mu_true"]
-        cov_mc: npt.NDArray[np.double] = parsed["cov_mc"]
+        cov_gen: npt.NDArray[np.double] = parsed["cov_gen"]
         cov_true: npt.NDArray[np.double] = parsed["cov_true"]
         cov_detector: npt.NDArray[np.double] = parsed["cov_detector"]
 
@@ -199,7 +199,7 @@ class RAN_Dataset():
                 check_valid='raise', method='svd',
             )
             z_gen = rng.multivariate_normal(
-                mu_mc, cov_mc, size=n_samples,
+                mu_gen, cov_gen, size=n_samples,
                 check_valid='raise', method='svd',
             )
 

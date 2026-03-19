@@ -29,6 +29,9 @@ def main(
     dataset: str = "gaussian",
     variables: tuple[str, ...] = ("m", "M", "w", "tau21", "zg", "sdm"),
     load_run: str | None = None,
+    hidden_units: int = 64,
+    n_layers: int = 2,
+    patience: int = 5,
 ) -> None:
     """
     Main entry point.
@@ -107,7 +110,8 @@ def main(
         print(f"Loaded run from {run_dir}")
     else:
         d: keras.Model
-        g, d, history = train(splits, dim=dim)
+        g, d, history = train(splits, dim=dim, hidden_units=hidden_units,
+                                n_layers=n_layers, patience=patience)
 
         run_dir = Path("runs") / datetime.now(timezone.utc).strftime(
             "%Y-%m-%dT%H%M%SZ"
@@ -135,9 +139,9 @@ def main(
 
             config_out["gaussian_params"] = {
                 "dim": dim,
-                "mu_mc": _to_list(gaussian_params["mu_mc"]),
+                "mu_gen": _to_list(gaussian_params["mu_gen"]),
                 "mu_true": _to_list(gaussian_params["mu_true"]),
-                "sigma_mc": _to_list(gaussian_params["cov_mc"]),
+                "sigma_gen": _to_list(gaussian_params["cov_gen"]),
                 "sigma_true": _to_list(gaussian_params["cov_true"]),
                 "sigma_detector": _to_list(gaussian_params["cov_detector"]),
             }

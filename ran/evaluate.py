@@ -72,7 +72,7 @@ def _get_weights(g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000) -
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
         raw[start:end] = g(z_gen[start:end]).numpy().flatten()
-    return raw * n / raw.sum()
+    return raw / raw.mean()
 
 
 def _wd_per_dim(

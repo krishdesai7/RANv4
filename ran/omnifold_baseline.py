@@ -75,7 +75,7 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
 
     # Get OmniFold weights for test MC via the trained gen-level model
     w = unfold.reweight(z_mc_t.astype(np.float32), unfold.model2).astype(np.float64)
-    w = w * len(w) / w.sum()  # normalize to preserve total count
+    w = w / w.mean()
 
     dataset = config.get("dataset", "gaussian")
     if dataset == "jets":

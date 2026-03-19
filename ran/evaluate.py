@@ -127,6 +127,50 @@ def _js_per_dim(
     return result
 
 
+def _triangular_per_dim(
+    ref: npt.NDArray, comp: npt.NDArray,
+    weights: npt.NDArray | None = None, n_bins: int = 100,
+) -> list[float]:
+    """Triangular discriminator (Vincze-LeCam divergence) per dimension.
+
+    Δ(p,q) = Σ (p_i - q_i)² / (p_i + q_i)  ×  1e3
+
+    where p_i, q_i are histogram probability masses. The bin-width factor
+    cancels analytically, so this works directly on normalized histograms.
+    """
+    dim = ref.shape[1] if ref.ndim > 1 else 1
+    result = []
+    for i in range(dim):
+        r = ref[:, i] if dim > 1 else ref.ravel()
+        c = comp[:, i] if dim > 1 else comp.ravel()
+
+        lo = min(r.min(), c.min())
+        hi = max(r.max(), c.max())
+        bins = np.linspace(lo, hi, n_bins + 1)
+
+        h_ref, _ = np.histogram(r, bins=bins)
+        if weights is not None:
+            h_comp, _ = np.histogram(c, bins=bins, weights=weights)
+        else:
+            h_comp, _ = np.histogram(c, bins=bins)
+
+        # Normalize to probability mass
+        h_ref = h_ref.astype(np.float64)
+        h_comp = h_comp.astype(np.float64)
+        s_ref = h_ref.sum()
+        s_comp = h_comp.sum()
+        if s_ref > 0:
+            h_ref /= s_ref
+        if s_comp > 0:
+            h_comp /= s_comp
+
+        denom = h_ref + h_comp
+        mask = denom > 0
+        diff = h_ref - h_comp
+        result.append(float(np.sum(diff[mask] ** 2 / denom[mask]) * 1e3))
+    return result
+
+
 def _improvement(before: float, after: float) -> float:
     return (1 - after / before) * 100 if before > 0 else 0.0
 
@@ -166,6 +210,8 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
         wd_after = _wd_per_dim(data, mc, weights=w)
         js_before = _js_per_dim(data, mc)
         js_after = _js_per_dim(data, mc, weights=w)
+        td_before = _triangular_per_dim(data, mc)
+        td_after = _triangular_per_dim(data, mc, weights=w)
 
         for i, var in enumerate(var_names):
             key = f"{level}_{var}"
@@ -176,6 +222,9 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
                 "jensenshannon_before": js_before[i],
                 "jensenshannon_after": js_after[i],
                 "jensenshannon_improvement_pct": _improvement(js_before[i], js_after[i]),
+                "triangular_before": td_before[i],
+                "triangular_after": td_after[i],
+                "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
             }
 
     json.dump(metrics, out_path.open("w"), indent=2)
@@ -208,6 +257,12 @@ def _print_metrics(run_name: str, metrics: dict, var_names: list[str]) -> None:
                 f" {m['jensenshannon_before']:>10.6f}"
                 f" {m['jensenshannon_after']:>10.6f}"
                 f" {m['jensenshannon_improvement_pct']:>+9.1f}%"
+            )
+            print(
+                f"  {'':<10} {chr(916)+' (x1e3)':<14}"
+                f" {m['triangular_before']:>10.4f}"
+                f" {m['triangular_after']:>10.4f}"
+                f" {m['triangular_improvement_pct']:>+9.1f}%"
             )
 
 

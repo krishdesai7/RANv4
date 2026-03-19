@@ -48,7 +48,7 @@ def _collect_data(
 
 def _get_weights(g: keras.Model, z_gen: npt.NDArray) -> npt.NDArray:
     raw_w = g(z_gen).numpy().flatten()
-    return raw_w * len(z_gen) / raw_w.sum()
+    return raw_w / raw_w.mean()
 
 
 def _hist_ratio_panel(

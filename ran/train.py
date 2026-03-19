@@ -113,26 +113,12 @@ def train(
     lr_d: float = 1e-4,
     patience: int = 5,
     min_delta: float = 1e-4,
+    hidden_units: int = 64,
+    n_layers: int = 2,
 ) -> tuple[keras.Model, keras.Model, dict[str, list[float | np.floating]]]:
-    """Train the generator and discriminator.
-    Arguments:
-        splits (DatasetSplits)
-        dim (int): Input dimensionality.
-        n_epochs (int)
-        n_disc_steps (int)
-        lr_g (float)
-        lr_d (float)
-        patience (int)
-        min_delta (float)
-    Returns:
-        tuple[
-            g (keras.Model): Generator model.
-            d (keras.Model): Discriminator model.
-            history (dict[str, list[float | np.floating]]): Training history.
-        ]
-    """
-    g: keras.Model = build_generator(dim=dim)
-    d: keras.Model = build_discriminator(dim=dim)
+    """Train the generator and discriminator."""
+    g: keras.Model = build_generator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
+    d: keras.Model = build_discriminator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
     opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
     opt_d: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_d)
     history: dict[str, list[float | np.floating]] = { "train_d": [], "train_g": [], "val_d": [], "val_g": [], }

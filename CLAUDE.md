@@ -24,21 +24,31 @@ RANv4 is a Reweighting Algorithm Network that uses adversarial learning to unfol
 ## Project Structure
 
 ```
-ran/                   Python package
-├── __main__.py        Entry point (python -m ran)
+ran/                          Python package
+├── __main__.py               Entry point (python -m ran)
 ├── data/
-│   ├── config.py      YAML config parsing, sigma promotion (parse_gaussian_config)
-│   ├── datasets.py    DatasetSplits, RAN_Dataset, caching
-│   ├── jets.py        Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
-│   └── download.py    One-time Zenodo download
-├── models.py          Generator and discriminator architectures
-├── train.py           Adversarial training loop with early stopping
-├── plotting.py        Detector-level, particle-level, and loss curve plots
-└── evaluate.py        Post-hoc distance metrics (Wasserstein, JS divergence)
+│   ├── config.py             YAML config parsing, sigma promotion (parse_gaussian_config)
+│   ├── datasets.py           DatasetSplits, RAN_Dataset, caching
+│   ├── jets.py               Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
+│   └── download.py           One-time Zenodo download
+├── models.py                 Generator and discriminator architectures
+├── train.py                  Adversarial training loop with early stopping
+├── plotting.py               Detector-level, particle-level, and loss curve plots
+├── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
+└── omnifold_baseline.py      OmniFold comparison baseline
 
-submit.sh              SLURM submission script
-runs/                  Output directory (timestamped subdirectories)
-.cache/                Cached datasets (gaussian .npz, per-variable jet .npz)
+params/                       Gaussian config YAML files
+├── 1d_default.yaml
+├── 2d_correlated.yaml
+├── 4d_correlated.yaml
+└── 6d_correlated.yaml
+
+scripts/
+└── leakage_check.py          z_true leakage sanity check
+
+submit.sh                     SLURM submission script
+runs/                         Output directory (timestamped subdirectories)
+.cache/                       Cached datasets (gaussian .npz, per-variable jet .npz)
 ```
 
 ## Running
@@ -50,8 +60,13 @@ uv run -m ran --dataset jets                               # train on all 6 jet 
 uv run -m ran --load_run=runs/2026-03-14T061023Z           # reload a saved run
 uv run -m ran.evaluate                                     # compute metrics for all runs
 uv run -m ran.evaluate --run_dir=runs/2026-...             # single run
-sbatch submit.sh --dataset jets                            # SLURM submission
+uv run -m ran.omnifold_baseline --run_dir=runs/2026-...    # OmniFold comparison
+sbatch submit.sh --config params/2d_correlated.yaml        # SLURM submission
 ```
+
+## Gaussian Config Format
+
+YAML files in `params/` use keys: `mu_gen`, `mu_true`, `sigma_gen`, `sigma_true`, `sigma_detector`. Sigma values are promoted via `sigma_to_covariance`: scalar → σ²I, vector → diag(σ²), matrix → used as-is.
 
 ## Tech Stack
 
@@ -60,3 +75,4 @@ sbatch submit.sh --dataset jets                            # SLURM submission
 - python-fire for CLI
 - Matplotlib for publication-quality plots
 - scipy for evaluation metrics (Wasserstein distance, Jensen-Shannon divergence)
+- omnifold for baseline comparison

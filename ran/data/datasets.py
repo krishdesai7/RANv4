@@ -1,15 +1,16 @@
-from typing import NamedTuple
+from typing import Any, NamedTuple, SupportsFloat, cast
 from pathlib import Path
 import hashlib, json
 
 import numpy as np
 import numpy.typing as npt
-from scipy.linalg import cholesky
 
 import tensorflow as tf
 from keras.utils import split_dataset
 
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
+
+type Nested[T] = T | list[Nested[T]]
 
 class DatasetSplits(NamedTuple):
     """
@@ -63,15 +64,15 @@ class RAN_Dataset():
         self.splits: DatasetSplits | None = None
     
     @staticmethod
-    def _round_nested(obj, ndigits: int = 10):
+    def _round_nested(obj: Nested[SupportsFloat], ndigits: int = 10) -> Nested[float]:
         """Recursively round floats in a nested list/scalar for stable hashing."""
         if isinstance(obj, list):
             return [RAN_Dataset._round_nested(v, ndigits) for v in obj]
         return round(float(obj), ndigits)
 
-    def _cache_key(self, parsed: dict, n_samples: int) -> str:
+    def _cache_key(self, parsed: dict[str, Any], n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
-        key_data = {
+        key_data: dict[str, Nested[float]] = {
             "mu_gen": self._round_nested(parsed["mu_gen"].tolist()),
             "mu_true": self._round_nested(parsed["mu_true"].tolist()),
             "cov_gen": self._round_nested(parsed["cov_gen"].tolist()),
@@ -84,8 +85,8 @@ class RAN_Dataset():
             json.dumps(key_data, sort_keys=True).encode("utf-8")
         ).hexdigest()[:16]
 
-    def _cache_path(self, parsed: dict, n_samples: int) -> Path:
-        cache_key = self._cache_key(parsed, n_samples)
+    def _cache_path(self, parsed: dict[str, Any], n_samples: int) -> Path:
+        cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
     
     def _build_dataset(
@@ -155,13 +156,13 @@ class RAN_Dataset():
             raise ValueError(
                 "Exactly one of config_path or params must be provided"
             )
-
+        parsed: dict[str, Any]
         if config_path is not None:
-            parsed = parse_gaussian_config(config_path)
+            parsed= parse_gaussian_config(config_path)
         else:
-            mu_gen = np.asarray(params["mu_gen"], dtype=np.double).ravel()
-            mu_true = np.asarray(params["mu_true"], dtype=np.double).ravel()
-            dim = mu_gen.shape[0]
+            mu_gen: npt.NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel() # type: ignore
+            mu_true: npt.NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel() # type: ignore
+            dim: np.ubyte = mu_gen.shape[0]
             if mu_true.shape[0] != dim:
                 raise ValueError(
                     f"mu_true has dim {mu_true.shape[0]}, expected {dim}"
@@ -170,12 +171,12 @@ class RAN_Dataset():
                 "dim": dim,
                 "mu_gen": mu_gen,
                 "mu_true": mu_true,
-                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),
-                "cov_true": sigma_to_covariance(params["sigma_true"], dim),
-                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),
+                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim), # type: ignore
+                "cov_true": sigma_to_covariance(params["sigma_true"], dim), # type: ignore
+                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim), # type: ignore
             }
 
-        dim: int = parsed["dim"]
+        dim: np.ubyte = parsed["dim"] # type: ignore
         mu_gen: npt.NDArray[np.double] = parsed["mu_gen"]
         mu_true: npt.NDArray[np.double] = parsed["mu_true"]
         cov_gen: npt.NDArray[np.double] = parsed["cov_gen"]
@@ -192,31 +193,31 @@ class RAN_Dataset():
                 x = data["x"]
                 y = data["y"]
         else:
-            rng = np.random.default_rng(self.seed)
+            rng: np.random.Generator = np.random.default_rng(self.seed)
 
-            z_true = rng.multivariate_normal(
+            z_true: npt.NDArray[np.double] = rng.multivariate_normal(
                 mu_true, cov_true, size=n_samples,
                 check_valid='raise', method='svd',
             )
-            z_gen = rng.multivariate_normal(
+            z_gen: npt.NDArray[np.double] = rng.multivariate_normal(
                 mu_gen, cov_gen, size=n_samples,
                 check_valid='raise', method='svd',
             )
 
-            L_det = cholesky(cov_detector, lower=True)
+            L_det: npt.NDArray[np.double] = np.linalg.cholesky(cast(npt.NDArray, cov_detector), upper=False)
 
-            s_data = rng.standard_normal(size=z_true.shape)
-            x_data = z_true + s_data @ L_det.T
+            s_data: npt.NDArray[np.double] = rng.standard_normal(size=z_true.shape)
+            x_data: npt.NDArray[np.double] = z_true + s_data @ L_det.T
 
-            s_sim = rng.standard_normal(size=z_gen.shape)
-            x_sim = z_gen + s_sim @ L_det.T
+            s_sim: npt.NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
+            x_sim: npt.NDArray[np.double] = z_gen + s_sim @ L_det.T
 
-            y_nat = np.ones(n_samples, dtype=np.ubyte)
-            y_MC = np.zeros(n_samples, dtype=np.ubyte)
+            y_nat: npt.NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
+            y_MC: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
 
-            z = np.concatenate((z_true, z_gen), axis=0)
-            x = np.concatenate((x_data, x_sim), axis=0)
-            y = np.concatenate((y_nat, y_MC), axis=0)
+            z: npt.NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
+            x: npt.NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
+            y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
             print(f"Generated and saved dataset to cache: {cache_path}")

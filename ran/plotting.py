@@ -64,6 +64,8 @@ def _hist_ratio_panel(
     rwt_label: str,
     xlabel: str,
     title: str,
+    omnifold_vals: npt.NDArray[np.double] | None = None,
+    omnifold_weights: npt.NDArray[np.double] | None = None,
 ) -> None:
     h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0",
                            label=ref_label)
@@ -71,9 +73,15 @@ def _hist_ratio_panel(
                             label=comp_label)
     h_rwt: tuple = ax.hist(
         rwt_vals, bins=h_ref[1], weights=rwt_weights,
-        histtype="step", color="black", linestyle="--", linewidth=1.5,
+        histtype="step", color="black", linestyle="-", linewidth=4,
         label=rwt_label,
     )
+    if omnifold_vals is not None and omnifold_weights is not None:
+        h_of: tuple = ax.hist(
+            omnifold_vals, bins=h_ref[1], weights=omnifold_weights,
+            histtype="step", color="red", linestyle="--", linewidth=4,
+            label="OmniFold",
+        )
     ax.set_ylabel("Events")
     ax.legend()
     ax.set_title(title)
@@ -90,8 +98,13 @@ def _hist_ratio_panel(
     ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
     ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
 
-    ax_r.plot(centres, ratio_comp, color="C1", marker="o")
-    ax_r.plot(centres, ratio_rwt, color="black", marker="^", linestyle="--")
+    ax_r.plot(centres, ratio_comp, color="C1", marker="d", linestyle="none")
+    ax_r.plot(centres, ratio_rwt, color="black", marker="o", linestyle="none")
+    if omnifold_vals is not None and omnifold_weights is not None:
+        ratio_of: npt.NDArray[np.double] = np.full_like(h_of[0], np.nan,
+                                                        dtype=np.double)
+        ratio_of[safe] = h_of[0][safe] / h_ref[0][safe]
+        ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="none")
     ax_r.axhline(1, color="gray", linewidth=0.5)
     ax_r.set_ylim(0, 2)
     ax_r.set_ylabel(f"Ratio to\n{ref_label}")
@@ -119,6 +132,7 @@ def plot_detector_level(
     g: keras.Model,
     save_path: str | Path = "plots/detector_level.pdf",
     var_info: list[VarInfo] | None = None,
+    omnifold_weights: npt.NDArray[np.double] | None = None,
 ) -> None:
     """Generate detector level plots.
     Arguments:
@@ -126,6 +140,7 @@ def plot_detector_level(
         g (keras.Model): Generator model.
         save_path (str | Path)
         var_info: Per-variable plot config.
+        omnifold_weights: Per-event OmniFold weights for MC events.
     """
     z: npt.NDArray[np.double]
     x: npt.NDArray[np.double]
@@ -184,9 +199,11 @@ def plot_detector_level(
             bins=bins.tolist(),
             ref_label="Data",
             comp_label="Sim",
-            rwt_label="Reweighted Sim",
+            rwt_label="RAN",
             xlabel=xlabel,
             title=title,
+            omnifold_vals=comp if omnifold_weights is not None else None,
+            omnifold_weights=omnifold_weights,
         )
     _save_fig(fig, save_path)
 
@@ -196,6 +213,7 @@ def plot_particle_level(
     g: keras.Model,
     save_path: str | Path = "plots/particle_level.pdf",
     var_info: list[VarInfo] | None = None,
+    omnifold_weights: npt.NDArray[np.double] | None = None,
 ) -> None:
     """Generate particle level plots.
     Arguments:
@@ -203,6 +221,7 @@ def plot_particle_level(
         g (keras.Model): Generator model.
         save_path (str | Path): Save path.
         var_info: Per-variable plot config.
+        omnifold_weights: Per-event OmniFold weights for MC events.
     """
     z: npt.NDArray[np.double]
     y: npt.NDArray[np.ubyte]
@@ -268,9 +287,11 @@ def plot_particle_level(
             bins=bins.tolist(),
             ref_label="Truth",
             comp_label="Gen",
-            rwt_label="Reweighted Gen",
+            rwt_label="RAN",
             xlabel=xlabel,
             title=title,
+            omnifold_vals=comp if omnifold_weights is not None else None,
+            omnifold_weights=omnifold_weights,
         )
     _save_fig(fig, save_path)
 

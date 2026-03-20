@@ -16,6 +16,12 @@ GENERATORS = ("Pythia26", "Herwig")
 N_FILES = 17
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 
+# Cache-safe filenames: avoid case collisions on case-insensitive filesystems
+# (macOS APFS default), where "m.npz" and "M.npz" resolve to the same path.
+CACHE_FILENAMES: dict[str, str] = {
+    "m": "mass", "M": "mult", "w": "w", "tau21": "tau21", "zg": "zg", "sdm": "sdm",
+}
+
 # Only load the keys we actually need (skip particles, Zs, lhas, ang2s).
 _NEEDED_KEYS = frozenset({
     "gen_jets", "sim_jets",
@@ -108,7 +114,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
 
     print(f"\nExtracting substructure variables...")
     for var in SUBSTRUCTURE_VARIABLES:
-        out_path = cache_dir / f"{var}.npz"
+        out_path = cache_dir / f"{CACHE_FILENAMES[var]}.npz"
         np.savez_compressed(
             out_path,
             z_true=_get_var(nature, var, "gen"),

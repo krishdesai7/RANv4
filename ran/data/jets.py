@@ -12,6 +12,7 @@ import numpy as np
 import numpy.typing as npt
 
 from ran.data.datasets import RAN_Dataset, DatasetSplits
+from ran.data.download import CACHE_FILENAMES
 
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
@@ -51,7 +52,7 @@ def load_jet_dataset(
     """
     # Check cache, download if needed
     missing: list[str] = [v for v in variables
-               if not (cache_dir / f"{v}.npz").exists()]
+               if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()]
     if missing:
         from ran.data.download import download_jet_data
         print("Cached jet data not found. Downloading from Zenodo...")
@@ -60,7 +61,7 @@ def load_jet_dataset(
     n_features: int = len(variables)
 
     # Check available samples
-    with np.load(cache_dir / f"{variables[0]}.npz") as f:
+    with np.load(cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
         raise ValueError(
@@ -76,7 +77,7 @@ def load_jet_dataset(
     # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[np.double, np.double]] = {}
     for i, var in enumerate(variables):
-        with np.load(cache_dir / f"{var}.npz") as f:
+        with np.load(cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:
             z_true[:, i] = f["z_true"][:n_samples]
             x_data[:, i] = f["x_data"][:n_samples]
             z_gen[:, i] = f["z_gen"][:n_samples]

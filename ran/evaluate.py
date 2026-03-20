@@ -35,8 +35,17 @@ def _load_splits(config: dict) -> DatasetSplits:
     dim = config["dim"]
 
     if dataset == "gaussian":
-        gaussian_params = config["gaussian_params"]
-        raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
+        if "gaussian_params" in config:
+            gaussian_params = config["gaussian_params"]
+            raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
+        else:
+            # Legacy config format: hardcoded mu/sigma, only smearing varied
+            smearing = config.get("smearing", 0.5)
+            raw_params = {
+                "mu_gen": [0.5] * dim, "mu_true": [0.0] * dim,
+                "sigma_gen": 0.9, "sigma_true": 1.0,
+                "sigma_detector": smearing,
+            }
         return RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
             params=raw_params, n_samples=n_samples,
         )

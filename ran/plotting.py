@@ -66,6 +66,8 @@ def _hist_ratio_panel(
     title: str,
     omnifold_vals: npt.NDArray[np.double] | None = None,
     omnifold_weights: npt.NDArray[np.double] | None = None,
+    ibu_vals: npt.NDArray[np.double] | None = None,
+    ibu_weights: npt.NDArray[np.double] | None = None,
 ) -> None:
     h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0",
                            label=ref_label)
@@ -81,6 +83,12 @@ def _hist_ratio_panel(
             omnifold_vals, bins=h_ref[1], weights=omnifold_weights,
             histtype="step", color="red", linestyle="--", linewidth=4,
             label="OmniFold",
+        )
+    if ibu_vals is not None and ibu_weights is not None:
+        h_ibu: tuple = ax.hist(
+            ibu_vals, bins=h_ref[1], weights=ibu_weights,
+            histtype="step", color="green", linestyle=":", linewidth=2,
+            label="IBU",
         )
     ax.set_ylabel("Events")
     ax.legend()
@@ -105,6 +113,11 @@ def _hist_ratio_panel(
                                                         dtype=np.double)
         ratio_of[safe] = h_of[0][safe] / h_ref[0][safe]
         ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="none")
+    if ibu_vals is not None and ibu_weights is not None:
+        ratio_ibu: npt.NDArray[np.double] = np.full_like(h_ibu[0], np.nan,
+                                                         dtype=np.double)
+        ratio_ibu[safe] = h_ibu[0][safe] / h_ref[0][safe]
+        ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="none")
     ax_r.axhline(1, color="gray", linewidth=0.5)
     ax_r.set_ylim(0, 2)
     ax_r.set_ylabel(f"Ratio to\n{ref_label}")
@@ -112,9 +125,8 @@ def _hist_ratio_panel(
 
 
 def _save_fig(fig: figure.Figure, save_path: Path) -> None:
-    fig.tight_layout()
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path)
+    fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved {save_path}")
 
@@ -133,6 +145,7 @@ def plot_detector_level(
     save_path: str | Path = "plots/detector_level.pdf",
     var_info: list[VarInfo] | None = None,
     omnifold_weights: npt.NDArray[np.double] | None = None,
+    ibu_weights: list[npt.NDArray[np.double]] | None = None,
 ) -> None:
     """Generate detector level plots.
     Arguments:
@@ -141,6 +154,7 @@ def plot_detector_level(
         save_path (str | Path)
         var_info: Per-variable plot config.
         omnifold_weights: Per-event OmniFold weights for MC events.
+        ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
     z: npt.NDArray[np.double]
     x: npt.NDArray[np.double]
@@ -155,16 +169,15 @@ def plot_detector_level(
     save_path = Path(save_path)
     dim: int = x.shape[1]
     fig: figure.Figure
-    all_axes: npt.NDArray
-    fig, all_axes = plt.subplots(
-        2 * dim, 1, figsize=(8, 6 * dim),
-        gridspec_kw={"height_ratios": [3, 1] * dim},
-    )
-    all_axes = np.atleast_1d(all_axes)
+    outer_grid: mpl.gridspec.GridSpec
+    fig = plt.figure(figsize=(8, 6 * dim))
+    outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
     for i in range(dim):
-        ax: axes.Axes = all_axes[2 * i]
-        ax_r: axes.Axes = all_axes[2 * i + 1]
-        ax_r.sharex(ax)
+        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = (
+            outer_grid[i].subgridspec(2, 1, height_ratios=[3, 1], hspace=0.0)
+        )
+        ax: axes.Axes = fig.add_subplot(inner_grid[0])
+        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
         ref: npt.NDArray[np.double]
@@ -190,6 +203,7 @@ def plot_detector_level(
             title = f"Detector Level — Dim {i}" if dim > 1\
                 else "Detector Level"
 
+        ibu_w_i = ibu_weights[i] if ibu_weights is not None else None
         _hist_ratio_panel(
             ax, ax_r,
             ref=ref,
@@ -204,6 +218,8 @@ def plot_detector_level(
             title=title,
             omnifold_vals=comp if omnifold_weights is not None else None,
             omnifold_weights=omnifold_weights,
+            ibu_vals=comp if ibu_w_i is not None else None,
+            ibu_weights=ibu_w_i,
         )
     _save_fig(fig, save_path)
 
@@ -214,6 +230,7 @@ def plot_particle_level(
     save_path: str | Path = "plots/particle_level.pdf",
     var_info: list[VarInfo] | None = None,
     omnifold_weights: npt.NDArray[np.double] | None = None,
+    ibu_weights: list[npt.NDArray[np.double]] | None = None,
 ) -> None:
     """Generate particle level plots.
     Arguments:
@@ -222,6 +239,7 @@ def plot_particle_level(
         save_path (str | Path): Save path.
         var_info: Per-variable plot config.
         omnifold_weights: Per-event OmniFold weights for MC events.
+        ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
     z: npt.NDArray[np.double]
     y: npt.NDArray[np.ubyte]
@@ -234,16 +252,15 @@ def plot_particle_level(
     save_path = Path(save_path)
     dim: int = z.shape[1]
     fig: figure.Figure
-    all_axes: npt.NDArray
-    fig, all_axes = plt.subplots(
-        2 * dim, 1, figsize=(8, 10 * dim),
-        gridspec_kw={"height_ratios": [3, 1] * dim},
-    )
-    all_axes = np.atleast_1d(all_axes)
+    outer_grid: mpl.gridspec.GridSpec
+    fig = plt.figure(figsize=(8, 10 * dim))
+    outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
     for i in range(dim):
-        ax: axes.Axes = all_axes[2 * i]
-        ax_r: axes.Axes = all_axes[2 * i + 1]
-        ax_r.sharex(ax)
+        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = (
+            outer_grid[i].subgridspec(2, 1, height_ratios=[3, 1], hspace=0.0)
+        )
+        ax: axes.Axes = fig.add_subplot(inner_grid[0])
+        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
         ref: npt.NDArray[np.double]
@@ -278,6 +295,7 @@ def plot_particle_level(
                 else "Particle Level"
             )
 
+        ibu_w_i = ibu_weights[i] if ibu_weights is not None else None
         _hist_ratio_panel(
             ax, ax_r,
             ref=ref,
@@ -292,6 +310,8 @@ def plot_particle_level(
             title=title,
             omnifold_vals=comp if omnifold_weights is not None else None,
             omnifold_weights=omnifold_weights,
+            ibu_vals=comp if ibu_w_i is not None else None,
+            ibu_weights=ibu_w_i,
         )
     _save_fig(fig, save_path)
 

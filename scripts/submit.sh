@@ -12,4 +12,4 @@ uv run -m ran "$@"
 # Find the most recent run and compute OmniFold baseline
 LATEST_RUN=$(ls -dt runs/*/ | head -1)
 echo "Running OmniFold baseline on ${LATEST_RUN}."
-uv run -m ran.omnifold_baseline --run_dir="${LATEST_RUN}"
+uv run -m ran.baselines.omnifold --run_dir="${LATEST_RUN}"

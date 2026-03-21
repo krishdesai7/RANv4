@@ -68,39 +68,39 @@ class TestParseGaussianConfig:
 
     def test_valid_2d_config(self, tmp_path):
         cfg = {
-            "mu_mc": [0.0, 1.0],
+            "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
-            "sigma_mc": [1.0, 1.5],
+            "sigma_gen": [1.0, 1.5],
             "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
             "sigma_detector": [0.5, 0.8],
         }
         path = self._write_yaml(cfg, tmp_path)
         params = parse_gaussian_config(path)
         assert params["dim"] == 2
-        assert params["mu_mc"].shape == (2,)
-        assert params["cov_mc"].shape == (2, 2)
+        assert params["mu_gen"].shape == (2,)
+        assert params["cov_gen"].shape == (2, 2)
         assert params["cov_true"].shape == (2, 2)
         assert params["cov_detector"].shape == (2, 2)
 
     def test_scalar_sigma(self, tmp_path):
         cfg = {
-            "mu_mc": [0.0],
+            "mu_gen": [0.0],
             "mu_true": [0.5],
-            "sigma_mc": 1.0,
+            "sigma_gen": 1.0,
             "sigma_true": 0.9,
             "sigma_detector": 0.5,
         }
         path = self._write_yaml(cfg, tmp_path)
         params = parse_gaussian_config(path)
         assert params["dim"] == 1
-        np.testing.assert_array_almost_equal(params["cov_mc"], [[1.0]])
+        np.testing.assert_array_almost_equal(params["cov_gen"], [[1.0]])
         np.testing.assert_array_almost_equal(params["cov_detector"], [[0.25]])
 
     def test_missing_key(self, tmp_path):
         cfg = {
-            "mu_mc": [0.0],
+            "mu_gen": [0.0],
             "mu_true": [0.5],
-            "sigma_mc": 1.0,
+            "sigma_gen": 1.0,
         }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="missing"):
@@ -108,9 +108,9 @@ class TestParseGaussianConfig:
 
     def test_dim_mismatch(self, tmp_path):
         cfg = {
-            "mu_mc": [0.0, 1.0],
+            "mu_gen": [0.0, 1.0],
             "mu_true": [0.5],
-            "sigma_mc": 1.0,
+            "sigma_gen": 1.0,
             "sigma_true": 0.9,
             "sigma_detector": 0.5,
         }

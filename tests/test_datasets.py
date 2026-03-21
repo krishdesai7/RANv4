@@ -19,9 +19,9 @@ class TestGenerateGaussianDataset:
     def test_1d_uncorrelated(self, tmp_path):
         """1D scalar sigma should produce valid splits."""
         cfg = {
-            "mu_mc": [0.5],
+            "mu_gen": [0.5],
             "mu_true": [0.0],
-            "sigma_mc": 0.9,
+            "sigma_gen": 0.9,
             "sigma_true": 1.0,
             "sigma_detector": 0.5,
         }
@@ -35,9 +35,9 @@ class TestGenerateGaussianDataset:
     def test_2d_correlated_shapes(self, tmp_path):
         """2D with full covariance should produce correct shapes."""
         cfg = {
-            "mu_mc": [0.0, 1.0],
+            "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
-            "sigma_mc": [[1.0, -0.54], [-0.54, 2.25]],
+            "sigma_gen": [[1.0, -0.54], [-0.54, 2.25]],
             "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
             "sigma_detector": [0.5, 0.8],
         }
@@ -52,9 +52,9 @@ class TestGenerateGaussianDataset:
     def test_params_dict_interface(self, tmp_path):
         """Passing params dict directly should work (for --load_run)."""
         params = {
-            "mu_mc": [0.0],
+            "mu_gen": [0.0],
             "mu_true": [0.5],
-            "sigma_mc": 1.0,
+            "sigma_gen": 1.0,
             "sigma_true": 0.9,
             "sigma_detector": 0.5,
         }
@@ -64,7 +64,7 @@ class TestGenerateGaussianDataset:
 
     def test_both_config_and_params_raises(self, tmp_path):
         """Providing both config_path and params should error."""
-        cfg = {"mu_mc": [0.0], "mu_true": [0.5], "sigma_mc": 1.0,
+        cfg = {"mu_gen": [0.0], "mu_true": [0.5], "sigma_gen": 1.0,
                "sigma_true": 0.9, "sigma_detector": 0.5}
         path = _write_config(cfg, tmp_path)
         ds = RAN_Dataset(batch_size=64, seed=42)
@@ -80,9 +80,9 @@ class TestGenerateGaussianDataset:
     def test_caching(self, tmp_path):
         """Second call with same config should hit cache."""
         cfg = {
-            "mu_mc": [0.0],
+            "mu_gen": [0.0],
             "mu_true": [0.5],
-            "sigma_mc": 1.0,
+            "sigma_gen": 1.0,
             "sigma_true": 0.9,
             "sigma_detector": 0.5,
         }
@@ -98,9 +98,9 @@ class TestGenerateGaussianDataset:
     def test_smearing_preserves_event_coupling(self, tmp_path):
         """Detector-level values should be correlated with particle-level."""
         cfg = {
-            "mu_mc": [0.0, 0.0],
+            "mu_gen": [0.0, 0.0],
             "mu_true": [0.0, 0.0],
-            "sigma_mc": [1.0, 1.0],
+            "sigma_gen": [1.0, 1.0],
             "sigma_true": [1.0, 1.0],
             "sigma_detector": [0.1, 0.1],
         }
@@ -118,9 +118,9 @@ class TestGenerateGaussianDataset:
     def test_yaml_and_params_share_cache(self, tmp_path):
         """YAML path and equivalent params dict must produce the same cache key."""
         cfg = {
-            "mu_mc": [0.0, 1.0],
+            "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
-            "sigma_mc": [1.0, 1.5],
+            "sigma_gen": [1.0, 1.5],
             "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
             "sigma_detector": [0.5, 0.8],
         }
@@ -133,9 +133,9 @@ class TestGenerateGaussianDataset:
         assert len(cache_files_after_yaml) == 1
 
         reload_params = {
-            "mu_mc": [0.0, 1.0],
+            "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
-            "sigma_mc": [[1.0, 0.0], [0.0, 2.25]],
+            "sigma_gen": [[1.0, 0.0], [0.0, 2.25]],
             "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
             "sigma_detector": [[0.25, 0.0], [0.0, 0.64]],
         }

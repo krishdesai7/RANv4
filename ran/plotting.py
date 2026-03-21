@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+from typing import Any
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -264,6 +265,7 @@ def plot_particle_level(
         omnifold_weights: Per-event OmniFold weights for MC events.
         ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
+    _: Any
     z: npt.NDArray[np.double]
     y: npt.NDArray[np.ubyte]
     z, _, y = _collect_data(test_dataset)
@@ -274,12 +276,10 @@ def plot_particle_level(
 
     save_path = Path(save_path)
     dim: int = z.shape[1]
-    fig: figure.Figure
-    outer_grid: mpl.gridspec.GridSpec
-    fig = plt.figure(figsize=(8, 10 * dim))
-    outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
+    fig: figure.Figure = plt.figure(figsize=(8, 10 * dim))
+    outer_grid: gridspec.GridSpec = fig.add_gridspec(dim, 1, hspace=0.35)
     for i in range(dim):
-        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
+        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
             2, 1, height_ratios=[3, 1], hspace=0.0
         )
         ax: axes.Axes = fig.add_subplot(inner_grid[0])
@@ -312,7 +312,9 @@ def plot_particle_level(
             )
             title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
 
-        ibu_w_i = ibu_weights[i] if ibu_weights is not None else None
+        ibu_w_i: npt.NDArray[np.double] | None = (
+            ibu_weights[i] if ibu_weights is not None else None
+        )
         _hist_ratio_panel(
             ax,
             ax_r,

@@ -96,7 +96,7 @@ def _ibu(
 
 def _run_and_evaluate(
     config: dict, n_iterations: int = 10, purity_threshold: float = 0.5,
-) -> tuple[dict, list[str]]:
+) -> tuple[dict, list[str], list[npt.NDArray[np.float64]]]:
     """Run 1D IBU per variable and evaluate on test set."""
     splits = _load_splits(config)
 
@@ -130,6 +130,7 @@ def _run_and_evaluate(
         var_names = [f"dim_{i}" for i in range(dim)]
 
     metrics: dict = {}
+    per_var_weights: list[npt.NDArray[np.float64]] = []
     eps = 1e-12
 
     for d in range(dim):
@@ -141,6 +142,7 @@ def _run_and_evaluate(
 
         if n_bins < 2:
             print(f"  {var_names[d]}: only {n_bins} bin(s), skipping")
+            per_var_weights.append(np.ones(z_mc_t.shape[0], dtype=np.float64))
             continue
 
         # Response matrix from all MC
@@ -165,6 +167,7 @@ def _run_and_evaluate(
         ) - 1
         w = bin_weights[mc_test_binned]
         w = w / w.mean()
+        per_var_weights.append(w)
 
         # Metrics per variable (IBU is 1D, so weights differ per variable)
         for level, ref, comp in [
@@ -191,7 +194,7 @@ def _run_and_evaluate(
                 "triangular_improvement_pct": _improvement(td_before[0], td_after[0]),
             }
 
-    return metrics, var_names
+    return metrics, var_names, per_var_weights
 
 
 def evaluate_single(
@@ -209,11 +212,15 @@ def evaluate_single(
     config = json.loads((run_dir / "config.json").read_text())
     print(f"  {run_dir.name}: running IBU (niter={n_iterations}, purity={purity_threshold})...")
 
-    metrics, var_names = _run_and_evaluate(
+    metrics, var_names, per_var_weights = _run_and_evaluate(
         config, n_iterations=n_iterations, purity_threshold=purity_threshold,
     )
 
     json.dump(metrics, out_path.open("w"), indent=2)
+    np.savez(
+        run_dir / "ibu_weights.npz",
+        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},
+    )
     _print_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
     return metrics
 

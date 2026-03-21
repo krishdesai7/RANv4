@@ -1,8 +1,8 @@
 """Run OmniFold on the same dataset as a RAN run for comparison.
 
 Usage:
-    python -m ran.omnifold_baseline --run_dir=runs/2026-...
-    python -m ran.omnifold_baseline --run_dir=runs  # all runs
+    python -m ran.baselines.omnifold --run_dir=runs/2026-...
+    python -m ran.baselines.omnifold --run_dir=runs  # all runs
 """
 
 import os

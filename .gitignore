@@ -13,6 +13,11 @@ wheels/
 .cache/
 #runs/
 
+# Generated outputs
+plots/
+weights/
+
 # Logs
 *.log
+*.out
 .DS_Store

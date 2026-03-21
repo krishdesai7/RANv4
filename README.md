@@ -168,19 +168,22 @@ RANv4/
 │   │   ├── datasets.py           DatasetSplits, RAN_Dataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
 │   │   └── download.py           One-time Zenodo data download
+│   ├── baselines/
+│   │   ├── omnifold.py           OmniFold comparison baseline
+│   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  Adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
-│   ├── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular)
-│   └── omnifold_baseline.py      OmniFold comparison baseline
+│   └── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular)
 ├── params/                       Gaussian config YAML files
 │   ├── 1d_default.yaml
 │   ├── 2d_correlated.yaml
 │   ├── 4d_correlated.yaml
 │   └── 6d_correlated.yaml
 ├── scripts/
+│   ├── submit.sh                 SLURM submission script
 │   └── leakage_check.py          z_true leakage sanity check
-├── submit.sh                     SLURM submission script
+├── tests/                        pytest tests
 ├── pyproject.toml                Project metadata and dependencies
 ├── runs/                         Output directory (timestamped subdirectories)
 └── .cache/                       Cached datasets
@@ -219,6 +222,7 @@ Each run produces a timestamped directory under `runs/` containing:
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
 - **`metrics_omnifold.json`** -- Same metrics from OmniFold baseline (if run)
+- **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
 
 ## Training Hyperparameters
 

@@ -1,4 +1,5 @@
 import os
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 from datetime import datetime, timezone
@@ -9,7 +10,7 @@ import fire
 
 from ran.data import DatasetSplits, RAN_Dataset, load_jet_dataset, JET_OBS
 from ran.evaluate import evaluate_run
-
+from ran.data.config import parse_gaussian_config
 from ran.train import train
 from ran.plotting import (
     plot_detector_level,
@@ -45,9 +46,7 @@ def main(
     # When loading a saved run, read config from that run
     if load_run is not None:
         run_dir = Path(load_run)
-        saved_config: dict[str, Any] = json.loads(
-            (run_dir / "config.json").read_text()
-        )
+        saved_config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
         dataset = saved_config.get("dataset", "gaussian")
         n_samples = saved_config["n_samples"]
         batch_size = saved_config["batch_size"]
@@ -58,27 +57,23 @@ def main(
     if dataset == "gaussian":
         if load_run is not None:
             # Reload: use stored params from config.json
-            gaussian_params = saved_config["gaussian_params"]
+            gaussian_params = saved_config["gaussian_params"]  # type: ignore
             dim = gaussian_params["dim"]
-            raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
-            splits = RAN_Dataset(
-                batch_size=batch_size
-            ).generate_gaussian_dataset(
+            raw_params: dict[str, Any] = {
+                k: v for k, v in gaussian_params.items() if k != "dim"
+            }
+            splits = RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
                 params=raw_params,
                 n_samples=n_samples,
             )
         else:
             # Fresh run: parse YAML config
             if config is None:
-                raise ValueError(
-                    "Gaussian mode requires --config path/to/config.yaml"
-                )
-            from ran.data.config import parse_gaussian_config
+                raise ValueError("Gaussian mode requires --config path/to/config.yaml")
+
             gaussian_params = parse_gaussian_config(config)
             dim = gaussian_params["dim"]
-            splits = RAN_Dataset(
-                batch_size=batch_size
-            ).generate_gaussian_dataset(
+            splits = RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
                 config_path=config,
                 n_samples=n_samples,
             )
@@ -96,7 +91,8 @@ def main(
                 symbol=JET_OBS[v]["symbol"],
                 mu=std_params[v][0],
                 sigma=std_params[v][1],
-            ) for v in variables
+            )
+            for v in variables
         ]
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
@@ -110,12 +106,15 @@ def main(
         print(f"Loaded run from {run_dir}")
     else:
         d: keras.Model
-        g, d, history = train(splits, dim=dim, hidden_units=hidden_units,
-                                n_layers=n_layers, patience=patience)
-
-        run_dir = Path("runs") / datetime.now(timezone.utc).strftime(
-            "%Y-%m-%dT%H%M%SZ"
+        g, d, history = train(
+            splits,
+            dim=dim,
+            hidden_units=hidden_units,
+            n_layers=n_layers,
+            patience=patience,
         )
+
+        run_dir = Path("runs") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
         run_dir.mkdir(parents=True, exist_ok=True)
 
         g.save(run_dir / "generator.keras")
@@ -134,6 +133,7 @@ def main(
             "dataset": dataset,
         }
         if dataset == "gaussian" and gaussian_params is not None:
+
             def _to_list(v):
                 return v.tolist() if hasattr(v, "tolist") else v
 
@@ -150,14 +150,35 @@ def main(
         json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
         print(f"Saved run to {run_dir}")
 
+    # Load baseline weights if available
+    omnifold_weights = None
+    ibu_weights = None
+    of_path = run_dir / "omnifold_weights.npz"
+    ibu_path = run_dir / "ibu_weights.npz"
+    if of_path.exists():
+        omnifold_weights = np.load(of_path)["weights"]
+        print(f"Loaded OmniFold weights from {of_path}")
+    if ibu_path.exists():
+        ibu_data = np.load(ibu_path)
+        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
+        print(f"Loaded IBU weights from {ibu_path}")
+
     # Plots
     plot_detector_level(
-        splits.test, g, save_path=run_dir / "detector_level.pdf",
+        splits.test,
+        g,
+        save_path=run_dir / "detector_level.pdf",
         var_info=var_info,
+        omnifold_weights=omnifold_weights,
+        ibu_weights=ibu_weights,
     )
     plot_particle_level(
-        splits.test, g, save_path=run_dir / "particle_level.pdf",
+        splits.test,
+        g,
+        save_path=run_dir / "particle_level.pdf",
         var_info=var_info,
+        omnifold_weights=omnifold_weights,
+        ibu_weights=ibu_weights,
     )
     plot_losses(history, save_path=run_dir / "losses.pdf")
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import fire
 import numpy as np
+import numpy.typing as npt
 import keras
 from omnifold import MultiFold, DataLoader, MLP
 from omnifold.net import weighted_binary_crossentropy
@@ -28,7 +29,7 @@ from ran.evaluate import (
 )
 
 
-def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[dict, list[str]]:
+def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[dict, list[str], npt.NDArray[np.float64]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
     splits = _load_splits(config)
 
@@ -106,7 +107,7 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
                 "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
             }
 
-    return metrics, var_names
+    return metrics, var_names, w
 
 
 def evaluate_single(run_dir: str | Path, force: bool = False,
@@ -122,9 +123,10 @@ def evaluate_single(run_dir: str | Path, force: bool = False,
     config = json.loads((run_dir / "config.json").read_text())
     print(f"  {run_dir.name}: running OmniFold (niter={niter}, epochs={epochs})...")
 
-    metrics, var_names = _run_and_evaluate(config, niter=niter, epochs=epochs)
+    metrics, var_names, w = _run_and_evaluate(config, niter=niter, epochs=epochs)
 
     json.dump(metrics, out_path.open("w"), indent=2)
+    np.savez(run_dir / "omnifold_weights.npz", weights=w)
     _print_metrics(f"{run_dir.name} [OmniFold]", metrics, var_names)
     return metrics
 

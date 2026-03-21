@@ -21,6 +21,7 @@ from ran.plotting import (
 
 import keras
 import numpy as np
+import numpy.typing as npt
 
 
 def main(
@@ -114,7 +115,7 @@ def main(
             patience=patience,
         )
 
-        run_dir = Path("runs") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+        run_dir: Path = Path("runs") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
         run_dir.mkdir(parents=True, exist_ok=True)
 
         g.save(run_dir / "generator.keras")
@@ -152,15 +153,17 @@ def main(
 
     # Load baseline weights if available
     omnifold_weights = None
-    ibu_weights = None
-    of_path = run_dir / "omnifold_weights.npz"
-    ibu_path = run_dir / "ibu_weights.npz"
+    ibu_weights: list[npt.NDArray[np.double]] | None = None
+    of_path: Path = run_dir / "omnifold_weights.npz"
+    ibu_path: Path = run_dir / "ibu_weights.npz"
     if of_path.exists():
         omnifold_weights = np.load(of_path)["weights"]
         print(f"Loaded OmniFold weights from {of_path}")
     if ibu_path.exists():
-        ibu_data = np.load(ibu_path)
-        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
+        ibu_data: dict[str, Any] = np.load(ibu_path)
+        ibu_weights = [
+            ibu_data[f"weights_{i}"] for i in range(dim)
+        ]
         print(f"Loaded IBU weights from {ibu_path}")
 
     # Plots
@@ -184,7 +187,7 @@ def main(
 
     # Metrics (run last so failures don't block plots/checkpoints)
     try:
-        evaluate_run(run_dir, force=True)
+        evaluate_run(run_dir, force=(load_run is None))
     except Exception as e:
         print(f"Metric evaluation failed: {e}")
 

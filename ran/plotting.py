@@ -7,7 +7,7 @@ import numpy.typing as npt
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib import figure, axes, font_manager
+from matplotlib import figure, axes, font_manager, gridspec
 
 import tensorflow as tf
 import keras
@@ -28,8 +28,7 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 
 def _collect_data(
     dataset: tf.data.Dataset,
-) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double],
-           npt.NDArray[np.ubyte]]:
+) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
     zs: list[npt.NDArray[np.double]] = []
     xs: list[npt.NDArray[np.double]] = []
     ys: list[npt.NDArray[np.ubyte]] = []
@@ -40,14 +39,16 @@ def _collect_data(
         ys.append(y)
 
     return (
-        np.concatenate(zs, axis=0),             # zs: (n_events, dim)
-        np.concatenate(xs, axis=0),             # xs: (n_events, dim)
+        np.concatenate(zs, axis=0),  # zs: (n_events, dim)
+        np.concatenate(xs, axis=0),  # xs: (n_events, dim)
         np.concatenate(ys, axis=0).reshape(-1),  # ys: (n_events,)
     )
 
 
-def _get_weights(g: keras.Model, z_gen: npt.NDArray) -> npt.NDArray:
-    raw_w = g(z_gen).numpy().flatten()
+def _get_weights(
+    g: keras.Model, z_gen: npt.NDArray[np.double]
+) -> npt.NDArray[np.double]:
+    raw_w: npt.NDArray[np.double] = g(z_gen).numpy().flatten()
     return raw_w / raw_w.mean()
 
 
@@ -69,53 +70,72 @@ def _hist_ratio_panel(
     ibu_vals: npt.NDArray[np.double] | None = None,
     ibu_weights: npt.NDArray[np.double] | None = None,
 ) -> None:
-    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0",
-                           label=ref_label)
-    h_comp: tuple = ax.hist(comp, bins=h_ref[1], alpha=0.35, color="C1",
-                            label=comp_label)
+    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
+    h_comp: tuple = ax.hist(
+        comp, bins=h_ref[1], alpha=0.35, color="C1", label=comp_label
+    )
     h_rwt: tuple = ax.hist(
-        rwt_vals, bins=h_ref[1], weights=rwt_weights,
-        histtype="step", color="black", linestyle="-", linewidth=4,
+        rwt_vals,
+        bins=h_ref[1],
+        weights=rwt_weights,
+        histtype="step",
+        color="black",
+        linestyle="-",
+        linewidth=4,
         label=rwt_label,
     )
-    if omnifold_vals is not None and omnifold_weights is not None:
-        h_of: tuple = ax.hist(
-            omnifold_vals, bins=h_ref[1], weights=omnifold_weights,
-            histtype="step", color="red", linestyle="--", linewidth=4,
-            label="OmniFold",
-        )
-    if ibu_vals is not None and ibu_weights is not None:
-        h_ibu: tuple = ax.hist(
-            ibu_vals, bins=h_ref[1], weights=ibu_weights,
-            histtype="step", color="green", linestyle=":", linewidth=2,
-            label="IBU",
-        )
-    ax.set_ylabel("Events")
-    ax.legend()
-    ax.set_title(title)
 
     bin_edges: npt.NDArray[np.double] = h_ref[1]
     centres: npt.NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
     safe: npt.NDArray[np.bool] = h_ref[0] > 0
-    ratio_comp: npt.NDArray[np.double] = np.full_like(h_comp[0], np.nan,
-                                                      dtype=np.double,
-                                                      )
-    ratio_rwt: npt.NDArray[np.double] = np.full_like(h_rwt[0], np.nan,
-                                                     dtype=np.double,
-                                                     )
+    ratio_comp: npt.NDArray[np.double] = np.full_like(
+        h_comp[0],
+        np.nan,
+        dtype=np.double,
+    )
+    ratio_rwt: npt.NDArray[np.double] = np.full_like(
+        h_rwt[0],
+        np.nan,
+        dtype=np.double,
+    )
     ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
     ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
 
     ax_r.plot(centres, ratio_comp, color="C1", marker="d", linestyle="none")
     ax_r.plot(centres, ratio_rwt, color="black", marker="o", linestyle="none")
     if omnifold_vals is not None and omnifold_weights is not None:
-        ratio_of: npt.NDArray[np.double] = np.full_like(h_of[0], np.nan,
-                                                        dtype=np.double)
+        h_of: tuple = ax.hist(
+            omnifold_vals,
+            bins=h_ref[1],
+            weights=omnifold_weights,
+            histtype="step",
+            color="red",
+            linestyle="--",
+            linewidth=4,
+            label="OmniFold",
+        )
+        ratio_of: npt.NDArray[np.double] = np.full_like(
+            h_of[0], np.nan, dtype=np.double
+        )
         ratio_of[safe] = h_of[0][safe] / h_ref[0][safe]
         ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="none")
     if ibu_vals is not None and ibu_weights is not None:
-        ratio_ibu: npt.NDArray[np.double] = np.full_like(h_ibu[0], np.nan,
-                                                         dtype=np.double)
+        h_ibu: tuple = ax.hist(
+            ibu_vals,
+            bins=h_ref[1],
+            weights=ibu_weights,
+            histtype="step",
+            color="green",
+            linestyle=":",
+            linewidth=2,
+            label="IBU",
+        )
+        ax.set_ylabel("Events")
+        ax.legend()
+        ax.set_title(title)
+        ratio_ibu: npt.NDArray[np.double] = np.full_like(
+            h_ibu[0], np.nan, dtype=np.double
+        )
         ratio_ibu[safe] = h_ibu[0][safe] / h_ref[0][safe]
         ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="none")
     ax_r.axhline(1, color="gray", linewidth=0.5)
@@ -169,12 +189,12 @@ def plot_detector_level(
     save_path = Path(save_path)
     dim: int = x.shape[1]
     fig: figure.Figure
-    outer_grid: mpl.gridspec.GridSpec
+    outer_grid: gridspec.GridSpec
     fig = plt.figure(figsize=(8, 6 * dim))
     outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
     for i in range(dim):
-        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = (
-            outer_grid[i].subgridspec(2, 1, height_ratios=[3, 1], hspace=0.0)
+        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
+            2, 1, height_ratios=[3, 1], hspace=0.0
         )
         ax: axes.Axes = fig.add_subplot(inner_grid[0])
         ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
@@ -198,14 +218,17 @@ def plot_detector_level(
             ref = x_data[:, i]
             comp = x_sim[:, i]
             bins = np.linspace(ref.min(), ref.max(), 51)
-            xlabel = f"$x_{{{i}}}$ (detector level)" if dim > 1\
-                else "x (detector level)"
-            title = f"Detector Level — Dim {i}" if dim > 1\
-                else "Detector Level"
+            xlabel = (
+                f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)"
+            )
+            title = f"Detector Level — Dim {i}" if dim > 1 else "Detector Level"
 
-        ibu_w_i = ibu_weights[i] if ibu_weights is not None else None
+        ibu_w_i: npt.NDArray[np.double] | None = (
+            ibu_weights[i] if ibu_weights is not None else None
+        )
         _hist_ratio_panel(
-            ax, ax_r,
+            ax,
+            ax_r,
             ref=ref,
             comp=comp,
             rwt_vals=comp,
@@ -256,8 +279,8 @@ def plot_particle_level(
     fig = plt.figure(figsize=(8, 10 * dim))
     outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
     for i in range(dim):
-        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = (
-            outer_grid[i].subgridspec(2, 1, height_ratios=[3, 1], hspace=0.0)
+        inner_grid: mpl.gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
+            2, 1, height_ratios=[3, 1], hspace=0.0
         )
         ax: axes.Axes = fig.add_subplot(inner_grid[0])
         ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
@@ -285,19 +308,14 @@ def plot_particle_level(
             hi: float = max(ref.max(), comp.max())
             bins = np.linspace(lo, hi, 51)
             xlabel = (
-                f"$z_{{{i}}}$ (particle level)"
-                if dim > 1
-                else "z (particle level)"
+                f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
             )
-            title = (
-                f"Particle Level — Dim {i}"
-                if dim > 1
-                else "Particle Level"
-            )
+            title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
 
         ibu_w_i = ibu_weights[i] if ibu_weights is not None else None
         _hist_ratio_panel(
-            ax, ax_r,
+            ax,
+            ax_r,
             ref=ref,
             comp=comp,
             rwt_vals=comp,
@@ -327,27 +345,30 @@ def plot_losses(
     """
     if isinstance(save_path, str):
         save_path = Path(save_path)
-    epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]),
-                                               dtype=np.ushort)
+    epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
 
     fig: figure.Figure
     ax: axes.Axes
     fig, ax = plt.subplots(figsize=(8, 5))
     train_d: npt.NDArray[np.double] = np.array(
-        history["train_d"], dtype=np.double,
+        history["train_d"],
+        dtype=np.double,
     )
-    val_d: npt.NDArray[np.double] = np.array(history["val_d"],
-                                             dtype=np.double)
-    train_g: npt.NDArray[np.double] = np.array(history["train_g"],
-                                               dtype=np.double)
-    val_g: npt.NDArray[np.double] = np.array(history["val_g"],
-                                             dtype=np.double)
+    val_d: npt.NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
+    train_g: npt.NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
+    val_g: npt.NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
     ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
     ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
     ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw=3, alpha=0.5)
-    ax.axhline(np.log(2), color="gray", linestyle="-", linewidth=2,
-               zorder=10, label=r"$\log(2)$")
+    ax.axhline(
+        np.log(2),
+        color="gray",
+        linestyle="-",
+        linewidth=2,
+        zorder=10,
+        label=r"$\log(2)$",
+    )
     ax.set_xlabel("Epoch")
     ax.set_ylabel("WeightedBCE")
     ax.set_title("Training History")

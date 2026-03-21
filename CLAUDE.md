@@ -31,11 +31,13 @@ ran/                          Python package
 │   ├── datasets.py           DatasetSplits, RAN_Dataset, caching
 │   ├── jets.py               Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
 │   └── download.py           One-time Zenodo download
+├── baselines/
+│   ├── omnifold.py           OmniFold comparison baseline
+│   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 ├── models.py                 Generator and discriminator architectures
 ├── train.py                  Adversarial training loop with early stopping
 ├── plotting.py               Detector-level, particle-level, and loss curve plots
-├── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
-└── omnifold_baseline.py      OmniFold comparison baseline
+└── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
 
 params/                       Gaussian config YAML files
 ├── 1d_default.yaml
@@ -44,9 +46,10 @@ params/                       Gaussian config YAML files
 └── 6d_correlated.yaml
 
 scripts/
+├── submit.sh                 SLURM submission script
 └── leakage_check.py          z_true leakage sanity check
 
-submit.sh                     SLURM submission script
+tests/                        pytest tests
 runs/                         Output directory (timestamped subdirectories)
 .cache/                       Cached datasets (gaussian .npz, per-variable jet .npz)
 ```
@@ -60,8 +63,9 @@ uv run -m ran --dataset jets                               # train on all 6 jet 
 uv run -m ran --load_run=runs/2026-03-14T061023Z           # reload a saved run
 uv run -m ran.evaluate                                     # compute metrics for all runs
 uv run -m ran.evaluate --run_dir=runs/2026-...             # single run
-uv run -m ran.omnifold_baseline --run_dir=runs/2026-...    # OmniFold comparison
-sbatch submit.sh --config params/2d_correlated.yaml        # SLURM submission
+uv run -m ran.baselines.omnifold --run_dir=runs/2026-...   # OmniFold comparison
+uv run -m ran.baselines.ibu --run_dir=runs/2026-...        # IBU comparison
+sbatch scripts/submit.sh --config params/2d_correlated.yaml  # SLURM submission
 ```
 
 ## Gaussian Config Format

@@ -93,8 +93,8 @@ uv run -m ran --dataset jets --variables='("m", "w")'
 uv run -m ran --load_run=runs/2026-03-14T061023Z
 
 # SLURM submission
-sbatch submit.sh --config params/2d_correlated.yaml
-sbatch submit.sh --dataset jets
+sbatch scripts/submit.sh --config params/2d_correlated.yaml
+sbatch scripts/submit.sh --dataset jets
 ```
 
 | Flag             | Default    | Description                                 |
@@ -134,22 +134,28 @@ uv run -m ran.evaluate --force
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence, x10^3) at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
 
-### OmniFold Baseline Comparison
+### Baseline Comparisons
 
-Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) on the same datasets for head-to-head comparison:
+Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) or IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
 
 ```bash
-# Single run
-uv run -m ran.omnifold_baseline --run_dir=runs/2026-...
+# OmniFold — single run
+uv run -m ran.baselines.omnifold --run_dir=runs/2026-...
 
-# All runs
-uv run -m ran.omnifold_baseline
+# OmniFold — all runs
+uv run -m ran.baselines.omnifold
 
 # Customize OmniFold iterations/epochs
-uv run -m ran.omnifold_baseline --run_dir=runs/2026-... --niter=5 --epochs=100
+uv run -m ran.baselines.omnifold --run_dir=runs/2026-... --niter=5 --epochs=100
+
+# IBU — single run
+uv run -m ran.baselines.ibu --run_dir=runs/2026-...
+
+# IBU — all runs
+uv run -m ran.baselines.ibu
 ```
 
-Results are saved to `metrics_omnifold.json` in each run directory using the same metric format as RAN.
+Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
 
 ## Project Structure
 

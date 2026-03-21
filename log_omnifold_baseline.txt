@@ -1,0 +1,3 @@
+1953 training steps at reco and 1953 steps at gen
+ITERATION: 1
+RUNNING STEP 1

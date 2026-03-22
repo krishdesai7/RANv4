@@ -21,3 +21,6 @@ weights/
 *.log
 *.out
 .DS_Store
+
+# Sandbox
+sandbox.ipynb

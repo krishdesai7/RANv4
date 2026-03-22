@@ -3,5 +3,26 @@
   "n_samples": 500000,
   "dim": 6,
   "dataset": "gaussian",
-  "smearing": 0.5
+  "gaussian_params": {
+    "dim": 6,
+    "mu_gen": [
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "mu_true": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "sigma_gen": 0.9,
+    "sigma_true": 1.0,
+    "sigma_detector": 0.5
+  }
 }

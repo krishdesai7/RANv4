@@ -5,7 +5,7 @@ import numpy as np
 from ran.data import DatasetSplits
 from ran.models import build_generator, build_discriminator
 
-EPS = keras.config.epsilon()
+EPS: float = keras.config.epsilon()
 
 
 def _compute_weights(g: keras.Model, z: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
@@ -14,8 +14,8 @@ def _compute_weights(g: keras.Model, z: tf.Tensor, y: tf.Tensor) -> tf.Tensor:
     """
     raw_w: tf.Tensor = tf.squeeze(g(z), axis=-1)
     y = tf.cast(y, raw_w.dtype)
-    one = tf.ones_like(y)
-    eps = tf.cast(EPS, raw_w.dtype)
+    one: tf.Tensor = tf.ones_like(y)
+    eps: tf.Tensor = tf.cast(EPS, raw_w.dtype)
     n_mc: tf.Tensor = tf.reduce_sum(one - y)
     w_mc_norm: tf.Tensor = raw_w * n_mc / (tf.reduce_sum(raw_w * (one - y)) + eps)
     return y + (one - y) * w_mc_norm
@@ -25,8 +25,8 @@ def _weighted_bce(d_out: tf.Tensor, y: tf.Tensor, w: tf.Tensor) -> tf.Tensor:
     """Weighted binary cross-entropy."""
     y = tf.cast(y, d_out.dtype)
     w = tf.cast(w, d_out.dtype)
-    one = tf.ones_like(d_out)
-    eps = tf.cast(EPS, d_out.dtype)
+    one: tf.Tensor = tf.ones_like(d_out)
+    eps: tf.Tensor = tf.cast(EPS, d_out.dtype)
     return -tf.reduce_mean(
         w * y * tf.math.log(d_out + eps)
         + w * (one - y) * tf.math.log(one - d_out + eps)

@@ -23,7 +23,7 @@ RANv4 is a Reweighting Algorithm Network that uses adversarial learning to unfol
 
 ## Project Structure
 
-```
+```text
 ran/                          Python package
 ├── __main__.py               Entry point (python -m ran)
 ├── data/

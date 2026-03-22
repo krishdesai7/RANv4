@@ -138,7 +138,7 @@ def _hist_ratio_panel(
             h_ibu[0], np.nan, dtype=np.double
         )
         ratio_ibu[safe] = h_ibu[0][safe] / h_ref[0][safe]
-        ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="none")
+        ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="--")
     ax_r.axhline(1, color="gray", linewidth=0.5)
     ax_r.set_ylim(0, 2)
     ax_r.set_ylabel(f"Ratio to\n{ref_label}")

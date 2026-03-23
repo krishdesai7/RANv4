@@ -1,0 +1,24 @@
+{
+  "detector_m": {
+    "wasserstein_before": 0.20734120517186302,
+    "wasserstein_after": 0.013812490407258704,
+    "wasserstein_improvement_pct": 93.33828006072903,
+    "jensenshannon_before": 0.00689899124804445,
+    "jensenshannon_after": 0.0003893114113280182,
+    "jensenshannon_improvement_pct": 94.35698064643334,
+    "triangular_before": 27.36586467846386,
+    "triangular_after": 1.4033367634702894,
+    "triangular_improvement_pct": 94.87194437318594
+  },
+  "particle_m": {
+    "wasserstein_before": 0.10884104012065575,
+    "wasserstein_after": 0.14128141046742368,
+    "wasserstein_improvement_pct": -29.805274105067504,
+    "jensenshannon_before": 0.0020370943627067233,
+    "jensenshannon_after": 0.004160305301013242,
+    "jensenshannon_improvement_pct": -104.22742201717993,
+    "triangular_before": 8.062332275620415,
+    "triangular_after": 16.495947139608408,
+    "triangular_improvement_pct": -104.60515116066715
+  }
+}

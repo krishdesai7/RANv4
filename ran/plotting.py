@@ -83,6 +83,7 @@ def _hist_ratio_panel(
         color="black",
         linestyle="-",
         linewidth=4,
+        alpha=0.75,
         label=rwt_label,
     )
 
@@ -102,8 +103,8 @@ def _hist_ratio_panel(
     ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
     ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
 
-    ax_r.plot(centres, ratio_comp, color="C1", marker="d", linestyle="none")
-    ax_r.plot(centres, ratio_rwt, color="black", marker="o", linestyle="none")
+    ax_r.plot(centres, ratio_comp, color="C1", marker="d", linestyle="--")
+    ax_r.plot(centres, ratio_rwt, color="black", marker="o", linestyle="--")
     if omnifold_vals is not None and omnifold_weights is not None:
         h_of: tuple = ax.hist(
             omnifold_vals,
@@ -113,13 +114,14 @@ def _hist_ratio_panel(
             color="red",
             linestyle="--",
             linewidth=4,
+            alpha=0.75,
             label="OmniFold",
         )
         ratio_of: npt.NDArray[np.double] = np.full_like(
             h_of[0], np.nan, dtype=np.double
         )
         ratio_of[safe] = h_of[0][safe] / h_ref[0][safe]
-        ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="none")
+        ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="--")
     if ibu_vals is not None and ibu_weights is not None:
         h_ibu: tuple = ax.hist(
             ibu_vals,
@@ -128,7 +130,8 @@ def _hist_ratio_panel(
             histtype="step",
             color="green",
             linestyle=":",
-            linewidth=2,
+            linewidth=4,
+            alpha=0.75,
             label="IBU",
         )
         ax.set_ylabel("Events")
@@ -140,7 +143,8 @@ def _hist_ratio_panel(
         ratio_ibu[safe] = h_ibu[0][safe] / h_ref[0][safe]
         ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="--")
     ax_r.axhline(1, color="gray", linewidth=0.5)
-    ax_r.set_ylim(0, 2)
+    width: float = 0.5
+    ax_r.set_ylim(1 - width, 1 + width)
     ax_r.set_ylabel(f"Ratio to\n{ref_label}")
     ax_r.set_xlabel(xlabel)
 

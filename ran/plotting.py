@@ -56,82 +56,109 @@ def _get_weights(
 def _hist_ratio_panel(
     ax: axes.Axes,
     ax_r: axes.Axes,
-    ref: npt.NDArray[np.double],
-    comp: npt.NDArray[np.double],
-    rwt_vals: npt.NDArray[np.double],
-    rwt_weights: npt.NDArray[np.double],
+    x_nature: npt.NDArray[np.double],
+    x_mc: npt.NDArray[np.double],
+    w_ran: npt.NDArray[np.double],
     bins: Sequence[float] | int,
-    ref_label: str,
-    comp_label: str,
-    rwt_label: str,
+    nature_label: str,
+    mc_label: str,
     xlabel: str,
     title: str,
-    omnifold_vals: npt.NDArray[np.double] | None = None,
-    omnifold_weights: npt.NDArray[np.double] | None = None,
-    ibu_vals: npt.NDArray[np.double] | None = None,
-    ibu_weights: npt.NDArray[np.double] | None = None,
+    w_omnifold: npt.NDArray[np.double] | None = None,
+    w_ibu: npt.NDArray[np.double] | None = None,
 ) -> None:
-    h_ref: tuple = ax.hist(ref, bins=bins, alpha=0.35, color="C0", label=ref_label)
-    h_comp: tuple = ax.hist(
-        comp, bins=h_ref[1], alpha=0.35, color="C1", label=comp_label
+    h_nature: tuple = ax.hist(x_nature,
+        bins=bins,
+        alpha=0.35,
+        color="C0",
+        label=nature_label,
+        )
+    h_mc: tuple = ax.hist(
+        x_mc,
+        bins=h_nature[1],
+        alpha=0.35,
+        color="C1",
+        label=mc_label,
     )
-    h_rwt: tuple = ax.hist(
-        rwt_vals,
-        bins=h_ref[1],
-        weights=rwt_weights,
+    h_ran: tuple = ax.hist(
+        x_mc,
+        bins=h_nature[1],
+        weights=w_ran,
         histtype="step",
         color="black",
         linestyle="-",
         linewidth=4,
-        alpha=0.75,
-        label=rwt_label,
+        alpha=0.35,
+        label="RAN",
     )
 
-    bin_edges: npt.NDArray[np.double] = h_ref[1]
+    bin_edges: npt.NDArray[np.double] = h_nature[1]
     centres: npt.NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
-    safe: npt.NDArray[np.bool] = h_ref[0] > 0
-    ratio_comp: npt.NDArray[np.double] = np.full_like(
-        h_comp[0],
+    safe: npt.NDArray[np.bool] = h_nature[0] > 0
+    ratio_mc: npt.NDArray[np.double] = np.full_like(
+        h_nature[0],
         np.nan,
         dtype=np.double,
     )
-    ratio_rwt: npt.NDArray[np.double] = np.full_like(
-        h_rwt[0],
+    ratio_ran: npt.NDArray[np.double] = np.full_like(
+        h_ran[0],
         np.nan,
         dtype=np.double,
     )
-    ratio_comp[safe] = h_comp[0][safe] / h_ref[0][safe]
-    ratio_rwt[safe] = h_rwt[0][safe] / h_ref[0][safe]
+    ratio_mc[safe] = h_mc[0][safe] / h_nature[0][safe]
+    ratio_ran[safe] = h_ran[0][safe] / h_nature[0][safe]
 
-    ax_r.plot(centres, ratio_comp, color="C1", marker="d", linestyle="--")
-    ax_r.plot(centres, ratio_rwt, color="black", marker="o", linestyle="--")
-    if omnifold_vals is not None and omnifold_weights is not None:
+    ax_r.plot(centres,
+        ratio_mc,
+        color="C1",
+        marker="d",
+        linestyle="--",
+        alpha=0.35,
+    )
+    ax_r.plot(centres,
+        ratio_ran,
+        color="black",
+        marker="o",
+        linestyle="--",
+        alpha=0.35,
+    )
+
+
+    if w_omnifold is not None:
         h_of: tuple = ax.hist(
-            omnifold_vals,
-            bins=h_ref[1],
-            weights=omnifold_weights,
+            x_mc,
+            bins=h_nature[1],
+            weights=w_omnifold,
             histtype="step",
             color="red",
             linestyle="--",
             linewidth=4,
-            alpha=0.75,
+            alpha=0.35,
             label="OmniFold",
         )
         ratio_of: npt.NDArray[np.double] = np.full_like(
             h_of[0], np.nan, dtype=np.double
         )
-        ratio_of[safe] = h_of[0][safe] / h_ref[0][safe]
-        ax_r.plot(centres, ratio_of, color="red", marker="d", linestyle="--")
-    if ibu_vals is not None and ibu_weights is not None:
+        ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
+        ax_r.plot(centres,
+            ratio_of,
+            color="red",
+            marker="d",
+            linestyle="--",
+            alpha=0.35,
+        )
+
+
+    if w_ibu is not None:
         h_ibu: tuple = ax.hist(
-            ibu_vals,
-            bins=h_ref[1],
-            weights=ibu_weights,
+            x_mc,
+            bins=h_nature[1],
+            weights=w_ibu,
             histtype="step",
             color="green",
             linestyle=":",
             linewidth=4,
-            alpha=0.75,
+            alpha=0.35,
             label="IBU",
         )
         ax.set_ylabel("Events")
@@ -140,12 +167,18 @@ def _hist_ratio_panel(
         ratio_ibu: npt.NDArray[np.double] = np.full_like(
             h_ibu[0], np.nan, dtype=np.double
         )
-        ratio_ibu[safe] = h_ibu[0][safe] / h_ref[0][safe]
-        ax_r.plot(centres, ratio_ibu, color="green", marker="s", linestyle="--")
-    ax_r.axhline(1, color="gray", linewidth=0.5)
+        ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
+        ax_r.plot(centres,
+            ratio_ibu,
+            color="green",
+            marker="s",
+            linestyle="--",
+            alpha=0.75,
+        )
+    ax_r.axhline(1, color="gray", linewidth=0.5, alpha=0.75)
     width: float = 0.5
     ax_r.set_ylim(1 - width, 1 + width)
-    ax_r.set_ylabel(f"Ratio to\n{ref_label}")
+    ax_r.set_ylabel(f"Ratio to\n{nature_label}")
     ax_r.set_xlabel(xlabel)
 
 
@@ -205,8 +238,8 @@ def plot_detector_level(
         ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
-        ref: npt.NDArray[np.double]
-        comp: npt.NDArray[np.double]
+        x_nature: npt.NDArray[np.double]
+        x_mc: npt.NDArray[np.double]
         bins: npt.NDArray[np.double]
         xlabel: str
         title: str
@@ -214,15 +247,15 @@ def plot_detector_level(
             cfg: VarInfo = var_info[i]
             mu: float = cfg["mu"]
             sigma: float = cfg["sigma"]
-            ref = x_data[:, i] * sigma + mu
-            comp = x_sim[:, i] * sigma + mu
+            x_nature = x_data[:, i] * sigma + mu
+            x_mc = x_sim[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
             xlabel = cfg["symbol"]
             title = f'{cfg["xlabel"]} (detector level)'
         else:
-            ref = x_data[:, i]
-            comp = x_sim[:, i]
-            bins = np.linspace(ref.min(), ref.max(), 51)
+            x_nature = x_data[:, i]
+            x_mc = x_sim[:, i]
+            bins = np.linspace(x_nature.min(), x_nature.max(), 51)
             xlabel = (
                 f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)"
             )
@@ -234,20 +267,16 @@ def plot_detector_level(
         _hist_ratio_panel(
             ax,
             ax_r,
-            ref=ref,
-            comp=comp,
-            rwt_vals=comp,
-            rwt_weights=w,
+            x_nature=x_nature,
+            x_mc=x_mc,
+            w_ran=w,
             bins=bins.tolist(),
-            ref_label="Data",
-            comp_label="Sim",
-            rwt_label="RAN",
+            nature_label="Data",
+            mc_label="Sim",
             xlabel=xlabel,
             title=title,
-            omnifold_vals=comp if omnifold_weights is not None else None,
-            omnifold_weights=omnifold_weights,
-            ibu_vals=comp if ibu_w_i is not None else None,
-            ibu_weights=ibu_w_i,
+            w_omnifold=omnifold_weights,   
+            w_ibu=ibu_w_i,
         )
     _save_fig(fig, save_path)
 
@@ -290,8 +319,8 @@ def plot_particle_level(
         ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
-        ref: npt.NDArray[np.double]
-        comp: npt.NDArray[np.double]
+        z_nature: npt.NDArray[np.double]
+        z_mc: npt.NDArray[np.double]
         bins: npt.NDArray[np.double]
         xlabel: str
         title: str
@@ -300,16 +329,16 @@ def plot_particle_level(
             cfg: VarInfo = var_info[i]
             mu: float = cfg["mu"]
             sigma: float = cfg["sigma"]
-            ref = z_true[:, i] * sigma + mu
-            comp = z_gen[:, i] * sigma + mu
+            z_nature = z_true[:, i] * sigma + mu
+            z_mc = z_gen[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
             xlabel = cfg["symbol"]
             title = f'{cfg["xlabel"]} (particle level)'
         else:
-            ref = z_true[:, i]
-            comp = z_gen[:, i]
-            lo: float = min(ref.min(), comp.min())
-            hi: float = max(ref.max(), comp.max())
+            z_nature = z_true[:, i]
+            z_mc = z_gen[:, i]
+            lo: float = min(z_nature.min(), z_mc.min())
+            hi: float = max(z_nature.max(), z_mc.max())
             bins = np.linspace(lo, hi, 51)
             xlabel = (
                 f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
@@ -322,20 +351,16 @@ def plot_particle_level(
         _hist_ratio_panel(
             ax,
             ax_r,
-            ref=ref,
-            comp=comp,
-            rwt_vals=comp,
-            rwt_weights=w,
+            x_nature=z_nature,
+            x_mc=z_mc,
+            w_ran=w,
             bins=bins.tolist(),
-            ref_label="Truth",
-            comp_label="Gen",
-            rwt_label="RAN",
+            nature_label="Truth",
+            mc_label="Gen.",
             xlabel=xlabel,
             title=title,
-            omnifold_vals=comp if omnifold_weights is not None else None,
-            omnifold_weights=omnifold_weights,
-            ibu_vals=comp if ibu_w_i is not None else None,
-            ibu_weights=ibu_w_i,
+            w_omnifold=omnifold_weights,
+            w_ibu=ibu_w_i,
         )
     _save_fig(fig, save_path)
 

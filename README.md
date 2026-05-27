@@ -12,28 +12,26 @@ RANv4 replaces this with a learned reweighting: a **generator** network predicts
 
 The system is a two-player adversarial game over event weights:
 
-| Component                | Input                      | Output                           | Role                                        |
-| ------------------------ | -------------------------- | -------------------------------- | ------------------------------------------- |
-| **Generator** _g(z)_     | Particle-level feature _z_ | Per-event weight (softplus)      | Predict weights that make MC look like data |
-| **Discriminator** _d(x)_ | Detector-level feature _x_ | Data vs MC probability (sigmoid) | Distinguish real data from reweighted MC    |
+| Component                | Input                      | Output                                        | Role                                        |
+| ------------------------ | -------------------------- | --------------------------------------------- | ------------------------------------------- |
+| **Generator** $g(z)$     | Particle-level feature $z$ | Per-event weight (`logplus` = $\log(1+\exp)$) | Predict weights that make MC look like data |
+| **Discriminator** $d(x)$ | Detector-level feature $x$ | Data vs MC probability (`sigmoid`)            | Distinguish real data from reweighted MC    |
 
 **Training loop:**
 
-1. **Discriminator step** -- freeze _g_, update _d_ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
-2. **Generator step** -- freeze _d_, update _g_ to minimize the same loss (fool the discriminator)
+1. **Discriminator step** -- freeze $g$, update $d$ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
+2. **Generator step** -- freeze $d$, update $g$ to minimize the same loss (fool the discriminator)
 3. Repeat with 5:1 D:G update ratio
 
 Weight normalization ensures the total MC yield is preserved:
 
-```
-w_i = g(z_i) / mean(g(z))
-```
+$$w_i = \frac{g(z_i)}{\text{mean}(g(z))}$$
 
-At Nash equilibrium both losses converge to log(2) and the reweighted MC matches data.
+In equilibrium, both losses converge to $\log(2)$ and the reweighted MC matches data.
 
 ## Installation
 
-Requires **Python >= 3.13**. Uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
+Requires **Python >= 3.13**. Uses [`UV-Astral`](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
 git clone <repo-url> && cd RANv4
@@ -66,15 +64,20 @@ uv run -m ran --config params/1d_default.yaml --hidden_units 128 --n_layers 3 --
 ```
 
 YAML config format (see `params/` for examples):
+
 ```yaml
 mu_gen: [0.5]
 mu_true: [0.0]
-sigma_gen: 0.9        # scalar, vector, or full covariance matrix
+sigma_gen: 0.9 # scalar, vector, or full covariance matrix
 sigma_true: 1.0
 sigma_detector: 0.5
 ```
 
-Sigma values are promoted to covariance matrices: scalar -> sigma^2 * I, vector -> diag(sigma^2), matrix -> used as-is.
+Sigma values are promoted to covariance matrices:
+
+- scalar $\to \sigma^2 I$
+- vector $\to \text{diag}(\sigma^2)$
+- matrix $\to$ as-is
 
 ### Jet Substructure
 
@@ -113,7 +116,7 @@ The pipeline will:
 
 1. Generate (or load from cache) the dataset
 2. Split into train / validation / test sets (70 / 10 / 20%)
-3. Train the GAN with early stopping
+3. Train the RAN with early stopping
 4. Save models, training history, and plots to `runs/<UTC-timestamp>/`
 5. Compute distance metrics on the test set
 
@@ -132,7 +135,7 @@ uv run -m ran.evaluate --run_dir=runs/2026-03-14T061023Z
 uv run -m ran.evaluate --force
 ```
 
-This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence, x10^3) at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
+This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
 
 ### Baseline Comparisons
 
@@ -156,6 +159,20 @@ uv run -m ran.baselines.ibu
 ```
 
 Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
+
+### Leakage Verification
+
+A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$ — the particle-level values of real data events, which are unknowable in a real experiment. `scripts/leakage_check.py` verifies this empirically via a **data poisoning test**:
+
+```bash
+# Clean run — z_true drawn from N(0, 1) as normal
+uv run scripts/leakage_check.py --poison=False
+
+# Poisoned run — z_true overwritten with -999 after x_data is generated
+uv run scripts/leakage_check.py --poison=True
+```
+
+The poisoned run corrupts every data particle-level value to a nonsense sentinel (-999) while leaving $x_\text{data}$ (the reco-level observations the discriminator actually sees) unchanged. If $g$ had any access to $z_\text{true}$, the poisoned run would produce degraded weights. Both runs should report statistically identical Wasserstein and triangular discriminator improvements. Matching results confirm that no leakage path exists.
 
 ## Project Structure
 
@@ -182,7 +199,7 @@ RANv4/
 │   └── 6d_correlated.yaml
 ├── scripts/
 │   ├── submit.sh                 SLURM submission script
-│   └── leakage_check.py          z_true leakage sanity check
+│   └── leakage_check.py          data poisoning test for z_true leakage
 ├── tests/                        pytest tests
 ├── pyproject.toml                Project metadata and dependencies
 ├── runs/                         Output directory (timestamped subdirectories)
@@ -193,20 +210,20 @@ RANv4/
 
 ### Gaussian (Synthetic)
 
-Configurable multivariate Gaussian distributions with correlated covariance matrices. Supports arbitrary dimensionality and correlation structure via YAML config files. Both truth and MC samples are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level (_z_) and detector-level (_x_) features.
+Configurable multivariate Gaussian distributions with correlated covariance matrices. Supports arbitrary dimensionality and correlation structure via YAML config files. Both truth and MC samples are smeared by additive Gaussian noise to simulate detector resolution, producing paired particle-level ($z$) and detector-level ($x$) features.
 
 ### Jet Substructure (Physics)
 
-Herwig (data) vs Pythia26 (MC) Z+jets at high pT (200 GeV), with Delphes detector simulation. Downloaded from [Zenodo record 3548091](https://zenodo.org/record/3548091).
+`Herwig` (data) vs `Pythia26` (MC) $Z+$ jets at high $p_T$ (200 GeV), with [`Delphes`](https://github.com/delphes/delphes) detector simulation. Automatically downloaded from from [Zenodo record 3548091](https://zenodo.org/record/3548091) if not already present in `.cache/`.
 
-| Variable | Symbol      | Description                   |
-| -------- | ----------- | ----------------------------- |
-| `m`      | _m_ \[GeV\] | Jet mass                      |
-| `M`      | _M_         | Jet constituent multiplicity  |
-| `w`      | _w_         | Jet width                     |
-| `tau21`  | tau_21      | N-subjettiness ratio          |
-| `zg`     | z_g         | Groomed jet momentum fraction |
-| `sdm`    | ln(rho)     | Log soft-drop jet mass        |
+| Variable | Symbol         | Description                   |
+| -------- | -------------- | ----------------------------- |
+| `m`      | $m/\text{GeV}$ | Jet mass                      |
+| `M`      | $M$            | Jet constituent multiplicity  |
+| `w`      | $w$            | Jet width                     |
+| `tau21`  | $\tau_{21}$    | N-subjettiness ratio          |
+| `zg`     | $z_g$          | Groomed jet momentum fraction |
+| `sdm`    | $\ln\rho$      | Log soft-drop jet mass        |
 
 All variables are z-score standardized using MC gen-level statistics only (no information leakage).
 
@@ -214,7 +231,7 @@ All variables are z-score standardized using MC gen-level statistics only (no in
 
 Each run produces a timestamped directory under `runs/` containing:
 
-- **`generator.keras`** / **`discriminator.keras`** -- Saved model checkpoints
+- **`generator.keras`**/**`discriminator.keras`** -- Saved model checkpoints
 - **`history.npz`** -- Training loss history
 - **`config.json`** -- Run configuration (reproducibility)
 - **`detector_level.pdf`** -- Histogram comparing data, MC, and reweighted MC at detector level with ratio panel
@@ -241,10 +258,10 @@ All configurable via CLI flags or in `ran/train.py`:
 
 ## Dependencies
 
-- [TensorFlow](https://www.tensorflow.org/) >= 2.21
-- [Keras](https://keras.io/) >= 3.13
-- [NumPy](https://numpy.org/) >= 2.4
-- [SciPy](https://scipy.org/) >= 1.15
-- [Matplotlib](https://matplotlib.org/) >= 3.10
-- [Fire](https://github.com/google/python-fire) >= 0.7
-- [OmniFold](https://github.com/ViniciusMikuni/omnifold) >= 0.1 (baseline comparison)
+- [`TensorFlow`](https://www.tensorflow.org/) >= 2.21
+- [`Keras`](https://keras.io/) >= 3.13
+- [`NumPy`](https://numpy.org/) >= 2.4
+- [`SciPy`](https://scipy.org/) >= 1.15
+- [`Matplotlib`](https://matplotlib.org/) >= 3.10
+- [`Fire`](https://github.com/google/python-fire) >= 0.7
+- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1 (baseline comparison)

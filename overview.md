@@ -1,6 +1,4 @@
-# RANv4 — Advisor Meeting Reference
-
-*2026-05-27*
+# RANv4 Overview
 
 ---
 
@@ -18,22 +16,24 @@ The difficulty: we never measure `z_true` for real data events. We only have MC 
 
 ### Variables
 
-| Symbol | Meaning | Who sees it |
-|--------|---------|-------------|
-| `z_gen` | MC particle-level (nominal truth) | Generator input |
-| `x_sim` | MC reco-level | Discriminator input |
-| `z_true` | Data particle-level (unknown in practice) | **Nobody** |
-| `x_data` | Data reco-level (observed) | Discriminator input |
+| Symbol   | Meaning                                   | Who sees it         |
+| -------- | ----------------------------------------- | ------------------- |
+| `z_gen`  | MC particle-level (nominal truth)         | Generator input     |
+| `x_sim`  | MC reco-level                             | Discriminator input |
+| `z_true` | Data particle-level (unknown in practice) | **Nobody**          |
+| `x_data` | Data reco-level (observed)                | Discriminator input |
 
 ### The two networks
 
 **Generator `g(z)`** — particle-level network
+
 - Input: `z_gen` (MC nominal-level events)
 - Output: per-event scalar weights `w = g(z_gen)` via **softplus** (ensures w > 0)
 - Weights normalized so `Σ w_MC = N_MC` (preserves total count per class)
 - Data events: weight fixed to 1
 
 **Discriminator `d(x)`** — reco-level network
+
 - Input: `x` (reco-level events, both data and reweighted sim)
 - Output: probability in [0,1] via sigmoid
 - Trained to distinguish data (y=1) from reweighted sim (y=0)
@@ -47,6 +47,7 @@ L = -mean[ w_i * y_i * log(d(x_i)) + w_i * (1-y_i) * log(1 - d(x_i)) ]
 ```
 
 **Min-max game:**
+
 - `d` minimizes L (correctly distinguish data vs. reweighted sim)
 - `g` maximizes L (generate weights that fool `d` — make sim look like data)
 
@@ -74,16 +75,18 @@ To prove empirically that `g` never sees `z_true`, the script runs two full trai
 
 **POISONED run:** `z_true[:] = -999.0` — every data particle-level value overwritten with a nonsense sentinel. If `g` had any access to `z_true`, the poisoned run would train differently (it can't learn from corrupted input).
 
-The reco-level `x_data` is generated *before* poisoning, so the data that the discriminator actually sees is unchanged. The poison only corrupts the `z` slot for data events in the dataset.
+The reco-level `x_data` is generated _before_ poisoning, so the data that the discriminator actually sees is unchanged. The poison only corrupts the `z` slot for data events in the dataset.
 
 **Expected result:** both runs should produce statistically identical Wasserstein and triangular discriminator improvements. The generator only computes weights from `z_gen` (MC events, y=0), so the -999 values for data events are never passed through it. If the poisoned run degrades significantly, it indicates a leakage path.
 
 **What it checks:**
+
 - Discriminator cannot use `z_true` (it only gets `x`)
 - Generator only consumes `z_gen` (enforced by the `y==0` mask in the training loop)
 - The `z` field for data events is structurally present in the dataset but architecturally dead
 
 **To run:**
+
 ```bash
 uv run python scripts/leakage_check.py --poison=False   # clean baseline
 uv run python scripts/leakage_check.py --poison=True    # poisoned — should match
@@ -94,9 +97,11 @@ uv run python scripts/leakage_check.py --poison=True    # poisoned — should ma
 ## 4. Network Architecture (`ran/models.py`)
 
 Both networks share the same MLP structure:
+
 ```
 Input (dim,) → [Dense(64, relu)] × n_layers → Dense(1, activation)
 ```
+
 - Generator output: **softplus** → w > 0 always
 - Discriminator output: **sigmoid** → probability in (0, 1)
 - Default: 64 hidden units, 2 layers, float64 throughout (physics requires precision)
@@ -108,19 +113,23 @@ Hyperparameters exposed at CLI: `--hidden_units`, `--n_layers`.
 ## 5. Training Loop (`ran/train.py`)
 
 ### Weight normalization (`_compute_weights`)
+
 ```
 w_MC = g(z_gen) * N_MC / sum(g(z_gen))   (MC events)
 w_data = 1                                (data events)
 ```
+
 The `tf.stop_gradient` on weights during the disc step is important: the discriminator should not backpropagate through the generator when updating its own parameters.
 
 ### Alternating update schedule
+
 - Every batch: one discriminator step
 - Every `n_disc_steps` batches (default 5): one generator step
 
 This is standard GAN practice — the discriminator needs to be slightly "ahead" of the generator to provide a useful gradient signal.
 
 ### Early stopping
+
 - Monitor **validation discriminator loss** — higher is better (approaching `log(2)`)
 - Patience: 5 epochs with improvement < 1e-4
 - Best weights are checkpointed and restored on stop
@@ -132,11 +141,13 @@ This is standard GAN practice — the discriminator needs to be slightly "ahead"
 ### Gaussian toy datasets (`datasets.py`, `config.py`)
 
 Controlled test where the true answer is known analytically. Each YAML in `params/` defines:
+
 - `mu_gen`, `mu_true`: means of the MC and true distributions
 - `sigma_gen`, `sigma_true`: spread (scalar → σ²I, vector → diagonal, matrix → full covariance)
 - `sigma_detector`: detector smearing (same promotion logic)
 
 Data generation:
+
 ```
 z_true ~ N(mu_true, cov_true)       # data particle-level
 x_data = z_true + ε, ε ~ N(0, cov_detector)   # data reco
@@ -147,24 +158,25 @@ x_sim = z_gen + ε', ε' ~ N(0, cov_detector)   # MC reco
 
 Covariance validation: every sigma input is Cholesky-decomposed to verify positive-definiteness before use.
 
-**Caching:** datasets are hashed by their full parameter set + n_samples + seed and stored in `.cache/gaussian_<hash16>.npz`. Reruns with identical config are instant.
+**Caching:** datasets are hashed by their full parameter set + n*samples + seed and stored in `.cache/gaussian*<hash16>.npz`. Reruns with identical config are instant.
 
 ### Jet substructure dataset (`jets.py`)
 
 Real W-boson jet data from Zenodo (6 variables). Variables:
 
-| Key | Observable | Physical meaning |
-|-----|-----------|-----------------|
-| `m` | Jet mass (GeV) | Leading mass scale |
-| `M` | Constituent multiplicity | Track count |
-| `w` | Jet width | Radial spread of energy |
-| `tau21` | N-subjettiness ratio τ₂₁ | 2-prong vs 1-prong substructure |
-| `zg` | Groomed momentum fraction | Soft-drop leading splitting |
-| `sdm` | Soft-drop jet mass (ln ρ) | Groomed mass in log scale |
+| Key     | Observable                | Physical meaning                |
+| ------- | ------------------------- | ------------------------------- |
+| `m`     | Jet mass (GeV)            | Leading mass scale              |
+| `M`     | Constituent multiplicity  | Track count                     |
+| `w`     | Jet width                 | Radial spread of energy         |
+| `tau21` | N-subjettiness ratio τ₂₁  | 2-prong vs 1-prong substructure |
+| `zg`    | Groomed momentum fraction | Soft-drop leading splitting     |
+| `sdm`   | Soft-drop jet mass (ln ρ) | Groomed mass in log scale       |
 
 **Standardization:** z-score using MC generator-level (`z_gen`) statistics only. The same (μ, σ) is applied to all four arrays (`z_true`, `x_data`, `z_gen`, `x_sim`) to avoid leakage and preserve correlations. The parameters are saved per-run for inverse-transforming plots.
 
 ### Dataset splits
+
 - 70% train / 10% val / 20% test (configurable)
 - Train: reshuffled each epoch
 - Val/test: fixed, not reshuffled
@@ -174,22 +186,24 @@ Real W-boson jet data from Zenodo (6 variables). Variables:
 ## 7. Config Formats (`params/`)
 
 **1D uncorrelated:**
+
 ```yaml
 mu_gen: [0.5]
 mu_true: [0.0]
-sigma_gen: 0.9       # scalar → 0.81 * I₁
+sigma_gen: 0.9 # scalar → 0.81 * I₁
 sigma_true: 1.0
 sigma_detector: 0.5
 ```
 
 **2D correlated:**
+
 ```yaml
 mu_gen: [0.0, 1.0]
 mu_true: [0.2, 0.8]
-sigma_gen:           # full 2×2 matrix
+sigma_gen: # full 2×2 matrix
   - [1.0, -0.9]
   - [-0.9, 2.25]
-sigma_detector: [0.5, 0.8]   # vector → diagonal
+sigma_detector: [0.5, 0.8] # vector → diagonal
 ```
 
 The sigma promotion (`sigma_to_covariance`) unifies all three input forms into a proper covariance matrix, validated via Cholesky.
@@ -200,11 +214,11 @@ The sigma promotion (`sigma_to_covariance`) unifies all three input forms into a
 
 Three distributional distance metrics, computed **before and after reweighting**, at both detector and particle levels:
 
-| Metric | Formula | Sensitivity |
-|--------|---------|------------|
-| **Wasserstein-1** | Earth-mover distance (sorted CDF, O(n log n)) | Magnitude of shift |
-| **Jensen-Shannon divergence** | (JS distance)² via histograms | Shape differences |
-| **Triangular discriminator** (Δ) | Σ (p-q)²/(p+q) × 10³ | Bin-by-bin shape, scaled |
+| Metric                           | Formula                                       | Sensitivity              |
+| -------------------------------- | --------------------------------------------- | ------------------------ |
+| **Wasserstein-1**                | Earth-mover distance (sorted CDF, O(n log n)) | Magnitude of shift       |
+| **Jensen-Shannon divergence**    | (JS distance)² via histograms                 | Shape differences        |
+| **Triangular discriminator** (Δ) | Σ (p-q)²/(p+q) × 10³                          | Bin-by-bin shape, scaled |
 
 All computed per-dimension (1D marginals). Improvement reported as percent reduction from baseline.
 
@@ -215,6 +229,7 @@ All computed per-dimension (1D marginals). Improvement reported as percent reduc
 ### OmniFold (`ran/baselines/omnifold.py`)
 
 The standard ML unfolding method. Trains two networks iteratively:
+
 1. Step 1: reweight data vs. sim at reco level → weights on sim
 2. Step 2: reweight pushed-back MC at particle level
 
@@ -225,6 +240,7 @@ Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs e
 ### IBU (`ran/baselines/ibu.py`)
 
 Classic frequentist unfolding. 1D per-variable:
+
 1. Build response matrix R[t,r] = P(reco=r | truth=t) from MC
 2. Apply Bayes iteratively: P(t|r) = R[t,r]·P(t) / Σ R[t',r]·P(t')
 3. Convert unfolded histogram → per-event weights for comparison
@@ -283,7 +299,7 @@ uv run -m ran --load_run=runs/...                     → reload + re-plot with 
 
 ---
 
-## 13. Likely Advisor Questions
+## 13. FAQ
 
 **Q: How do you know the weights learned at reco level give the correct particle-level unfolding?**
 The generator weights are a function of `z_gen` (particle-level). When `g` fools `d`, the reweighted reco distribution matches data. Because the detector smearing is applied on top of the particle-level variable, the weight function on particle space is self-consistent at both levels — it's the same weight for each MC event, applied wherever that event appears.
@@ -326,14 +342,14 @@ Runs are organized into five experimental families. Each family demonstrates a d
 
 **Setup:** `mu_gen = [0.5]*d`, `mu_true = [0]*d`, `sigma_gen = 0.9` (scalar → σ²I), `sigma_det = 0.5`. n=500k.
 
-| Run | dim | WD improvement (particle level, all dims) |
-|-----|-----|------------------------------------------|
-| `2026-03-14T051912Z` | 1 | 90.3% |
-| `2026-03-14T044110Z` | 2 | 95.7%, 94.8% |
-| `2026-03-14T044210Z` | 3 | 93.0%, 95.3%, 96.8% |
-| `2026-03-14T044109Z` | 4 | 96.3%, 97.3%, 96.3%, 94.6% |
-| `2026-03-14T060656Z` | 5 | 97.4%, 92.2%, 96.4%, 96.8%, 95.8% |
-| `2026-03-14T061333Z` | 6 | 96.2%, 97.5%, 95.8%, 94.6%, 84.5%, 88.4% |
+| Run                  | dim | WD improvement (particle level, all dims) |
+| -------------------- | --- | ----------------------------------------- |
+| `2026-03-14T051912Z` | 1   | 90.3%                                     |
+| `2026-03-14T044110Z` | 2   | 95.7%, 94.8%                              |
+| `2026-03-14T044210Z` | 3   | 93.0%, 95.3%, 96.8%                       |
+| `2026-03-14T044109Z` | 4   | 96.3%, 97.3%, 96.3%, 94.6%                |
+| `2026-03-14T060656Z` | 5   | 97.4%, 92.2%, 96.4%, 96.8%, 95.8%         |
+| `2026-03-14T061333Z` | 6   | 96.2%, 97.5%, 95.8%, 94.6%, 84.5%, 88.4%  |
 
 **Takeaway:** performance stays consistently above ~85% across all dimensions with uncorrelated structure. All runs have full baseline overlays (OmniFold + IBU).
 
@@ -345,12 +361,12 @@ Runs are organized into five experimental families. Each family demonstrates a d
 
 **Setup:** same Gaussian structure as Family 1, sigma_det=0.25 (tighter smearing).
 
-| Run | dim | WD improvement (particle level) |
-|-----|-----|----------------------------------|
-| `2026-03-16T064923Z` | 1 | **−2.1%** (weights add noise) |
-| `2026-03-16T064938Z` | 2 | 18.9%, 22.0% (correlated) |
+| Run                  | dim | WD improvement (particle level) |
+| -------------------- | --- | ------------------------------- |
+| `2026-03-16T064923Z` | 1   | **−2.1%** (weights add noise)   |
+| `2026-03-16T064938Z` | 2   | 18.9%, 22.0% (correlated)       |
 
-**Takeaway:** at 10k the 1D run actually makes the distribution *worse* — the generator doesn't have enough signal to learn a useful weight function and introduces variance. The 2D correlated run manages ~20% improvement but far below the 500k equivalent. These runs have no baselines — they predated the baseline infrastructure.
+**Takeaway:** at 10k the 1D run actually makes the distribution _worse_ — the generator doesn't have enough signal to learn a useful weight function and introduces variance. The 2D correlated run manages ~20% improvement but far below the 500k equivalent. These runs have no baselines — they predated the baseline infrastructure.
 
 **Key talking point:** this motivates the 500k default. The threshold between "learning signal" and "noise amplification" is somewhere between 10k and 500k events for this problem.
 
@@ -363,16 +379,19 @@ Runs are organized into five experimental families. Each family demonstrates a d
 **Setup:** mu and covariance differ between gen and true; sigma_det is diagonal. n=500k.
 
 **2D correlated** (`2026-03-17T181937Z` / `2026-03-18T235803Z`):
+
 - sigma_gen has off-diagonal = −0.9 (strong negative correlation)
 - sigma_true has off-diagonal = −0.702
 - Particle-level WD: 94.6%, 89.1%
 
 **4D correlated** (`2026-03-19T000651Z`):
+
 - Full 4×4 covariance for both gen and true
 - Particle-level WD: 86.2%, 86.3%, **59.1%**, 96.1%
 - dim_2 is the hardest — the covariance structure creates a subspace that's difficult to reweight
 
 **6D correlated** (`2026-03-19T001535Z`):
+
 - Full 6×6 covariance; most complex Gaussian test
 - Particle-level WD: 87.6%, 88.6%, 89.4%, 95.8%, 86.5%, 89.6%
 - More uniform than 4D — the 6D covariance structure happens to be better conditioned
@@ -385,10 +404,10 @@ Runs are organized into five experimental families. Each family demonstrates a d
 
 **What it shows:** the first step from Gaussian toy to real physics — training on a single jet substructure variable (mass, `m`) downloaded from Zenodo. Real data means no analytic ground truth; closure is assessed visually.
 
-| Run | var | WD detector | WD particle |
-|-----|-----|-------------|-------------|
-| `2026-03-14T061023Z` | m | 88.5% | 82.8% |
-| `2026-03-14T061506Z` | m | (duplicate run) | |
+| Run                  | var | WD detector     | WD particle |
+| -------------------- | --- | --------------- | ----------- |
+| `2026-03-14T061023Z` | m   | 88.5%           | 82.8%       |
+| `2026-03-14T061506Z` | m   | (duplicate run) |             |
 
 **Takeaway:** the algorithm transfers to real jet data immediately without code changes. Single-variable case also lets IBU compete directly (it's 1D), establishing a fair baseline.
 
@@ -400,18 +419,19 @@ Runs are organized into five experimental families. Each family demonstrates a d
 
 **Best run** (`2026-03-20T155247Z`, full baselines):
 
-| Variable | WD detector | WD particle | Note |
-|----------|-------------|-------------|------|
-| m (mass) | 94.9% | **16.8%** | Particle level hardest |
-| M (multiplicity) | 94.3% | 84.7% | |
-| w (width) | 98.2% | 97.3% | Best overall |
-| τ₂₁ | 95.5% | 75.9% | |
-| z_g | 83.2% | 84.4% | Lowest detector |
-| ln ρ (sdm) | 95.0% | 95.2% | |
+| Variable         | WD detector | WD particle | Note                   |
+| ---------------- | ----------- | ----------- | ---------------------- |
+| m (mass)         | 94.9%       | **16.8%**   | Particle level hardest |
+| M (multiplicity) | 94.3%       | 84.7%       |                        |
+| w (width)        | 98.2%       | 97.3%       | Best overall           |
+| τ₂₁              | 95.5%       | 75.9%       |                        |
+| z_g              | 83.2%       | 84.4%       | Lowest detector        |
+| ln ρ (sdm)       | 95.0%       | 95.2%       |                        |
 
 **Notable pattern:** detector-level improvements are uniformly high (83–98%) across all variables, but particle-level is much more variable (17–97%). Jet mass (`m`) is the striking outlier: 94.9% at detector but only 16.8% at particle level. This is physically meaningful — the detector smearing for mass is large relative to the gen/true difference, so the reweighted reco distribution matches data easily, but the particle-level correction is subtle and the generator's signal is weaker.
 
 Earlier jets runs:
+
 - `2026-03-17T181755Z` — missing `metrics.json` (evaluation crashed, baselines still present)
 - `2026-03-19T172653Z` — same
 - `2026-03-19T202353Z` — has metrics but missing `omnifold_weights.npz`

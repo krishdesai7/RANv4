@@ -31,7 +31,7 @@ In equilibrium, both losses converge to $\log(2)$ and the reweighted MC matches 
 
 ## Installation
 
-Requires **Python >= 3.13**. Uses [`UV-Astral`](https://docs.astral.sh/uv/) for dependency management.
+Uses [`UV-Astral`](https://docs.astral.sh/uv/) for dependency management. One way to install `uv` is with `pip install uv`. For alternative installation methods, see the [UV documentation](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```bash
 git clone <repo-url> && cd RANv4

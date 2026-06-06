@@ -10,6 +10,13 @@
 
 ---
 
+## Implementation deviations (as built)
+
+- **No local model training in tests.** The default `uv run pytest` must never train RAN or OmniFold — that is cluster work. Task 4's smoke test was replaced with a fast **stubbed** wiring test (`monkeypatch` fakes `train` and `omnifold_unfold`). Task 2's real-OmniFold smoke test is gated behind `RAN_RUN_SLOW=1` (skipped by default). Task 7's "real mini sweep" was replaced by running the stubbed suite plus a real `collect` CLI exercise over stub JSONs (no training).
+- **`run_point` gained an OmniFold hang-guard.** OmniFold computes `validation_steps = (0.2 * NTRAIN) // batch_size`; at small N this floors to 0 and `model.fit` hangs forever. `run_point` caps the OmniFold batch size (`of_batch = max(1, min(omnifold_batch_size, 2*n_samples//5))`) so there is always ≥1 validation step. No-op at the real n=500k scale. Added param: `omnifold_batch_size=512`.
+
+---
+
 ## File Structure
 
 - **Create** `ran/experiments/__init__.py` — empty package marker.
@@ -26,6 +33,7 @@
 ## Task 1: `splits_from_arrays` on RAN_Dataset
 
 **Files:**
+
 - Modify: `ran/data/datasets.py` (add method after `generate_gaussian_dataset`)
 - Test: `tests/test_datasets.py`
 
@@ -96,6 +104,7 @@ git commit -m "feat: add RAN_Dataset.splits_from_arrays for in-memory datasets"
 ## Task 2: Extract `omnifold_unfold` from the baseline
 
 **Files:**
+
 - Modify: `ran/baselines/omnifold.py` (add function; refactor `_run_and_evaluate` to call it)
 - Test: `tests/test_omnifold.py`
 
@@ -250,6 +259,7 @@ git commit -m "refactor: extract omnifold_unfold for in-memory array unfolding"
 ## Task 3: Pure helpers in `cubic_sweep.py` (`response`, `make_particles`, `unfolded_wasserstein`)
 
 **Files:**
+
 - Create: `ran/experiments/__init__.py`
 - Create: `ran/experiments/cubic_sweep.py`
 - Test: `tests/test_cubic_sweep.py`
@@ -259,6 +269,7 @@ git commit -m "refactor: extract omnifold_unfold for in-memory array unfolding"
 Create `ran/experiments/__init__.py` with empty content:
 
 ```python
+
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -388,6 +399,7 @@ git commit -m "feat: add cubic_sweep helpers (response, make_particles, unfolded
 ## Task 4: `run_point` — train RAN + OmniFold for one s
 
 **Files:**
+
 - Modify: `ran/experiments/cubic_sweep.py` (add imports + `run_point`)
 - Test: `tests/test_cubic_sweep.py`
 
@@ -514,6 +526,7 @@ git commit -m "feat: add run_point to train RAN + OmniFold per sweep point"
 ## Task 5: `collect` — concatenate results and plot
 
 **Files:**
+
 - Modify: `ran/experiments/cubic_sweep.py` (add `collect` + fire CLI)
 - Test: `tests/test_cubic_sweep.py`
 
@@ -620,6 +633,7 @@ git commit -m "feat: add collect step (results.npz + Wasserstein-vs-s plot) and 
 ## Task 6: SLURM launcher `scripts/submit_sweep.sh`
 
 **Files:**
+
 - Create: `scripts/submit_sweep.sh`
 
 - [ ] **Step 1: Write the launcher script**
@@ -682,11 +696,13 @@ Expected: all tests pass, including `test_datasets.py`, `test_omnifold.py`, `tes
 - [ ] **Step 2: End-to-end mini sweep (2 points, tiny N) on CPU**
 
 Run:
+
 ```bash
 uv run -m ran.experiments.cubic_sweep run_point --s_index=0 --sweep_dir=/tmp/sweep_smoke --n_samples=800 --n_points=2 --ran_epochs=2 --omnifold_niter=1 --omnifold_epochs=2
 uv run -m ran.experiments.cubic_sweep run_point --s_index=1 --sweep_dir=/tmp/sweep_smoke --n_samples=800 --n_points=2 --ran_epochs=2 --omnifold_niter=1 --omnifold_epochs=2
 uv run -m ran.experiments.cubic_sweep collect --sweep_dir=/tmp/sweep_smoke --n_points=2
 ```
+
 Expected: two `s_0*.json` files, then `results.npz` + `wasserstein_vs_s.pdf` in `/tmp/sweep_smoke`, and a "Wrote ... (2 points)" line with no missing-index warning.
 
 - [ ] **Step 3: Clean up the smoke artifacts**

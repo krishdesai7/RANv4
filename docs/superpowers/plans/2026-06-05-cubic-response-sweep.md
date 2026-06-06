@@ -10,6 +10,13 @@
 
 ---
 
+## Implementation deviations (as built)
+
+- **No local model training in tests.** The default `uv run pytest` must never train RAN or OmniFold — that is cluster work. Task 4's smoke test was replaced with a fast **stubbed** wiring test (`monkeypatch` fakes `train` and `omnifold_unfold`). Task 2's real-OmniFold smoke test is gated behind `RAN_RUN_SLOW=1` (skipped by default). Task 7's "real mini sweep" was replaced by running the stubbed suite plus a real `collect` CLI exercise over stub JSONs (no training).
+- **`run_point` gained an OmniFold hang-guard.** OmniFold computes `validation_steps = (0.2 * NTRAIN) // batch_size`; at small N this floors to 0 and `model.fit` hangs forever. `run_point` caps the OmniFold batch size (`of_batch = max(1, min(omnifold_batch_size, 2*n_samples//5))`) so there is always ≥1 validation step. No-op at the real n=500k scale. Added param: `omnifold_batch_size=512`.
+
+---
+
 ## File Structure
 
 - **Create** `ran/experiments/__init__.py` — empty package marker.

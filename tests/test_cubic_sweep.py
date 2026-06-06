@@ -36,3 +36,46 @@ def test_unfolded_wasserstein_uniform_weights_equals_unweighted():
     got = unfolded_wasserstein(z_truth, z_gen, w)
     expected = wasserstein_distance(z_truth, z_gen)
     np.testing.assert_allclose(got, expected, rtol=1e-12)
+
+
+class _FakeTensor:
+    """Minimal stand-in for a Keras tensor: only needs .numpy()."""
+
+    def __init__(self, arr):
+        self._arr = arr
+
+    def numpy(self):
+        return self._arr
+
+
+def test_run_point_wiring_with_stubbed_training(tmp_path, monkeypatch):
+    """Verify run_point's orchestration WITHOUT training any models.
+
+    Real RAN/OmniFold training is cluster work; here we stub train() and
+    omnifold_unfold() with instant fakes and only check that run_point draws
+    the right s, normalizes weights, computes both metrics, and writes the JSON.
+    """
+    import ran.experiments.cubic_sweep as cs
+
+    def fake_train(splits, dim=1, n_epochs=100):
+        # Generator returns uniform raw weights for any z (shape (n, 1)).
+        def g(z):
+            return _FakeTensor(np.ones((len(z), 1)))
+
+        return g, None, None
+
+    def fake_omnifold(x_data, x_sim, z_gen, niter=3, epochs=50, batch_size=512):
+        return np.ones(len(z_gen))
+
+    monkeypatch.setattr(cs, "train", fake_train)
+    monkeypatch.setattr(cs, "omnifold_unfold", fake_omnifold)
+
+    out = cs.run_point(s_index=3, sweep_dir=tmp_path, n_samples=2000, n_points=25, seed=0)
+
+    assert out["s_index"] == 3
+    assert out["s"] == float(np.linspace(0.0, 20.0, 25)[3])
+    assert np.isfinite(out["ran_wd"])
+    assert np.isfinite(out["omnifold_wd"])
+
+    written = json.loads((tmp_path / "s_03.json").read_text())
+    assert written == out

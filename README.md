@@ -1,4 +1,4 @@
-# RANv4 -- Reweighting Algorithm Network
+# RANv4 -- Reweighting Adversarial Networks
 
 An adversarial neural network that learns per-event weights to correct simulated (Monte Carlo) distributions so they match observed data. Built with TensorFlow/Keras.
 

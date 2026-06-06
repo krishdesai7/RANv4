@@ -1,30 +1,76 @@
 #!/bin/bash
-# Launch the cubic-response RAN-vs-OmniFold sweep as a SLURM array job.
+# Launch the cubic-response RAN-vs-OmniFold sweep as ONE packed multi-node job.
 # Run on the login node:  bash scripts/submit_sweep.sh
-# (Do NOT sbatch this file itself; it submits the array + collect jobs.)
+# (Do NOT sbatch this file itself; it computes the sweep dir and submits the job.)
+#
+# Why packed instead of an array of 25 single-node jobs: on Perlmutter the queue
+# wait for a 2-hour 1-node job can be ~1 day, while 4-7 node jobs slide into a
+# ~2-hour wait window. We grab a few nodes at once (4 A100 GPUs per node) and run
+# the sweep points concurrently, one GPU per point, via a bash background loop +
+# srun step placement. collect runs inline at the end of the same job.
 set -euo pipefail
 
 PROJECT_DIR=/global/u1/k/kdesai/RANv4
-N_POINTS=25
+N_POINTS=24
+
+# NODES=6 -> 24 GPUs == 24 points -> every point runs at once, one GPU each
+# (single wave, no risk of a 2nd wave overrunning the wall clock). Lower NODES to
+# use fewer GPUs at the cost of extra waves; all sit in the same Perlmutter queue
+# window. Keep GPUS_TOTAL >= N_POINTS for the clean one-point-per-GPU mapping.
+NODES=6
+GPUS_PER_NODE=4
+GPUS_TOTAL=$((NODES * GPUS_PER_NODE))
+
 SWEEP_DIR="${PROJECT_DIR}/runs/cubic_sweep_$(date -u +%Y-%m-%dT%H%M%SZ)"
 mkdir -p "${SWEEP_DIR}"
 echo "Sweep dir: ${SWEEP_DIR}"
+echo "Requesting ${NODES} nodes (${GPUS_TOTAL} GPUs) for ${N_POINTS} points"
 
-# One array task per s value (indices 0..N_POINTS-1). Each trains RAN + OmniFold
-# at its s and writes s_<index>.json into the shared sweep dir.
-ARRAY_JOB=$(sbatch --parsable \
-  --qos=regular --constraint=gpu --gpus=1 --account=m3246_g --time=02:00:00 \
-  --array=0-$((N_POINTS - 1)) \
-  --output="${SWEEP_DIR}/slurm-%A_%a.log" \
-  --wrap="cd ${PROJECT_DIR} && uv run -m ran.experiments.cubic_sweep run_point --s_index=\${SLURM_ARRAY_TASK_ID} --sweep_dir=${SWEEP_DIR} --n_points=${N_POINTS}")
-echo "Array job: ${ARRAY_JOB}"
+# Submit a single batch job. The heredoc is the batch script; it is quoted
+# ('EOF') so $i / $SWEEP_DIR / $(...) are evaluated at job runtime, not now.
+# SWEEP_DIR, N_POINTS, GPUS_TOTAL reach the job via --export. --output lives on
+# the command line because SLURM does not expand shell vars in #SBATCH lines.
+JOB=$(sbatch --parsable \
+  --qos=regular --constraint=gpu --account=m3246_g --time=02:00:00 \
+  --nodes="${NODES}" --gpus-per-node="${GPUS_PER_NODE}" \
+  --job-name=cubic_sweep \
+  --output="${SWEEP_DIR}/slurm-%j.log" \
+  --export="ALL,SWEEP_DIR=${SWEEP_DIR},N_POINTS=${N_POINTS},GPUS_TOTAL=${GPUS_TOTAL},PROJECT_DIR=${PROJECT_DIR}" \
+  <<'EOF'
+#!/bin/bash
+set -euo pipefail
+cd "${PROJECT_DIR}"
 
-# Collect after all array elements finish (afterany: run even if some failed,
-# so a single bad point doesn't sink the whole figure).
-COLLECT_JOB=$(sbatch --parsable \
-  --qos=regular --constraint=gpu --gpus=1 --account=m3246_g --time=00:20:00 \
-  --dependency=afterany:"${ARRAY_JOB}" \
-  --output="${SWEEP_DIR}/slurm-collect-%j.log" \
-  --wrap="cd ${PROJECT_DIR} && uv run -m ran.experiments.cubic_sweep collect --sweep_dir=${SWEEP_DIR} --n_points=${N_POINTS}")
-echo "Collect job: ${COLLECT_JOB} (afterany:${ARRAY_JOB})"
-echo "Results will land in ${SWEEP_DIR}/ (results.npz, wasserstein_vs_s.pdf)"
+# Each point is one srun step pinned to a single GPU. --exact lets multiple steps
+# share the allocation simultaneously (without it the first step grabs whole
+# nodes and the rest block). --gpus-per-task=1 sets CUDA_VISIBLE_DEVICES per step
+# so TensorFlow in each point sees exactly one GPU. ~16 cores / 56G per A100.
+step="srun --exact --nodes=1 --ntasks=1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56G"
+
+for i in $(seq 0 $((N_POINTS - 1))); do
+  # Fan out one point per GPU; capture its log so a crash in one point is easy to
+  # find and never sinks the others (collect tolerates missing s_*.json files).
+  $step uv run -m ran.experiments.cubic_sweep run_point \
+      --s_index="${i}" --sweep_dir="${SWEEP_DIR}" --n_points="${N_POINTS}" \
+      > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
+
+  # Throttle to GPUS_TOTAL concurrent steps; start the next as soon as one frees
+  # a GPU (dynamic, so an uneven 25-over-16 split wastes no idle GPU time).
+  # `|| true`: a point that crashes must not abort the sweep under set -e — it
+  # just leaves its s_*.json missing, and collect tolerates the gap.
+  while (( $(jobs -rp | wc -l) >= GPUS_TOTAL )); do
+    wait -n || true
+  done
+  sleep 0.5  # small stagger to avoid "srun: Job step creation temporarily disabled"
+done
+wait || true  # let the final wave of points finish (ignore individual failures)
+
+# Gather all s_*.json into results.npz + wasserstein_vs_s.pdf (runs on the head
+# node of the allocation; afterany-style resilience is built into collect).
+uv run -m ran.experiments.cubic_sweep collect --sweep_dir="${SWEEP_DIR}" --n_points="${N_POINTS}"
+EOF
+)
+
+echo "Submitted packed job: ${JOB}"
+echo "Logs:    ${SWEEP_DIR}/slurm-${JOB}.log  (+ per-point point_NN.log)"
+echo "Results: ${SWEEP_DIR}/results.npz and ${SWEEP_DIR}/wasserstein_vs_s.pdf"

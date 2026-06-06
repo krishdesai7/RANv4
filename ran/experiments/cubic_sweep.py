@@ -123,3 +123,48 @@ def run_point(
     (sweep_dir / f"s_{s_index:02d}.json").write_text(json.dumps(out, indent=2))
     print(f"s={s:.4f}  RAN={ran_wd:.6f}  OmniFold={of_wd:.6f}")
     return out
+
+
+def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
+    """Gather all s_*.json into results.npz and a Wasserstein-vs-s PDF."""
+    sweep_dir = Path(sweep_dir)
+    records = [
+        json.loads(f.read_text()) for f in sorted(sweep_dir.glob("s_*.json"))
+    ]
+    if not records:
+        raise FileNotFoundError(f"No s_*.json files found in {sweep_dir}")
+    records.sort(key=lambda r: r["s"])
+
+    present = {r["s_index"] for r in records}
+    missing = sorted(set(range(n_points)) - present)
+    if missing:
+        print(f"WARNING: missing s_index values (failed/incomplete tasks): {missing}")
+
+    s = np.array([r["s"] for r in records])
+    ran = np.array([r["ran_wd"] for r in records])
+    omnifold = np.array([r["omnifold_wd"] for r in records])
+    np.savez(sweep_dir / "results.npz", s=s, ran=ran, omnifold=omnifold)
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(s, ran, "o-", label="RAN")
+    ax.plot(s, omnifold, "s-", label="OmniFold")
+    ax.set_xlabel(r"$s$ (cubic distortion strength)")
+    ax.set_ylabel(r"Wasserstein($z_\mathrm{truth}$, $z_\mathrm{unfolded}$)")
+    ax.set_title("Unfolding performance vs detector distortion")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(sweep_dir / "wasserstein_vs_s.pdf")
+    plt.close(fig)
+    print(
+        f"Wrote {sweep_dir / 'results.npz'} and "
+        f"{sweep_dir / 'wasserstein_vs_s.pdf'} ({len(records)} points)"
+    )
+
+
+if __name__ == "__main__":
+    fire.Fire({"run_point": run_point, "collect": collect})

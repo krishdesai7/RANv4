@@ -79,3 +79,21 @@ def test_run_point_wiring_with_stubbed_training(tmp_path, monkeypatch):
 
     written = json.loads((tmp_path / "s_03.json").read_text())
     assert written == out
+
+
+def test_collect_writes_results_and_plot(tmp_path):
+    from ran.experiments.cubic_sweep import collect
+
+    for i, s in enumerate([0.0, 10.0]):
+        rec = {"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1), "omnifold_wd": 0.2 * (i + 1)}
+        (tmp_path / f"s_{i:02d}.json").write_text(json.dumps(rec))
+
+    collect(sweep_dir=tmp_path, n_points=2)
+
+    assert (tmp_path / "results.npz").exists()
+    assert (tmp_path / "wasserstein_vs_s.pdf").exists()
+
+    data = np.load(tmp_path / "results.npz")
+    np.testing.assert_array_equal(data["s"], [0.0, 10.0])
+    np.testing.assert_allclose(data["ran"], [0.1, 0.2])
+    np.testing.assert_allclose(data["omnifold"], [0.2, 0.4])

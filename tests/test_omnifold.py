@@ -1,5 +1,15 @@
+import os
+
 import numpy as np
 import pytest
+
+# This test trains a real (tiny) OmniFold model. Local/dev runs and CI should
+# NOT train models — that is cluster work — so it is opt-in. Enable with:
+#   RAN_RUN_SLOW=1 uv run pytest tests/test_omnifold.py
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RAN_RUN_SLOW") != "1",
+    reason="trains a real OmniFold model; set RAN_RUN_SLOW=1 to run",
+)
 
 
 def test_omnifold_unfold_returns_mean_normalized_weights():

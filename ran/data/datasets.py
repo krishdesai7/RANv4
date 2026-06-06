@@ -225,3 +225,18 @@ class RAN_Dataset():
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)
         return self.splits
+
+    def splits_from_arrays(
+        self,
+        z: npt.NDArray[np.double],
+        x: npt.NDArray[np.double],
+        y: npt.NDArray[np.ubyte],
+    ) -> DatasetSplits:
+        """Build train/val/test splits directly from in-memory (z, x, y) arrays.
+
+        z (particle level) and x (detector level) must have matching first
+        dimension; y is the per-event class label (1 = data, 0 = MC).
+        """
+        self.dataset = self._build_dataset(z, x, y)
+        self.splits = self._split_dataset(self.dataset)
+        return self.splits

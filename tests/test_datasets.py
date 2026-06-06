@@ -144,3 +144,18 @@ class TestGenerateGaussianDataset:
 
         cache_files_after_params = set(cache_dir.glob("gaussian_*.npz"))
         assert cache_files_after_params == cache_files_after_yaml
+
+
+def test_splits_from_arrays_builds_three_nonempty_splits():
+    n = 200
+    z = np.random.default_rng(0).normal(size=(2 * n, 1))
+    x = np.random.default_rng(1).normal(size=(2 * n, 1))
+    y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+
+    splits = RAN_Dataset(batch_size=32).splits_from_arrays(z, x, y)
+
+    for ds in (splits.train, splits.val, splits.test):
+        features, labels = next(iter(ds))
+        assert set(features.keys()) == {"z", "x"}
+        assert features["z"].shape[-1] == 1
+        assert labels.shape[0] > 0

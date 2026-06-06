@@ -1,4 +1,4 @@
-# RANv4 -- Reweighting Adversarial Networks
+# RANv4: Reweighting Adversarial Networks
 
 An adversarial neural network that learns per-event weights to correct simulated (Monte Carlo) distributions so they match observed data. Built with TensorFlow/Keras.
 
@@ -12,15 +12,15 @@ RANv4 replaces this with a learned reweighting: a **generator** network predicts
 
 The system is a two-player adversarial game over event weights:
 
-| Component                | Input                      | Output                                        | Role                                        |
-| ------------------------ | -------------------------- | --------------------------------------------- | ------------------------------------------- |
-| **Generator** $g(z)$     | Particle-level feature $z$ | Per-event weight (`logplus` = $\log(1+\exp)$) | Predict weights that make MC look like data |
-| **Discriminator** $d(x)$ | Detector-level feature $x$ | Data vs MC probability (`sigmoid`)            | Distinguish real data from reweighted MC    |
+| Component                | Input                      | Output                                         | Role                                        |
+| ------------------------ | -------------------------- | ---------------------------------------------- | ------------------------------------------- |
+| **Generator** $g(z)$     | Particle-level feature $z$ | Per-event weight (`logplus` = $\log(1+\exp)$ ) | Predict weights that make MC look like data |
+| **Discriminator** $d(x)$ | Detector-level feature $x$ | Data vs MC probability (`sigmoid`)             | Distinguish real data from reweighted MC    |
 
 **Training loop:**
 
-1. **Discriminator step** -- freeze $g$, update $d$ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
-2. **Generator step** -- freeze $d$, update $g$ to minimize the same loss (fool the discriminator)
+1. **Discriminator step**: freeze $g$, update $d$ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
+2. **Generator step**: freeze $d$, update $g$ to minimize the same loss (fool the discriminator).
 3. Repeat with 5:1 D:G update ratio
 
 Weight normalization ensures the total MC yield is preserved:
@@ -264,4 +264,5 @@ All configurable via CLI flags or in `ran/train.py`:
 - [`SciPy`](https://scipy.org/) >= 1.15
 - [`Matplotlib`](https://matplotlib.org/) >= 3.10
 - [`Fire`](https://github.com/google/python-fire) >= 0.7
-- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1 (baseline comparison)
+- [`PyYAML`](https://pyyaml.org/) >= 6.0
+- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1

@@ -29,6 +29,49 @@ from ran.evaluate import (
 )
 
 
+def omnifold_unfold(
+    x_data: npt.NDArray,
+    x_sim: npt.NDArray,
+    z_gen: npt.NDArray,
+    z_target: npt.NDArray | None = None,
+    niter: int = 3,
+    epochs: int = 50,
+    batch_size: int = 512,
+) -> npt.NDArray[np.float64]:
+    """Train OmniFold on in-memory arrays; return mean-normalized gen weights.
+
+    Trains on (data reco = x_data, MC reco = x_sim, MC gen = z_gen), then
+    reweights z_target (defaults to z_gen) through the gen-level model. Returns
+    a 1D weight array, normalized so its mean is 1.
+    """
+    def _as2d(a: npt.NDArray) -> npt.NDArray:
+        a = np.asarray(a, dtype=np.float32)
+        return a[:, None] if a.ndim == 1 else a
+
+    x_data = _as2d(x_data)
+    x_sim = _as2d(x_sim)
+    z_gen = _as2d(z_gen)
+    z_target = z_gen if z_target is None else _as2d(z_target)
+    dim = x_data.shape[1]
+
+    data_dl = DataLoader(reco=x_data)
+    mc_dl = DataLoader(reco=x_sim, gen=z_gen)
+
+    unfold = MultiFold(
+        "omnifold_baseline",
+        MLP(dim), MLP(dim),
+        data_dl, mc_dl,
+        niter=niter,
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=False,
+    )
+    unfold.Unfold()
+
+    w = unfold.reweight(z_target, unfold.model2).astype(np.float64).ravel()
+    return w / w.mean()
+
+
 def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[dict, list[str], npt.NDArray[np.float64]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
     splits = _load_splits(config)
@@ -51,22 +94,6 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
     x_mc = x_all[mask_mc].astype(np.float32)
     z_mc = z_all[mask_mc].astype(np.float32)
 
-    dim = x_data.shape[1]
-
-    data_dl = DataLoader(reco=x_data)
-    mc_dl = DataLoader(reco=x_mc, gen=z_mc)
-
-    unfold = MultiFold(
-        "omnifold_baseline",
-        MLP(dim), MLP(dim),
-        data_dl, mc_dl,
-        niter=niter,
-        epochs=epochs,
-        batch_size=512,
-        verbose=False,
-    )
-    unfold.Unfold()
-
     # Evaluate on test split only
     z_test, x_test, y_test = _collect_test_data(splits.test)
     z_data_t = z_test[y_test == 1]
@@ -74,9 +101,12 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
     z_mc_t = z_test[y_test == 0]
     x_mc_t = x_test[y_test == 0]
 
-    # Get OmniFold weights for test MC via the trained gen-level model
-    w = unfold.reweight(z_mc_t.astype(np.float32), unfold.model2).astype(np.float64)
-    w = w / w.mean()
+    w = omnifold_unfold(
+        x_data, x_mc, z_mc,
+        z_target=z_mc_t,
+        niter=niter,
+        epochs=epochs,
+    )
 
     dataset = config.get("dataset", "gaussian")
     if dataset == "jets":

@@ -17,7 +17,7 @@ N_POINTS=24
 # (single wave, no risk of a 2nd wave overrunning the wall clock). Lower NODES to
 # use fewer GPUs at the cost of extra waves; all sit in the same Perlmutter queue
 # window. Keep GPUS_TOTAL >= N_POINTS for the clean one-point-per-GPU mapping.
-NODES=6
+NODES=${NODES:-6}
 GPUS_PER_NODE=4
 GPUS_TOTAL=$((NODES * GPUS_PER_NODE))
 

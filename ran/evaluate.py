@@ -34,6 +34,7 @@ def _load_splits(config: dict) -> DatasetSplits:
     batch_size = config["batch_size"]
     dim = config["dim"]
 
+    print(f"Loading dataset: {dataset}")
     if dataset == "gaussian":
         if "gaussian_params" in config:
             gaussian_params = config["gaussian_params"]

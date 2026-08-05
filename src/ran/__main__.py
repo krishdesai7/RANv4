@@ -72,7 +72,9 @@ def main(
             raw_params: dict[str, Any] = {
                 k: v for k, v in gaussian_params.items() if k != "dim"
             }
-            splits = RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
+            splits = RAN_Dataset(
+                batch_size=batch_size, seed=data_seed
+            ).generate_gaussian_dataset(
                 params=raw_params,
                 n_samples=n_samples,
             )
@@ -83,7 +85,9 @@ def main(
 
             gaussian_params = parse_gaussian_config(config)
             dim = gaussian_params["dim"]
-            splits = RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
+            splits = RAN_Dataset(
+                batch_size=batch_size, seed=data_seed
+            ).generate_gaussian_dataset(
                 config_path=config,
                 n_samples=n_samples,
             )
@@ -177,9 +181,7 @@ def main(
         print(f"Loaded OmniFold weights from {of_path}")
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
-        ibu_weights = [
-            ibu_data[f"weights_{i}"] for i in range(dim)
-        ]
+        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
         print(f"Loaded IBU weights from {ibu_path}")
 
     # Plots

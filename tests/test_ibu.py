@@ -237,6 +237,45 @@ def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
     assert result.weights.mean() == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize(
+    ("corrupt_call", "population"),
+    [(1, "prior"), (2, "observed")],
+)
+def test_unfold_variable_reports_population_count_mismatch(
+    monkeypatch, corrupt_call: int, population: str
+) -> None:
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
+    )
+    real_bin_counts = ibu._bin_counts
+    call_count = 0
+
+    def dropping_bin_counts(
+        indices: NDArray[np.intp], n_bins: int
+    ) -> NDArray[np.double]:
+        nonlocal call_count
+        call_count += 1
+        counts = real_bin_counts(indices, n_bins)
+        if call_count == corrupt_call:
+            counts[-1] -= 1
+        return counts
+
+    monkeypatch.setattr(ibu, "_bin_counts", dropping_bin_counts)
+
+    with pytest.raises(ValueError, match=rf"{population}.*3.*4"):
+        ibu._unfold_variable(
+            variable_name="dim_0",
+            response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+            response_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),
+            observed_reco=np.array([0.1, 0.9, 1.1, 1.9], dtype=np.double),
+            test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+            n_iterations=2,
+            purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
+        )
+
+
 def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
     record = ibu._evaluate_dimension(
         reference=np.array([0.0, 1.0, 2.0], dtype=np.double),

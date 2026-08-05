@@ -1,3 +1,4 @@
+import json
 import logging
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- backend isolation
 import sys
@@ -124,19 +125,36 @@ def test_ibu_records_metric_and_weight_artifact_completion(
 
     run_dir = tmp_path / "sample-run"
     run_dir.mkdir()
-    (run_dir / "config.json").write_text('{"dim": 1, "n_samples": 2, "batch_size": 1}')
+    (run_dir / "config.json").write_text('{"dim": 2, "n_samples": 2, "batch_size": 1}')
+
+    metric_record: ibu.MetricRecord = {
+        "wasserstein_before": 1.0,
+        "wasserstein_after": 0.5,
+        "wasserstein_improvement_pct": 50.0,
+        "jensenshannon_before": 0.4,
+        "jensenshannon_after": 0.2,
+        "jensenshannon_improvement_pct": 50.0,
+        "triangular_before": 0.3,
+        "triangular_after": 0.1,
+        "triangular_improvement_pct": 200.0 / 3.0,
+    }
 
     def fake_run_and_evaluate(
         config: ibu.IBUConfig, n_iterations: int, purity_threshold: np.double
     ) -> ibu.IBUResult:
         del config, n_iterations, purity_threshold
         return ibu.IBUResult(
-            metrics={},
-            variable_names=("dim_0",),
-            weights=np.ones((1, 2), dtype=np.double),
+            metrics={"detector_mass": metric_record},
+            variable_names=("mass", "momentum"),
+            weights=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.double),
             outcomes=(
                 ibu.VariableOutcome(
-                    variable_name="dim_0",
+                    variable_name="mass",
+                    status="completed",
+                    n_bins=2,
+                ),
+                ibu.VariableOutcome(
+                    variable_name="momentum",
                     status="completed",
                     n_bins=2,
                 ),
@@ -161,9 +179,11 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     ]
     assert metrics_path.exists()
     assert weights_path.exists()
+    assert json.loads(metrics_path.read_text()) == {"detector_mass": metric_record}
     with np.load(weights_path) as weights:
-        assert set(weights.files) == {"weights_0"}
-        np.testing.assert_array_equal(weights["weights_0"], np.ones(2, dtype=np.double))
+        assert set(weights.files) == {"weights_0", "weights_1"}
+        np.testing.assert_array_equal(weights["weights_0"], [1.0, 2.0])
+        np.testing.assert_array_equal(weights["weights_1"], [3.0, 4.0])
     assert any(
         str(metrics_path) in message and str(weights_path) in message
         for message in messages

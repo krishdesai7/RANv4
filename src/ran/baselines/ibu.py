@@ -204,6 +204,11 @@ def _prepare_data(splits: DatasetSplits, expected_dim: int) -> _IBUData:
 def _assign_bins(
     values: NDArray[np.double], edges: NDArray[np.double]
 ) -> NDArray[np.intp]:
+    """Assign every value to a saturated bin.
+
+    Underflow enters the first bin; overflow and values equal to the upper edge
+    enter the last bin, so every finite input value receives an assignment.
+    """
     if values.ndim != 1 or not np.all(np.isfinite(values)):
         raise ValueError("bin values must be a finite one-dimensional array")
     if edges.ndim != 1 or edges.size < 2 or not np.all(np.diff(edges) > 0):
@@ -215,6 +220,12 @@ def _assign_bins(
 
 
 def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.double]:
+    """Count saturated assignments while preserving every assigned event.
+
+    Assignments from `_assign_bins` place underflow in the first bin and both
+    overflow and the upper edge in the last bin; their counts therefore retain
+    one entry for every assigned event.
+    """
     if n_bins < 1 or indices.ndim != 1:
         raise ValueError("bin indices must be one-dimensional with n_bins >= 1")
     if np.any((indices < 0) | (indices >= n_bins)):
@@ -457,8 +468,18 @@ def _unfold_variable(
     )
     prior: NDArray[np.double] = _bin_counts(response_gen_bins, n_bins)
     observed: NDArray[np.double] = _bin_counts(observed_reco_bins, n_bins)
-    assert prior.sum() == response_gen.size  # ruff: ignore[assert]
-    assert observed.sum() == observed_reco.size  # ruff: ignore[assert]
+    prior_count: np.double = prior.sum()
+    if prior_count != response_gen.size:
+        raise ValueError(
+            "prior/response population count mismatch: "
+            f"actual={prior_count}, expected={response_gen.size}"
+        )
+    observed_count: np.double = observed.sum()
+    if observed_count != observed_reco.size:
+        raise ValueError(
+            "observed/data population count mismatch: "
+            f"actual={observed_count}, expected={observed_reco.size}"
+        )
 
     unfolded: NDArray[np.double] = _ibu(prior, observed, response, n_iterations)
     bin_weights: NDArray[np.double] = _unfolded_to_bin_weights(unfolded, prior)

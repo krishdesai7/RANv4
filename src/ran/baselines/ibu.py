@@ -6,8 +6,8 @@ the result to per-event weights for evaluation with the same
 metrics as RAN and OmniFold.
 
 Usage:
-    python -m ran.baselines.ibu --run_dir=runs/2026-...
-    python -m ran.baselines.ibu --run_dir=runs  # all runs
+    uv run -m ran baseline ibu --run-dir runs/2026-...
+    uv run -m ran baseline ibu --run-dir runs  # all runs
 """
 
 import json

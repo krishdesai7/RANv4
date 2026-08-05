@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -255,4 +255,58 @@ def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
         "triangular_after",
         "triangular_improvement_pct",
     }
-    assert all(np.isfinite(value) for value in record.values())
+    assert all(np.isfinite(cast("float", value)) for value in record.values())
+
+
+def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
+    monkeypatch.setattr(ibu, "_load_splits", lambda _config: _splits())
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0], dtype=np.double),
+    )
+    config = ibu._parse_config(_config(dim=1, gaussian_params={"dim": 1}))
+
+    result = ibu._run_and_evaluate(config, n_iterations=2)
+
+    assert isinstance(result, ibu.IBUResult)
+    assert result.variable_names == ("dim_0",)
+    assert result.weights.shape == (1, 2)
+    assert len(result.outcomes) == 1
+    assert result.outcomes[0].status == "skipped"
+    assert set(result.metrics) == {"detector_dim_0", "particle_dim_0"}
+    for record in result.metrics.values():
+        assert record["wasserstein_after"] == pytest.approx(
+            record["wasserstein_before"]
+        )
+
+
+@pytest.mark.parametrize(
+    ("n_iterations", "purity_threshold", "message"),
+    [
+        (0, ibu.DEFAULT_PURITY_THRESHOLD, "n_iterations"),
+        (True, ibu.DEFAULT_PURITY_THRESHOLD, "n_iterations"),
+        (1, np.double(np.nan), "purity_threshold"),
+        (1, np.double(-0.1), "purity_threshold"),
+        (1, np.double(1.1), "purity_threshold"),
+    ],
+)
+def test_run_and_evaluate_validates_controls_before_loading_data(
+    monkeypatch,
+    n_iterations: int,
+    purity_threshold: np.double,
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        ibu,
+        "_load_splits",
+        lambda _config: pytest.fail("loaded data before validating controls"),
+    )
+    config = ibu._parse_config(_config())
+
+    with pytest.raises(ValueError, match=message):
+        ibu._run_and_evaluate(
+            config,
+            n_iterations=n_iterations,
+            purity_threshold=purity_threshold,
+        )

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from logging import Logger
 
     from jax._src.pjit import JitWrapped
+    from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import DatasetSplits, Variables
@@ -177,8 +178,8 @@ def _make_steps(
 
 
 def _as_batch(
-    features: dict[str, npt.NDArray[np.double]], y: npt.NDArray[np.ubyte]
-) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.double]]:
+    features: dict[str, NDArray[np.double]], y: NDArray[np.ubyte]
+) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.double]]:
     """Cast one dataset batch to the float64 arrays the steps expect."""
     return (
         features["z"].astype(np.double),

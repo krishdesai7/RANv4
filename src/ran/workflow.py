@@ -1,49 +1,62 @@
+from __future__ import annotations
+
 import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import keras
 import numpy as np
-import numpy.typing as npt
 
-from ran.data import JET_OBS, DatasetSplits, RANDataset, load_jet_dataset
-from ran.data.config import parse_gaussian_config
-from ran.evaluate import evaluate_run
-from ran.plotting import (
-    VarInfo,
-    plot_detector_level,
-    plot_losses,
-    plot_particle_level,
-)
-from ran.train import train
+from . import plot_detector_level, plot_losses, plot_particle_level, train
+from .baselines import parse_run_config
+from .data import RANDataset, load_jet_dataset, parse_gaussian_config
+from .evaluate import evaluate_run
+from .rantypes import JET_OBS, GaussianConfig, VarInfo
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from logging import Logger
+    from typing import Any
+
+    from numpy.typing import NDArray
+
+    from .rantypes import DatasetSplits
+
+logger: Logger = logging.getLogger(__name__)
+
+
+def _gaussian_config_from_source(source: dict[str, Any], dim: int) -> GaussianConfig:
+    """Rebuild a GaussianConfig from a reloaded run's config.json."""
+    gp: dict[str, Any] = source["gaussian_params"]
+    return GaussianConfig(
+        dim,
+        np.array(gp["mu_gen"], dtype=np.double),
+        np.array(gp["mu_true"], dtype=np.double),
+        np.array(gp["cov_gen"], dtype=np.double),
+        np.array(gp["cov_true"], dtype=np.double),
+        np.array(gp["cov_detector"], dtype=np.double),
+    )
 
 
 def _prepare_gaussian(
-    config: str | None,
-    saved_config: dict[str, Any],
+    config: Path | None,
+    saved_config: GaussianConfig | None,
     batch_size: int,
     n_samples: int,
     data_seed: int,
-) -> tuple[DatasetSplits, int, dict[str, Any]]:
+) -> tuple[DatasetSplits, int, GaussianConfig]:
     """Build Gaussian splits from a reloaded run's config, or from a YAML file.
 
     Returns the splits, the dimensionality, and the parsed Gaussian params --
     the last so a fresh run can record them in its own config.json.
     """
     builder = RANDataset(batch_size=batch_size, seed=data_seed)
-    gaussian_params: dict[str, Any]
-    if saved_config:
+    if saved_config is not None:
+        gaussian_params: GaussianConfig = saved_config
         # Reload: use stored params from config.json
-        gaussian_params = saved_config["gaussian_params"]
-        raw_params: dict[str, Any] = {
-            k: v for k, v in gaussian_params.items() if k != "dim"
-        }
         splits = builder.generate_gaussian_dataset(
-            params=raw_params, n_samples=n_samples
+            params=saved_config, n_samples=n_samples
         )
     else:
         # Fresh run: parse YAML config
@@ -53,13 +66,13 @@ def _prepare_gaussian(
         splits = builder.generate_gaussian_dataset(
             config_path=config, n_samples=n_samples
         )
-    return splits, gaussian_params["dim"], gaussian_params
+    return splits, gaussian_params.dim, gaussian_params
 
 
 def _prepare_jets(
     n_samples: int,
     batch_size: int,
-    variables: tuple[str, ...],
+    variables: frozenset[str],
     data_seed: int,
 ) -> tuple[DatasetSplits, int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
@@ -70,11 +83,11 @@ def _prepare_jets(
         variables=variables,
         seed=data_seed,
     )
-    var_info = [
+    var_info: list[VarInfo] = [
         VarInfo(
-            xlim=JET_OBS[v]["xlim"],
-            xlabel=JET_OBS[v]["xlabel"],
-            symbol=JET_OBS[v]["symbol"],
+            xlim=JET_OBS[v].xlim,
+            xlabel=JET_OBS[v].xlabel,
+            symbol=JET_OBS[v].symbol,
             mu=std_params[v][0],
             sigma=std_params[v][1],
         )
@@ -98,8 +111,8 @@ def _save_run(
     dataset: str,
     init_seed: int,
     data_seed: int,
-    gaussian_params: dict[str, Any] | None,
-    variables: tuple[str, ...],
+    gaussian_params: GaussianConfig | None,
+    variables: frozenset[str],
 ) -> Path:
     """Write models, history and config to a fresh timestamped run directory.
 
@@ -129,14 +142,7 @@ def _save_run(
         "data_seed": data_seed,
     }
     if dataset == "gaussian" and gaussian_params is not None:
-        config_out["gaussian_params"] = {
-            "dim": dim,
-            "mu_gen": _to_list(gaussian_params["mu_gen"]),
-            "mu_true": _to_list(gaussian_params["mu_true"]),
-            "sigma_gen": _to_list(gaussian_params["cov_gen"]),
-            "sigma_true": _to_list(gaussian_params["cov_true"]),
-            "sigma_detector": _to_list(gaussian_params["cov_detector"]),
-        }
+        config_out["gaussian_params"] = gaussian_params.model_dump()
     else:
         config_out["variables"] = list(variables)
     json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
@@ -156,10 +162,10 @@ def _load_artifacts(run_dir: Path) -> tuple[keras.Model, dict[str, list[float]]]
 
 def _load_baseline_weights(
     run_dir: Path, dim: int
-) -> tuple[npt.NDArray[np.double] | None, list[npt.NDArray[np.double]] | None]:
+) -> tuple[NDArray[np.double] | None, list[NDArray[np.double]] | None]:
     """Pick up OmniFold/IBU weights from the run dir, if those baselines have run."""
     omnifold_weights = None
-    ibu_weights: list[npt.NDArray[np.double]] | None = None
+    ibu_weights: list[NDArray[np.double]] | None = None
     of_path: Path = run_dir / "omnifold_weights.npz"
     ibu_path: Path = run_dir / "ibu_weights.npz"
     if of_path.exists():
@@ -175,10 +181,10 @@ def _load_baseline_weights(
 def run(
     batch_size: int = 1024,
     n_samples: int = 500_000,
-    config: str | None = None,
+    config: Path | None = None,
     dataset: str = "gaussian",
-    variables: tuple[str, ...] = ("m", "M", "w", "tau21", "zg", "sdm"),
-    load_run: str | None = None,
+    variables: frozenset[str] = frozenset(("m", "M", "w", "tau21", "zg", "sdm")),
+    load_run: Path | None = None,
     hidden_units: int = 64,
     n_layers: int = 2,
     patience: int = 5,
@@ -200,27 +206,36 @@ def run(
     run_dir: Path
     splits: DatasetSplits
     var_info: list[VarInfo] | None = None
-    gaussian_params: dict | None = None
+    gaussian_params: GaussianConfig | None = None
     dim: int = 1
 
-    # When loading a saved run, read config from that run. Defaults to {} so
-    # every branch below can read it unconditionally.
-    saved_config: dict[str, Any] = {}
+    # When loading a saved run, read config from that run and rebuild the
+    # Gaussian params it recorded, so a reload never re-parses --config (which
+    # may not even be passed, or may have since changed on disk).
+    saved_gaussian_config: GaussianConfig | None = None
     if load_run is not None:
         run_dir = Path(load_run)
-        saved_config = json.loads((run_dir / "config.json").read_text())
-        dataset = saved_config.get("dataset", "gaussian")
-        n_samples = saved_config["n_samples"]
-        batch_size = saved_config["batch_size"]
-        dim = saved_config["dim"]
+        saved_config = parse_run_config((run_dir / "config.json").read_text())
+        dataset = saved_config.dataset
+        n_samples = saved_config.n_samples
+        batch_size = saved_config.batch_size
+        dim = saved_config.dim
         # Runs predating seed recording used the then-hardcoded default of 42.
-        data_seed = saved_config.get("data_seed", 42)
+        data_seed = saved_config.data_seed
         if dataset == "jets":
-            variables = tuple(saved_config["variables"])
+            variables = frozenset(saved_config.variable_names)
+        else:
+            saved_gaussian_config = _gaussian_config_from_source(
+                saved_config.source, dim
+            )
 
     if dataset == "gaussian":
         splits, dim, gaussian_params = _prepare_gaussian(
-            config, saved_config, batch_size, n_samples, data_seed
+            config=config,
+            saved_config=saved_gaussian_config,
+            batch_size=batch_size,
+            n_samples=n_samples,
+            data_seed=data_seed,
         )
     elif dataset == "jets":
         splits, dim, var_info = _prepare_jets(

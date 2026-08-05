@@ -96,7 +96,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
 
     assert result.exit_code == 0
     assert calls[0]["dataset"] == "jets"
-    assert calls[0]["variables"] == ("m", "w")
+    assert calls[0]["variables"] == frozenset(("m", "w"))
     assert calls[0]["load_run"] == str(tmp_path)
     assert calls[0]["seed"] == 7
     assert configured_levels == ["WARNING"]

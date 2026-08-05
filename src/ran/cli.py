@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated
 
 import typer
 
-from . import configure_logging
+from .logging_config import configure_logging
 from .rantypes import SUBSTRUCTURE_VARIABLES, DatasetName, LogLevel
-
-if TYPE_CHECKING:
-    from typing import Annotated
 
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -49,10 +46,10 @@ def train_command(
     run(
         batch_size=batch_size,
         n_samples=n_samples,
-        config=str(config) if config is not None else None,
+        config=config,
         dataset=dataset.value,
-        variables=tuple(variable or SUBSTRUCTURE_VARIABLES),
-        load_run=str(load_run) if load_run is not None else None,
+        variables=frozenset(variable or SUBSTRUCTURE_VARIABLES),
+        load_run=load_run,
         hidden_units=hidden_units,
         n_layers=n_layers,
         patience=patience,

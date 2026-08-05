@@ -65,7 +65,7 @@ def parse_gaussian_config(config_path: Path) -> GaussianConfig:
     with config_path.open() as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
-    missing: set[str] = REQUIRED_KEYS - raw.keys()
+    missing: frozenset[str] = REQUIRED_KEYS - raw.keys()
     if missing:
         raise ValueError(f"Config missing required keys: {missing}")
 

@@ -42,9 +42,9 @@ from ran.evaluate import (
     _improvement,
     _js_per_dim,
     _load_splits,
-    _print_metrics,
     _triangular_per_dim,
     _wd_per_dim,
+    render_metrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -182,7 +182,7 @@ def evaluate_single(run_dir: str | Path, force: bool = False,
 
     json.dump(metrics, out_path.open("w"), indent=2)
     np.savez(run_dir / "omnifold_weights.npz", weights=w)
-    _print_metrics(f"{run_dir.name} [OmniFold]", metrics, var_names)
+    render_metrics(f"{run_dir.name} [OmniFold]", metrics, var_names)
     return metrics
 
 

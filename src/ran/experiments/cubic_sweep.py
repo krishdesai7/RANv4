@@ -27,7 +27,9 @@ import numpy.typing as npt
 from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
-from ran.data.datasets import RANDataset
+from ..baselines import omnifold_unfold
+from ..data import RANDataset
+from ..train import train
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +49,10 @@ def make_particles(
     return z_truth, z_gen
 
 
-def unfolded_wasserstein(
-    z_truth: npt.NDArray[np.double],
-    z_gen: npt.NDArray[np.double],
-    weights: npt.NDArray[np.double],
+def unfolded_wasserstein[T: np.floating](
+    z_truth: npt.NDArray[T],
+    z_gen: npt.NDArray[T],
+    weights: npt.NDArray[T],
 ) -> float:
     """Wasserstein distance between z_truth and the weighted z_gen distribution."""
     return float(
@@ -79,7 +81,7 @@ def _write_point(sweep_dir: Path, prefix: str, out: dict) -> dict:
     return out
 
 
-def _finite(w: npt.NDArray[np.double]) -> npt.NDArray[np.double]:
+def _finite[T: np.floating](w: npt.NDArray[T]) -> npt.NDArray[T]:
     """Zero out non-finite weights (e.g. a saturated classifier at large s).
 
     Keeps the Wasserstein call from crashing; bad weights just carry no mass.
@@ -108,7 +110,6 @@ def run_ran(
             Re-run a point with different values to get an ensemble at fixed s;
             the resolved value is recorded in the output JSON.
     """
-    from ran.train import train
 
     s, z_truth, z_gen, x_data, x_sim = _sweep_point(s_index, n_points, n_samples, seed)
 
@@ -156,7 +157,6 @@ def run_omnifold(
     compare like for like. Must run in its own process: the import below pins
     Keras to the TensorFlow backend.
     """
-    from ran.baselines.omnifold import omnifold_unfold
 
     s, z_truth, z_gen, x_data, x_sim = _sweep_point(s_index, n_points, n_samples, seed)
 

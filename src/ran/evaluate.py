@@ -18,7 +18,6 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import keras
 import numpy as np
 import numpy.typing as npt
 from numpy import ndarray
@@ -31,6 +30,8 @@ from ran.data import ArrayDataset, DatasetSplits, RANDataset
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+
+    import keras
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,12 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
     if out_path.exists() and not force:
         logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
         return json.loads(out_path.read_text())
+
+    # Imported here, not at module scope, so this module stays keras-free on
+    # import. ran.baselines.omnifold depends on that: it must pin
+    # KERAS_BACKEND=tensorflow before anything pulls keras in, and it imports
+    # from this module.
+    import keras
 
     config = json.loads((run_dir / "config.json").read_text())
     logger.info("%s: loading model and data...", run_dir.name)

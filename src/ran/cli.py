@@ -1,31 +1,22 @@
-from enum import StrEnum
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING
 
 import typer
 
 from ran.logging_config import configure_logging
 
-DEFAULT_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
+from .rantypes import SUBSTRUCTURE_VARIABLES, DatasetName, LogLevel
+
+if TYPE_CHECKING:
+    from typing import Annotated
 
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app.add_typer(baseline_app, name="baseline", help="Run comparison baselines.")
 app.add_typer(sweep_app, name="sweep", help="Run cubic-response sweep steps.")
-
-
-class LogLevel(StrEnum):
-    debug = "DEBUG"
-    info = "INFO"
-    warning = "WARNING"
-    error = "ERROR"
-    critical = "CRITICAL"
-
-
-class DatasetName(StrEnum):
-    gaussian = "gaussian"
-    jets = "jets"
 
 
 @app.callback()
@@ -61,7 +52,7 @@ def train_command(
         n_samples=n_samples,
         config=str(config) if config is not None else None,
         dataset=dataset.value,
-        variables=tuple(variable or DEFAULT_VARIABLES),
+        variables=tuple(variable or SUBSTRUCTURE_VARIABLES),
         load_run=str(load_run) if load_run is not None else None,
         hidden_units=hidden_units,
         n_layers=n_layers,

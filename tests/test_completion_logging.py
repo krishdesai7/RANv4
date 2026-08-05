@@ -43,6 +43,7 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
 def test_evaluation_records_metrics_artifact_completion(
     monkeypatch, tmp_path, caplog
 ) -> None:
+    import keras
     import numpy as np
     from ran import evaluate
 
@@ -54,7 +55,9 @@ def test_evaluation_records_metrics_artifact_completion(
     x = z.copy()
     y = np.array([1, 1, 0, 0])
 
-    monkeypatch.setattr(evaluate.keras.saving, "load_model", lambda _path: object())
+    # evaluate_run imports keras inside the function (so ran.evaluate stays
+    # keras-free for the OmniFold backend pin), so patch the real module.
+    monkeypatch.setattr(keras.saving, "load_model", lambda _path: object())
     monkeypatch.setattr(
         evaluate, "_load_splits", lambda _config: SimpleNamespace(test=object())
     )
@@ -94,7 +97,7 @@ import numpy as np
 from ran.baselines import omnifold
 
 run_dir = Path(sys.argv[1])
-(run_dir / "config.json").write_text("{}")
+(run_dir / "config.json").write_text('{"dim": 1, "n_samples": 1, "batch_size": 1}')
 omnifold._run_and_evaluate = lambda config, niter, epochs: ({}, [], np.ones(2))
 omnifold.render_metrics = lambda *args, **kwargs: None
 logging.basicConfig(level=logging.INFO)
@@ -121,13 +124,14 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     monkeypatch, tmp_path, caplog
 ) -> None:
     import numpy as np
+    from ran.baselines import _shared as shared
     from ran.baselines import ibu
 
     run_dir = tmp_path / "sample-run"
     run_dir.mkdir()
     (run_dir / "config.json").write_text('{"dim": 2, "n_samples": 2, "batch_size": 1}')
 
-    metric_record: ibu.MetricRecord = {
+    metric_record: shared.MetricRecord = {
         "wasserstein_before": 1.0,
         "wasserstein_after": 0.5,
         "wasserstein_improvement_pct": 50.0,
@@ -140,7 +144,7 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     }
 
     def fake_run_and_evaluate(
-        config: ibu.IBUConfig, n_iterations: int, purity_threshold: np.double
+        config: shared.RunConfig, n_iterations: int, purity_threshold: np.double
     ) -> ibu.IBUResult:
         del config, n_iterations, purity_threshold
         return ibu.IBUResult(

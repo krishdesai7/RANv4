@@ -13,23 +13,15 @@ import numpy as np
 import numpy.typing as npt
 from rich.progress import Progress, TaskID
 
+from ..rantypes import (
+    CACHE_FILENAMES,
+    GENERATORS,
+    N_FILES,
+    SUBSTRUCTURE_VARIABLES,
+    ZENODO_RECORD,
+)
+
 logger = logging.getLogger(__name__)
-
-ZENODO_RECORD = 3548091
-GENERATORS = ("Pythia26", "Herwig")
-N_FILES = 17
-SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
-
-# Cache-safe filenames: avoid case collisions on case-insensitive filesystems
-# (macOS APFS default), where "m.npz" and "M.npz" resolve to the same path.
-CACHE_FILENAMES: dict[str, str] = {
-    "m": "mass",
-    "M": "mult",
-    "w": "w",
-    "tau21": "tau21",
-    "zg": "zg",
-    "sdm": "sdm",
-}
 
 # Only load the keys we actually need (skip particles, Zs, lhas, ang2s).
 _NEEDED_KEYS = frozenset(

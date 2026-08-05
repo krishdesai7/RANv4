@@ -6,11 +6,13 @@ import numpy as np
 import yaml
 from scipy.linalg import cholesky
 
+from ..rantypes import REQUIRED_KEYS, GaussianConfig
+
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any, Final
+    from typing import Any
 
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 
 def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
@@ -40,7 +42,7 @@ def _full_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
 
 
 def sigma_to_covariance(
-    sigma: float | list | NDArray,
+    sigma: ArrayLike,
     dim: int,
 ) -> NDArray[np.double]:
     arr: NDArray[np.double] = np.atleast_1d(np.asarray(sigma, dtype=np.double))
@@ -59,16 +61,7 @@ def sigma_to_covariance(
     return cov
 
 
-REQUIRED_KEYS: Final[set[str]] = {
-    "mu_gen",
-    "mu_true",
-    "sigma_gen",
-    "sigma_true",
-    "sigma_detector",
-}
-
-
-def parse_gaussian_config(config_path: Path) -> dict[str, int | NDArray[np.double]]:
+def parse_gaussian_config(config_path: Path) -> GaussianConfig:
     with config_path.open() as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
@@ -87,11 +80,11 @@ def parse_gaussian_config(config_path: Path) -> dict[str, int | NDArray[np.doubl
     cov_true: NDArray[np.double] = sigma_to_covariance(raw["sigma_true"], dim)
     cov_detector: NDArray[np.double] = sigma_to_covariance(raw["sigma_detector"], dim)
 
-    return {
-        "dim": dim,
-        "mu_gen": mu_gen,
-        "mu_true": mu_true,
-        "cov_gen": cov_gen,
-        "cov_true": cov_true,
-        "cov_detector": cov_detector,
-    }
+    return GaussianConfig(
+        dim,
+        mu_gen,
+        mu_true,
+        cov_gen,
+        cov_true,
+        cov_detector,
+    )

@@ -11,9 +11,6 @@ Usage:
     python -m ran.evaluate --force                  # recompute existing
 """
 
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 import json
 from pathlib import Path
 
@@ -22,17 +19,22 @@ import numpy as np
 import numpy.typing as npt
 import keras
 
-from ran.data import RAN_Dataset, DatasetSplits
+from ran.data import ArrayDataset, RAN_Dataset, DatasetSplits
 from scipy.stats import wasserstein_distance
 from scipy.spatial.distance import jensenshannon
 
 
 def _load_splits(config: dict) -> DatasetSplits:
-    """Reconstruct dataset splits from a run config."""
+    """Reconstruct dataset splits from a run config.
+
+    Must reproduce the split the run trained on, so the dataset seed comes from
+    the config. Runs predating seed recording used the then-hardcoded 42.
+    """
     dataset = config.get("dataset", "gaussian")
     n_samples = config["n_samples"]
     batch_size = config["batch_size"]
     dim = config["dim"]
+    data_seed = config.get("data_seed", 42)
 
     print(f"Loading dataset: {dataset}")
     if dataset == "gaussian":
@@ -47,32 +49,23 @@ def _load_splits(config: dict) -> DatasetSplits:
                 "sigma_gen": 0.9, "sigma_true": 1.0,
                 "sigma_detector": smearing,
             }
-        return RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
+        return RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
             params=raw_params, n_samples=n_samples,
         )
     elif dataset == "jets":
         from ran.data import load_jet_dataset
         splits, _, _ = load_jet_dataset(
             n_samples=n_samples, batch_size=batch_size,
-            variables=tuple(config["variables"]),
+            variables=tuple(config["variables"]), seed=data_seed,
         )
         return splits
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data(test_ds):
-    """Iterate test dataset in batches, return concatenated arrays."""
-    zs, xs, ys = [], [], []
-    for features, y in test_ds.as_numpy_iterator():
-        zs.append(features["z"])
-        xs.append(features["x"])
-        ys.append(y)
-    return (
-        np.concatenate(zs, axis=0),
-        np.concatenate(xs, axis=0),
-        np.concatenate(ys, axis=0).reshape(-1),
-    )
+def _collect_test_data(test_ds: ArrayDataset):
+    """Return the test split as flat (z, x, y) arrays."""
+    return test_ds.as_arrays()
 
 
 def _get_weights(g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000) -> npt.NDArray:
@@ -81,7 +74,7 @@ def _get_weights(g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000) -
     raw = np.empty(n, dtype=np.float64)
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
-        raw[start:end] = g(z_gen[start:end]).numpy().flatten()
+        raw[start:end] = np.asarray(g(z_gen[start:end])).flatten()
     return raw / raw.mean()
 
 

@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any, NamedTuple, SupportsFloat, cast
 from pathlib import Path
 import hashlib, json
@@ -5,24 +6,110 @@ import hashlib, json
 import numpy as np
 import numpy.typing as npt
 
-import tensorflow as tf
-from keras.utils import split_dataset
-
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
 
 type Nested[T] = T | list[Nested[T]]
+
+type Batch = tuple[dict[str, npt.NDArray[np.double]], npt.NDArray[np.ubyte]]
+
+
+class ArrayDataset:
+    """In-memory (z, x, y) arrays with deterministic minibatching.
+
+    Iterating yields ``({"z": ..., "x": ...}, y)`` batches of NumPy arrays. The
+    final batch is short rather than dropped whenever the split length is not a
+    multiple of ``batch_size``.
+
+    Every split holds a view onto one shared pair of base arrays; slicing is
+    done with fancy indexing at batch time, so splitting costs no extra memory.
+
+    Arguments:
+        z: Particle-level features, shape (n_events, dim).
+        x: Detector-level features, shape (n_events, dim).
+        y: Per-event class label (1 = data, 0 = MC), shape (n_events,).
+        batch_size: Events per batch.
+        shuffle: Re-permute the event order before every pass. Used for the
+            training split; validation and test iterate in fixed order.
+        seed: Seed for the reshuffling generator.
+
+    Each pass draws its permutation from ``(seed, pass_index)`` rather than
+    from a generator carried across passes, so the order an epoch sees depends
+    only on how many passes preceded it -- not on who else has iterated this
+    object. Call `reset` to return to the first pass; `train` does so at the
+    start of every run, which is what lets two runs over one `DatasetSplits`
+    (an ensemble loop over init seeds) see identical data.
+    """
+
+    def __init__(
+        self,
+        z: npt.NDArray[np.double],
+        x: npt.NDArray[np.double],
+        y: npt.NDArray[np.ubyte],
+        batch_size: int = 128,
+        shuffle: bool = False,
+        seed: int = 42,
+    ) -> None:
+        if not (len(z) == len(x) == len(y)):
+            raise ValueError(
+                f"z, x, y must share a first dimension; got {len(z)}, {len(x)}, {len(y)}"
+            )
+        if batch_size < 1:
+            raise ValueError("batch_size must be >= 1")
+        self.z = z
+        self.x = x
+        self.y = y
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.seed = seed
+        self._pass = 0
+
+    def reset(self) -> None:
+        """Rewind to the first pass, so iteration repeats from the start."""
+        self._pass = 0
+
+    def __len__(self) -> int:
+        """Number of batches per pass."""
+        return int(np.ceil(len(self.y) / self.batch_size))
+
+    @property
+    def n_events(self) -> int:
+        return len(self.y)
+
+    def __iter__(self) -> Iterator[Batch]:
+        order: npt.NDArray[np.intp]
+        if self.shuffle:
+            order = np.random.default_rng([self.seed, self._pass]).permutation(
+                len(self.y)
+            )
+            self._pass += 1
+        else:
+            order = np.arange(len(self.y))
+        for start in range(0, len(order), self.batch_size):
+            idx = order[start : start + self.batch_size]
+            yield {"z": self.z[idx], "x": self.x[idx]}, self.y[idx]
+
+    def as_arrays(
+        self,
+    ) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
+        """Return the whole split as flat (z, x, y) arrays, in stored order.
+
+        Callers that just want every event (plotting, metrics, the baselines)
+        should use this instead of concatenating an iteration.
+        """
+        return self.z, self.x, self.y.reshape(-1)
+
 
 class DatasetSplits(NamedTuple):
     """
     Named tuple representing dataset splits.
     Fields:
-        train (tf.data.Dataset)
-        val (tf.data.Dataset)
-        test (tf.data.Dataset)
+        train (ArrayDataset)
+        val (ArrayDataset)
+        test (ArrayDataset)
     """
-    train: tf.data.Dataset
-    val: tf.data.Dataset
-    test: tf.data.Dataset
+    train: ArrayDataset
+    val: ArrayDataset
+    test: ArrayDataset
 
 class RAN_Dataset():
     """
@@ -34,7 +121,7 @@ class RAN_Dataset():
         val_fraction (float)
         test_fraction (float)
     Attributes:
-        dataset (tf.data.Dataset)
+        dataset (tuple of (z, x, y) arrays in shuffled order)
         splits (DatasetSplits)
 
     Methods:
@@ -60,9 +147,11 @@ class RAN_Dataset():
 
         self.val_fraction = val_fraction
         self.test_fraction = test_fraction
-        self.dataset: tf.data.Dataset | None = None
+        self.dataset: tuple[
+            npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]
+        ] | None = None
         self.splits: DatasetSplits | None = None
-    
+
     @staticmethod
     def _round_nested(obj: Nested[SupportsFloat], ndigits: int = 10) -> Nested[float]:
         """Recursively round floats in a nested list/scalar for stable hashing."""
@@ -88,54 +177,62 @@ class RAN_Dataset():
     def _cache_path(self, parsed: dict[str, Any], n_samples: int) -> Path:
         cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
-    
+
     def _build_dataset(
         self,
         z: npt.NDArray[np.double],
         x: npt.NDArray[np.double],
         y: npt.NDArray[np.ubyte],
-    ) -> tf.data.Dataset:
-        features: dict[str, npt.NDArray[np.double]] = {
-            "z": z, # Particle level
-            "x": x, # Detector level
-        }
-        dataset: tf.data.Dataset = tf.data.Dataset.from_tensor_slices((features, y))
-        dataset = dataset.shuffle(
-            buffer_size=len(y),
-            seed=self.seed,
-            reshuffle_each_iteration=False,
-            )
-        return dataset
+    ) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
+        """Interleave the data and MC halves with one fixed-seed permutation.
 
-    def _split_dataset(self, dataset: tf.data.Dataset) -> DatasetSplits:
-        non_test: tf.data.Dataset
-        test: tf.data.Dataset
-        non_test, test = split_dataset(
-            dataset,
-            right_size=self.test_fraction,
-            shuffle=False,
-        )
+        The arrays arrive as data (y=1) stacked on MC (y=0); the splits below
+        are contiguous slices, so they would otherwise be single-class. This
+        shuffle happens once and is not repeated per epoch -- it defines the
+        event ordering the splits cut into.
+        """
+        rng: np.random.Generator = np.random.default_rng(self.seed)
+        order: npt.NDArray[np.intp] = rng.permutation(len(y))
+        return z[order], x[order], y[order]
+
+    def _split_dataset(
+        self,
+        dataset: tuple[
+            npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]
+        ],
+    ) -> DatasetSplits:
+        """Cut the shuffled arrays into contiguous train/val/test splits.
+
+        Test is taken off the end, validation off the end of what remains, so
+        train occupies the front -- matching the nested `split_dataset` calls
+        this replaced. Only the training split reshuffles between epochs.
+        """
+        z, x, y = dataset
+        n: int = len(y)
+        n_test: int = int(n * self.test_fraction)
+        n_non_test: int = n - n_test
         val_of_non_test: float = self.val_fraction / (1.0 - self.test_fraction)
-        train: tf.data.Dataset
-        val: tf.data.Dataset
-        train, val = split_dataset(
-            non_test,
-            right_size=val_of_non_test,
-            shuffle=False,
+        n_val: int = int(n_non_test * val_of_non_test)
+        n_train: int = n_non_test - n_val
+        if n_train < 1 or n_val < 1 or n_test < 1:
+            raise ValueError(
+                f"{n} events split into train={n_train}, val={n_val}, test={n_test}; "
+                "every split needs at least one event"
+            )
+
+        def _slice(lo: int, hi: int, shuffle: bool) -> ArrayDataset:
+            return ArrayDataset(
+                z[lo:hi], x[lo:hi], y[lo:hi],
+                batch_size=self.batch_size,
+                shuffle=shuffle,
+                seed=self.seed,
+            )
+
+        return DatasetSplits(
+            train=_slice(0, n_train, shuffle=True),
+            val=_slice(n_train, n_non_test, shuffle=False),
+            test=_slice(n_non_test, n, shuffle=False),
         )
-        train_buffer_size: tf.Tensor | int = tf.data.experimental.cardinality(train)
-        if train_buffer_size == tf.data.UNKNOWN_CARDINALITY:
-            train_buffer_size = self.batch_size * 10
-        elif train_buffer_size == tf.data.INFINITE_CARDINALITY:
-            raise ValueError("Train dataset has infinite cardinality")
-        train = train.shuffle(
-            buffer_size=train_buffer_size,
-            seed=self.seed,
-            reshuffle_each_iteration=True,
-        ).batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        val = val.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        test = test.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
-        return DatasetSplits(train, val, test)
 
     def generate_gaussian_dataset(self,
         config_path: str | Path | None = None,

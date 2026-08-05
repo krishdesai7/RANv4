@@ -108,8 +108,8 @@ class TestGenerateGaussianDataset:
         ds = RAN_Dataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
         for features, y in splits.test:
-            z = features["z"].numpy()
-            x = features["x"].numpy()
+            z = features["z"]
+            x = features["x"]
             for d in range(2):
                 corr = np.corrcoef(z[:, d], x[:, d])[0, 1]
                 assert corr > 0.95, f"dim {d}: corr={corr}, expected >0.95"
@@ -159,3 +159,102 @@ def test_splits_from_arrays_builds_three_nonempty_splits():
         assert set(features.keys()) == {"z", "x"}
         assert features["z"].shape[-1] == 1
         assert labels.shape[0] > 0
+
+
+def _toy_splits(n=200, batch_size=32, **kwargs):
+    z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
+    x = -z
+    y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+    return RAN_Dataset(batch_size=batch_size, **kwargs).splits_from_arrays(z, x, y)
+
+
+class TestArrayDataset:
+    """Behaviour the tf.data pipeline used to provide."""
+
+    def test_splits_partition_events_without_overlap(self):
+        """Every event lands in exactly one split."""
+        splits = _toy_splits(n=200)
+        ids = [set(ds.as_arrays()[0].ravel().tolist()) for ds in splits]
+        assert sum(len(s) for s in ids) == 400
+        assert set.union(*ids) == set(range(400))
+        assert not (ids[0] & ids[1]) and not (ids[0] & ids[2]) and not (ids[1] & ids[2])
+
+    def test_default_split_fractions(self):
+        splits = _toy_splits(n=500)
+        assert splits.test.n_events == 200  # 20% of 1000
+        assert splits.val.n_events == 100  # 10% of 1000
+        assert splits.train.n_events == 700
+
+    def test_shuffle_interleaves_classes(self):
+        """Splits must not be single-class: data and MC arrive stacked."""
+        for ds in _toy_splits(n=500):
+            frac = float(ds.as_arrays()[2].mean())
+            assert 0.4 < frac < 0.6, f"class fraction {frac} — split is not mixed"
+
+    def test_z_and_x_stay_paired(self):
+        """Shuffling and splitting must not decouple particle/detector rows."""
+        for ds in _toy_splits(n=200):
+            z, x, _ = ds.as_arrays()
+            np.testing.assert_array_equal(x, -z)
+            for features, _ in ds:
+                np.testing.assert_array_equal(features["x"], -features["z"])
+
+    def test_batches_cover_split_and_keep_remainder(self):
+        """A short final batch is kept, not dropped."""
+        splits = _toy_splits(n=200, batch_size=32)
+        train = splits.train
+        assert train.n_events % 32 != 0, "test needs a ragged final batch"
+        sizes = [len(y) for _, y in train]
+        assert len(sizes) == len(train)
+        assert sum(sizes) == train.n_events
+        assert all(s == 32 for s in sizes[:-1]) and sizes[-1] == train.n_events % 32
+
+    def test_train_reshuffles_each_epoch_but_val_does_not(self):
+        splits = _toy_splits(n=200)
+        first = lambda ds: next(iter(ds))[0]["z"].ravel().copy()
+        assert not np.array_equal(first(splits.train), first(splits.train))
+        np.testing.assert_array_equal(first(splits.val), first(splits.val))
+
+    def test_reset_rewinds_the_shuffle_sequence(self):
+        """Two passes after a reset must repeat the first two exactly.
+
+        Without this, a second training run over the same splits would resume
+        mid-sequence and see different data — silently coupling the dataset
+        seed to how many runs preceded it.
+        """
+        train = _toy_splits(n=200).train
+        firsts = lambda: [next(iter(train))[0]["z"].ravel().copy() for _ in range(2)]
+        before = firsts()
+        assert not np.array_equal(before[0], before[1]), "passes should differ"
+        train.reset()
+        for a, b in zip(before, firsts()):
+            np.testing.assert_array_equal(a, b)
+
+    def test_shuffle_order_is_independent_of_other_iterations(self):
+        """Pass N's order depends only on (seed, N), not on who else iterated."""
+        a, b = _toy_splits(n=200).train, _toy_splits(n=200).train
+        for _ in range(3):  # advance `a` only
+            list(a)
+        a.reset()
+        np.testing.assert_array_equal(
+            next(iter(a))[0]["z"].ravel(), next(iter(b))[0]["z"].ravel()
+        )
+
+    def test_as_arrays_matches_iteration_for_ordered_splits(self):
+        val = _toy_splits(n=200).val
+        z_iter = np.concatenate([f["z"] for f, _ in val], axis=0)
+        np.testing.assert_array_equal(z_iter, val.as_arrays()[0])
+
+    def test_same_seed_gives_same_split(self):
+        a, b = _toy_splits(n=200, seed=7), _toy_splits(n=200, seed=7)
+        np.testing.assert_array_equal(a.test.as_arrays()[0], b.test.as_arrays()[0])
+
+    def test_mismatched_lengths_raise(self):
+        from ran.data.datasets import ArrayDataset
+
+        with pytest.raises(ValueError, match="first dimension"):
+            ArrayDataset(np.zeros((5, 1)), np.zeros((4, 1)), np.zeros(5, dtype=np.ubyte))
+
+    def test_too_few_events_to_split_raises(self):
+        with pytest.raises(ValueError, match="at least one event"):
+            _toy_splits(n=2)

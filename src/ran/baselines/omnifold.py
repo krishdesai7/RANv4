@@ -3,10 +3,25 @@
 Usage:
     python -m ran.baselines.omnifold --run_dir=runs/2026-...
     python -m ran.baselines.omnifold --run_dir=runs  # all runs
+
+RAN itself runs on the JAX backend, but the third-party `omnifold` package does
+not: its `weighted_binary_crossentropy` calls raw `tf.gather` on the label
+tensor, which raises `TracerArrayConversionError` the moment JAX traces it. So
+this module pins the backend back to TensorFlow.
+
+A process gets one Keras backend, set at first `keras` import, so this module
+has to be the entry point of its own process -- run it as `python -m
+ran.baselines.omnifold`, never import it from a module that has already touched
+JAX. `ran.experiments.cubic_sweep` keeps the two sides in separate subcommands
+for exactly this reason.
 """
 
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+# Must precede every keras import, including the transitive one via `ran`
+# (whose __init__ only *defaults* the backend to jax, so this hard set wins).
+os.environ["KERAS_BACKEND"] = "tensorflow"
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import json
 from pathlib import Path
@@ -79,10 +94,10 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
     # Collect all splits into flat arrays for OmniFold training
     zs, xs, ys = [], [], []
     for split in [splits.train, splits.val, splits.test]:
-        for features, y_batch in split:
-            zs.append(features["z"].numpy())
-            xs.append(features["x"].numpy())
-            ys.append(y_batch.numpy().reshape(-1))
+        z_split, x_split, y_split = split.as_arrays()
+        zs.append(z_split)
+        xs.append(x_split)
+        ys.append(y_split)
     z_all = np.concatenate(zs, axis=0)
     x_all = np.concatenate(xs, axis=0)
     y_all = np.concatenate(ys, axis=0)

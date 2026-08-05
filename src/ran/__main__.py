@@ -1,7 +1,3 @@
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -34,9 +30,20 @@ def main(
     hidden_units: int = 64,
     n_layers: int = 2,
     patience: int = 5,
+    seed: int | None = None,
+    data_seed: int = 42,
 ) -> None:
     """
     Main entry point.
+
+    Arguments:
+        seed: Weight-initialization seed. Omit to draw one from system entropy;
+            the value used is always recorded in config.json, so any run can be
+            reproduced afterwards. Vary this across runs (holding data_seed
+            fixed) to build an ensemble for model-uncertainty bands.
+        data_seed: Dataset seed, controlling generation, the shuffle, the
+            train/val/test split and the batch order. Keep fixed across an
+            ensemble so replicas differ only in initialization.
     """
     run_dir: Path
     splits: DatasetSplits
@@ -52,6 +59,8 @@ def main(
         n_samples = saved_config["n_samples"]
         batch_size = saved_config["batch_size"]
         dim = saved_config["dim"]
+        # Runs predating seed recording used the then-hardcoded default of 42.
+        data_seed = saved_config.get("data_seed", 42)
         if dataset == "jets":
             variables = tuple(saved_config["variables"])
 
@@ -63,7 +72,7 @@ def main(
             raw_params: dict[str, Any] = {
                 k: v for k, v in gaussian_params.items() if k != "dim"
             }
-            splits = RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
+            splits = RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
                 params=raw_params,
                 n_samples=n_samples,
             )
@@ -74,7 +83,7 @@ def main(
 
             gaussian_params = parse_gaussian_config(config)
             dim = gaussian_params["dim"]
-            splits = RAN_Dataset(batch_size=batch_size).generate_gaussian_dataset(
+            splits = RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
                 config_path=config,
                 n_samples=n_samples,
             )
@@ -84,6 +93,7 @@ def main(
             n_samples=n_samples,
             batch_size=batch_size,
             variables=variables,
+            seed=data_seed,
         )
         var_info = [
             VarInfo(
@@ -107,12 +117,14 @@ def main(
         print(f"Loaded run from {run_dir}")
     else:
         d: keras.Model
-        g, d, history = train(
+        init_seed: int
+        g, d, history, init_seed = train(
             splits,
             dim=dim,
             hidden_units=hidden_units,
             n_layers=n_layers,
             patience=patience,
+            seed=seed,
         )
 
         run_dir: Path = Path("runs") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -127,11 +139,15 @@ def main(
 
         # Save config — Gaussian params stored as covariance matrices
         # so runs are self-contained and reloadable without original YAML
+        # `seed` is the resolved weight-init seed, never None, so a run drawn
+        # from entropy is still reproducible via --seed after the fact.
         config_out: dict[str, Any] = {
             "batch_size": batch_size,
             "n_samples": n_samples,
             "dim": dim,
             "dataset": dataset,
+            "seed": init_seed,
+            "data_seed": data_seed,
         }
         if dataset == "gaussian" and gaussian_params is not None:
 

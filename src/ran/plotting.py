@@ -10,8 +10,9 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import figure, axes, font_manager, gridspec
 
-import tensorflow as tf
 import keras
+
+from ran.data import ArrayDataset
 
 mpl.rcParams["font.family"] = "serif"
 available_fonts: set[str] = {f.name for f in font_manager.fontManager.ttflist}
@@ -28,28 +29,16 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 
 
 def _collect_data(
-    dataset: tf.data.Dataset,
+    dataset: ArrayDataset,
 ) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
-    zs: list[npt.NDArray[np.double]] = []
-    xs: list[npt.NDArray[np.double]] = []
-    ys: list[npt.NDArray[np.ubyte]] = []
-
-    for features, y in dataset.as_numpy_iterator():
-        zs.append(features["z"])
-        xs.append(features["x"])
-        ys.append(y)
-
-    return (
-        np.concatenate(zs, axis=0),  # zs: (n_events, dim)
-        np.concatenate(xs, axis=0),  # xs: (n_events, dim)
-        np.concatenate(ys, axis=0).reshape(-1),  # ys: (n_events,)
-    )
+    # zs: (n_events, dim), xs: (n_events, dim), ys: (n_events,)
+    return dataset.as_arrays()
 
 
 def _get_weights(
     g: keras.Model, z_gen: npt.NDArray[np.double]
 ) -> npt.NDArray[np.double]:
-    raw_w: npt.NDArray[np.double] = g(z_gen).numpy().flatten()
+    raw_w: npt.NDArray[np.double] = np.asarray(g(z_gen)).flatten()
     return raw_w / raw_w.mean()
 
 
@@ -198,7 +187,7 @@ class VarInfo(TypedDict):
 
 
 def plot_detector_level(
-    test_dataset: tf.data.Dataset,
+    test_dataset: ArrayDataset,
     g: keras.Model,
     save_path: str | Path = "plots/detector_level.pdf",
     var_info: list[VarInfo] | None = None,
@@ -207,7 +196,7 @@ def plot_detector_level(
 ) -> None:
     """Generate detector level plots.
     Arguments:
-        test_dataset (tf.data.Dataset)
+        test_dataset (ArrayDataset)
         g (keras.Model): Generator model.
         save_path (str | Path)
         var_info: Per-variable plot config.
@@ -282,7 +271,7 @@ def plot_detector_level(
 
 
 def plot_particle_level(
-    test_dataset: tf.data.Dataset,
+    test_dataset: ArrayDataset,
     g: keras.Model,
     save_path: str | Path = "plots/particle_level.pdf",
     var_info: list[VarInfo] | None = None,
@@ -291,7 +280,7 @@ def plot_particle_level(
 ) -> None:
     """Generate particle level plots.
     Arguments:
-        test_dataset (tf.data.Dataset): Test dataset.
+        test_dataset (ArrayDataset): Test dataset.
         g (keras.Model): Generator model.
         save_path (str | Path): Save path.
         var_info: Per-variable plot config.

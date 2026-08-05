@@ -113,7 +113,9 @@ def _make_steps(
     arguments; each returned function is traced once per input shape.
     """
 
-    def _weights(g_trainable: list[Array], g_non_trainable: list[Array], z, y, training: bool):
+    def _weights(
+        g_trainable: list[Array], g_non_trainable: list[Array], z, y, training: bool
+    ):
         raw_w, g_non_trainable = g.stateless_call(
             g_trainable, g_non_trainable, z, training=training
         )

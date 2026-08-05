@@ -91,7 +91,9 @@ def test_run_ran_and_run_omnifold_see_identical_particles() -> None:
     assert a[0] == b[0]
 
 
-def _write_points(tmp_path, indices: list[int], s_values: list[float], ran=True, omnifold=True) -> None:
+def _write_points(
+    tmp_path, indices: list[int], s_values: list[float], ran=True, omnifold=True
+) -> None:
     for i, s in zip(indices, s_values, strict=False):
         if ran:
             (tmp_path / f"ran_{i:02d}.json").write_text(

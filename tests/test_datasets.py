@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import yaml
-from ran.data.datasets import DatasetSplits, RAN_Dataset
+from ran.data.datasets import ArrayDataset, DatasetSplits, RAN_Dataset
 
 if TYPE_CHECKING:
     from pathlib import Path

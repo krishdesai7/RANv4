@@ -5,18 +5,19 @@ from types import ModuleType
 import pytest
 from ran import cli
 from ran.cli import app, baseline_app, sweep_app
+from typer.main import Typer
 from typer.testing import CliRunner
 
 runner = CliRunner()
 
 
-def _command_names(typer_app):
+def _command_names(typer_app: Typer):
     command_names = {command.name for command in typer_app.registered_commands}
     group_names = {group.name for group in typer_app.registered_groups}
     return command_names | group_names
 
 
-def test_registered_command_trees_are_exact():
+def test_registered_command_trees_are_exact() -> None:
     assert _command_names(app) == {
         "train",
         "evaluate",
@@ -42,12 +43,12 @@ def test_registered_command_trees_are_exact():
     ],
     ids=lambda command: "-".join(command),
 )
-def test_every_leaf_command_has_help(command):
+def test_every_leaf_command_has_help(command) -> None:
     result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0
 
 
-def test_importing_cli_does_not_commit_a_keras_backend():
+def test_importing_cli_does_not_commit_a_keras_backend() -> None:
     completed = subprocess.run(
         [
             sys.executable,
@@ -61,7 +62,7 @@ def test_importing_cli_does_not_commit_a_keras_backend():
     assert completed.returncode == 0, completed.stderr
 
 
-def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path):
+def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> None:
     calls = []
     configured_levels = []
     fake_workflow = ModuleType("ran.workflow")

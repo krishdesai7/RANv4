@@ -14,7 +14,7 @@ def restore_root_logging():
     root.setLevel(old_level)
 
 
-def test_configure_logging_installs_one_rich_handler_and_level():
+def test_configure_logging_installs_one_rich_handler_and_level() -> None:
     from ran.logging_config import configure_logging
 
     configure_logging("debug")
@@ -25,7 +25,7 @@ def test_configure_logging_installs_one_rich_handler_and_level():
     assert isinstance(root.handlers[0], RichHandler)
 
 
-def test_configure_logging_is_deterministic_when_called_twice():
+def test_configure_logging_is_deterministic_when_called_twice() -> None:
     from ran.logging_config import configure_logging
 
     configure_logging("INFO")
@@ -37,7 +37,7 @@ def test_configure_logging_is_deterministic_when_called_twice():
     assert isinstance(root.handlers[0], RichHandler)
 
 
-def test_configure_logging_rejects_unknown_level():
+def test_configure_logging_rejects_unknown_level() -> None:
     from ran.logging_config import configure_logging
 
     with pytest.raises(ValueError, match="Unknown log level"):

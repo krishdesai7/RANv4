@@ -7,9 +7,11 @@ models. They do NOT train to convergence -- that is cluster work.
 import keras
 import numpy as np
 import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax before keras is imported
-from ran.data.datasets import RAN_Dataset
+from numpy import dtype, float64, ndarray
+from ran.data.datasets import DatasetSplits, RAN_Dataset
 from ran.train import (
     EPS,
+    TrainResult,
     TrainState,
     _make_steps,
     normalize_weights,
@@ -18,7 +20,7 @@ from ran.train import (
 )
 
 
-def test_backend_is_jax_with_float64_enabled():
+def test_backend_is_jax_with_float64_enabled() -> None:
     import jax.numpy as jnp
 
     assert keras.backend.backend() == "jax"
@@ -26,14 +28,14 @@ def test_backend_is_jax_with_float64_enabled():
 
 
 class TestNormalizeWeights:
-    def test_data_events_are_pinned_to_one(self):
+    def test_data_events_are_pinned_to_one(self) -> None:
         rng = np.random.default_rng(0)
         raw = rng.uniform(0.1, 3.0, size=64)
         y = (rng.random(64) < 0.5).astype(np.double)
         w = np.asarray(normalize_weights(raw, y))
         np.testing.assert_allclose(w[y == 1], 1.0)
 
-    def test_mc_weights_preserve_event_count(self):
+    def test_mc_weights_preserve_event_count(self) -> None:
         """Reweighted MC must keep the same total as unweighted MC."""
         rng = np.random.default_rng(1)
         raw = rng.uniform(0.1, 3.0, size=256)
@@ -41,7 +43,7 @@ class TestNormalizeWeights:
         w = np.asarray(normalize_weights(raw, y))
         np.testing.assert_allclose(w[y == 0].sum(), (y == 0).sum(), rtol=1e-9)
 
-    def test_mc_weights_stay_proportional_to_raw_output(self):
+    def test_mc_weights_stay_proportional_to_raw_output(self) -> None:
         rng = np.random.default_rng(2)
         raw = rng.uniform(0.1, 3.0, size=128)
         y = (rng.random(128) < 0.5).astype(np.double)
@@ -49,7 +51,7 @@ class TestNormalizeWeights:
         ratio = w[y == 0] / raw[y == 0]
         np.testing.assert_allclose(ratio, ratio[0], rtol=1e-9)
 
-    def test_generator_output_on_data_rows_cannot_change_the_result(self):
+    def test_generator_output_on_data_rows_cannot_change_the_result(self) -> None:
         """The z_true guard: g's output on y=1 rows must not affect any weight.
 
         Data rows carry z_true, so if poisoning g's output there moved the
@@ -67,7 +69,7 @@ class TestNormalizeWeights:
 
 
 class TestWeightedBCE:
-    def test_matches_numpy_reference_in_float64(self):
+    def test_matches_numpy_reference_in_float64(self) -> None:
         """Guards against float32 accumulation inside the reduction.
 
         `keras.ops.mean` picks a float32 compute dtype for float64 input, which
@@ -85,13 +87,13 @@ class TestWeightedBCE:
         got = float(weighted_bce(d_out, y, w))
         assert abs(got - expected) < 1e-15, f"{got!r} vs {expected!r}"
 
-    def test_perfect_classifier_scores_near_zero(self):
+    def test_perfect_classifier_scores_near_zero(self) -> None:
         y = np.array([1.0, 1.0, 0.0, 0.0])
         d_out = np.array([1.0, 1.0, 0.0, 0.0])
         w = np.ones(4)
         assert float(weighted_bce(d_out, y, w)) < 1e-6
 
-    def test_uninformative_classifier_scores_log2(self):
+    def test_uninformative_classifier_scores_log2(self) -> None:
         y = np.array([1.0, 1.0, 0.0, 0.0])
         d_out = np.full(4, 0.5)
         w = np.ones(4)
@@ -99,7 +101,7 @@ class TestWeightedBCE:
             float(weighted_bce(d_out, y, w)), np.log(2), atol=1e-6
         )
 
-    def test_zero_weight_events_are_ignored(self):
+    def test_zero_weight_events_are_ignored(self) -> None:
         rng = np.random.default_rng(5)
         d_out = rng.uniform(0.01, 0.99, size=8)
         y = (rng.random(8) < 0.5).astype(np.double)
@@ -115,7 +117,7 @@ class TestTrainSteps:
     """One real disc/gen update each, on tiny models."""
 
     @staticmethod
-    def _setup(dim=2, n=64):
+    def _setup(dim: int = 2, n: int = 64):
         from ran.models import build_discriminator, build_generator
 
         keras.utils.set_random_seed(0)
@@ -139,7 +141,7 @@ class TestTrainSteps:
         y = (rng.random(n) < 0.5).astype(np.double)
         return _make_steps(g, d, opt_g, opt_d), state, (z, x, y)
 
-    def test_disc_step_updates_only_the_discriminator(self):
+    def test_disc_step_updates_only_the_discriminator(self) -> None:
         (disc_step, _, _), state, batch = self._setup()
         new, loss = disc_step(state, *batch)
         assert np.isfinite(float(loss))
@@ -148,7 +150,7 @@ class TestTrainSteps:
         for before, after in zip(state.g_trainable, new.g_trainable, strict=False):
             np.testing.assert_array_equal(np.asarray(before), np.asarray(after))
 
-    def test_gen_step_updates_only_the_generator(self):
+    def test_gen_step_updates_only_the_generator(self) -> None:
         (_, gen_step, _), state, batch = self._setup()
         new, loss = gen_step(state, *batch)
         assert np.isfinite(float(loss))
@@ -157,13 +159,13 @@ class TestTrainSteps:
         for before, after in zip(state.d_trainable, new.d_trainable, strict=False):
             np.testing.assert_array_equal(np.asarray(before), np.asarray(after))
 
-    def test_gen_and_disc_losses_are_opposite(self):
+    def test_gen_and_disc_losses_are_opposite(self) -> None:
         (disc_step, gen_step, _eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
         _, g_loss = gen_step(state, *batch)
         np.testing.assert_allclose(float(g_loss), -float(d_loss), rtol=1e-12)
 
-    def test_eval_step_leaves_state_untouched_and_matches_disc_loss(self):
+    def test_eval_step_leaves_state_untouched_and_matches_disc_loss(self) -> None:
         (disc_step, _, eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
         np.testing.assert_allclose(
@@ -171,7 +173,7 @@ class TestTrainSteps:
         )
 
 
-def test_train_runs_and_returns_usable_models(tmp_path):
+def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     """A few epochs on a tiny problem: shapes, history, and a saveable model."""
     n = 512
     rng = np.random.default_rng(7)
@@ -201,7 +203,7 @@ def test_train_runs_and_returns_usable_models(tmp_path):
     np.testing.assert_allclose(np.asarray(reloaded(z_gen)), w, rtol=1e-12)
 
 
-def test_train_restores_best_weights_on_early_stop():
+def test_train_restores_best_weights_on_early_stop() -> None:
     """Early stopping must roll back to the best-val epoch, not the last one."""
     n = 512
     rng = np.random.default_rng(8)
@@ -222,7 +224,7 @@ class TestSeeding:
     """Weight-init seeding: reproducible runs that still ensemble."""
 
     @staticmethod
-    def _splits(n=384):
+    def _splits(n: int = 384) -> DatasetSplits:
         rng = np.random.default_rng(11)
         z = rng.normal(size=(2 * n, 1))
         x = z + rng.normal(0, 0.3, size=(2 * n, 1))
@@ -230,7 +232,7 @@ class TestSeeding:
         return RAN_Dataset(batch_size=128, seed=3).splits_from_arrays(z, x, y)
 
     @staticmethod
-    def _run(splits, seed):
+    def _run(splits: DatasetSplits, seed: int | None) -> TrainResult:
         return train(
             splits,
             dim=1,
@@ -241,7 +243,7 @@ class TestSeeding:
             seed=seed,
         )
 
-    def test_same_seed_reproduces_run_exactly(self):
+    def test_same_seed_reproduces_run_exactly(self) -> None:
         splits = self._splits()
         probe = np.linspace(-2, 2, 16).reshape(-1, 1)
         a, b = self._run(splits, 123), self._run(splits, 123)
@@ -249,14 +251,14 @@ class TestSeeding:
         np.testing.assert_array_equal(np.asarray(a.g(probe)), np.asarray(b.g(probe)))
         np.testing.assert_allclose(a.history["train_d"], b.history["train_d"], rtol=0)
 
-    def test_different_seeds_give_different_models(self):
+    def test_different_seeds_give_different_models(self) -> None:
         """The ensemble spread the HEP error estimate relies on."""
         splits = self._splits()
         probe = np.linspace(-2, 2, 16).reshape(-1, 1)
         a, b = self._run(splits, 1), self._run(splits, 2)
         assert not np.allclose(np.asarray(a.g(probe)), np.asarray(b.g(probe)))
 
-    def test_omitted_seed_is_drawn_and_reported(self):
+    def test_omitted_seed_is_drawn_and_reported(self) -> None:
         """A run left unseeded must still be reproducible after the fact."""
         splits = self._splits()
         drawn = self._run(splits, None)
@@ -269,12 +271,12 @@ class TestSeeding:
             np.asarray(drawn.g(probe)), np.asarray(replay.g(probe))
         )
 
-    def test_omitted_seed_varies_between_runs(self):
+    def test_omitted_seed_varies_between_runs(self) -> None:
         splits = self._splits()
         seeds = {self._run(splits, None).seed for _ in range(3)}
         assert len(seeds) == 3, f"entropy-drawn seeds collided: {seeds}"
 
-    def test_init_seed_does_not_disturb_batch_order(self):
+    def test_init_seed_does_not_disturb_batch_order(self) -> None:
         """The two randomness axes must stay independent.
 
         Batch order comes from the dataset's own generator, so changing the
@@ -282,7 +284,7 @@ class TestSeeding:
         """
         splits = self._splits()
 
-        def first_batch():
+        def first_batch() -> ndarray[tuple[int], dtype[float64]]:
             splits.train.reset()
             return next(iter(splits.train))[0]["z"].ravel().copy()
 

@@ -21,6 +21,8 @@ import jax
 import keras
 import numpy as np
 import numpy.typing as npt
+from jax._src.basearray import Array
+from jax._src.pjit import JitWrapped
 from keras import ops
 
 from ran.models import build_discriminator, build_generator
@@ -103,14 +105,14 @@ def _make_steps(
     d: keras.Model,
     opt_g: keras.optimizers.Optimizer,
     opt_d: keras.optimizers.Optimizer,
-):
+) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
     """Build the jitted disc/gen/eval steps, closing over the models.
 
     The models are captured rather than passed so jit sees only array
     arguments; each returned function is traced once per input shape.
     """
 
-    def _weights(g_trainable, g_non_trainable, z, y, training: bool):
+    def _weights(g_trainable: list[Array], g_non_trainable: list[Array], z, y, training: bool):
         raw_w, g_non_trainable = g.stateless_call(
             g_trainable, g_non_trainable, z, training=training
         )
@@ -203,7 +205,7 @@ def _as_batch(
 
 
 def _eval_dataset(
-    eval_step, state: TrainState, dataset: ArrayDataset
+    eval_step: JitWrapped, state: TrainState, dataset: ArrayDataset
 ) -> tuple[float, float]:
     """Mean weighted BCE over a split, as (d_loss, g_loss).
 

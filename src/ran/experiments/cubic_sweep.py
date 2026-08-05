@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
 from ran.data.datasets import RAN_Dataset
@@ -61,7 +62,7 @@ def unfolded_wasserstein(
     )
 
 
-def _sweep_point(s_index: int, n_points: int, n_samples: int, seed: int):
+def _sweep_point(s_index: int, n_points: int, n_samples: int, seed: int) -> tuple[float, ndarray, ndarray, ndarray, ndarray]:
     """Resolve one sweep point: its s, the fixed particles, and their response."""
     s = float(np.linspace(0.0, 20.0, n_points)[s_index])
     z_truth, z_gen = make_particles(n_samples, seed=seed)

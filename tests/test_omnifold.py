@@ -25,7 +25,7 @@ pytestmark = [
 ]
 
 
-def test_omnifold_unfold_returns_mean_normalized_weights():
+def test_omnifold_unfold_returns_mean_normalized_weights() -> None:
     from ran.baselines.omnifold import omnifold_unfold
 
     rng = np.random.default_rng(0)

@@ -18,6 +18,7 @@ from pathlib import Path
 import keras
 import numpy as np
 import numpy.typing as npt
+from numpy import ndarray
 from rich.console import Console
 from rich.table import Table
 from scipy.spatial.distance import jensenshannon
@@ -74,7 +75,7 @@ def _load_splits(config: dict) -> DatasetSplits:
     raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data(test_ds: ArrayDataset):
+def _collect_test_data(test_ds: ArrayDataset) -> tuple[ndarray, ndarray, ndarray]:
     """Return the test split as flat (z, x, y) arrays."""
     return test_ds.as_arrays()
 
@@ -98,7 +99,7 @@ def _wd_per_dim(
 ) -> list[float]:
     """1D Wasserstein distance per dimension using sorted-CDF fast path."""
     dim = ref.shape[1] if ref.ndim > 1 else 1
-    result = []
+    result: list[float] = []
     for i in range(dim):
         r = ref[:, i] if dim > 1 else ref.ravel()
         c = comp[:, i] if dim > 1 else comp.ravel()
@@ -117,7 +118,7 @@ def _js_per_dim(
     Returns JS divergence (squared JS distance) per dimension.
     """
     dim = ref.shape[1] if ref.ndim > 1 else 1
-    result = []
+    result: list[float] = []
     for i in range(dim):
         r = ref[:, i] if dim > 1 else ref.ravel()
         c = comp[:, i] if dim > 1 else comp.ravel()
@@ -161,7 +162,7 @@ def _triangular_per_dim(
     cancels analytically, so this works directly on normalized histograms.
     """
     dim = ref.shape[1] if ref.ndim > 1 else 1
-    result = []
+    result: list[float] = []
     for i in range(dim):
         r = ref[:, i] if dim > 1 else ref.ravel()
         c = comp[:, i] if dim > 1 else comp.ravel()

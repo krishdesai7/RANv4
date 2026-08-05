@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 import numpy as np
 
@@ -20,7 +21,7 @@ from ran.evaluate import (
 from ran.train import EPS
 
 if TYPE_CHECKING:
-    from typing import Any, Final
+    from typing import Any, Final, Literal
 
     from numpy.typing import NDArray
 
@@ -30,6 +31,95 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5, dtype=np.double)
+
+
+class MetricRecord(TypedDict):
+    wasserstein_before: float
+    wasserstein_after: float
+    wasserstein_improvement_pct: float
+    jensenshannon_before: float
+    jensenshannon_after: float
+    jensenshannon_improvement_pct: float
+    triangular_before: float
+    triangular_after: float
+    triangular_improvement_pct: float
+
+
+@dataclass(frozen=True)
+class IBUConfig:
+    source: dict[str, Any]
+    dataset: Literal["gaussian", "jets"]
+    dim: int
+    n_samples: int
+    batch_size: int
+    data_seed: int
+    variable_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VariableOutcome:
+    variable_name: str
+    status: Literal["completed", "skipped"]
+    n_bins: int
+    skip_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class IBUResult:
+    metrics: dict[str, MetricRecord]
+    variable_names: tuple[str, ...]
+    weights: NDArray[np.double]
+    outcomes: tuple[VariableOutcome, ...]
+
+
+def _positive_int(value: object, key: str) -> int:
+    if type(value) is not int or value <= 0:
+        raise ValueError(f"{key} must be a positive integer")
+    return value
+
+
+def _parse_config(raw: object) -> IBUConfig:
+    if not isinstance(raw, dict):
+        raise ValueError("IBU config must be a JSON object")  # ruff: ignore[type-check-without-type-error]
+
+    dim: int = _positive_int(raw.get("dim"), "dim")
+    n_samples: int = _positive_int(raw.get("n_samples"), "n_samples")
+    batch_size: int = _positive_int(raw.get("batch_size"), "batch_size")
+    data_seed: object = raw.get("data_seed", 42)
+    if type(data_seed) is not int:
+        raise ValueError("data_seed must be an integer")
+
+    dataset_raw: object = raw.get("dataset", "gaussian")
+    if dataset_raw == "gaussian":
+        dataset: Literal["gaussian", "jets"] = "gaussian"
+    elif dataset_raw == "jets":
+        dataset = "jets"
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_raw!r}")
+
+    if dataset == "gaussian":
+        variable_names: tuple[str, ...] = tuple(f"dim_{i}" for i in range(dim))
+    else:
+        variables: object = raw.get("variables")
+        if not isinstance(variables, (list, tuple)) or any(
+            not isinstance(name, str) or not name for name in variables
+        ):
+            raise ValueError("variables must be a sequence of nonempty strings")
+        variable_names = tuple(variables)
+        if len(variable_names) != dim:
+            raise ValueError(
+                f"variables has length {len(variable_names)}, expected dim={dim}"
+            )
+
+    return IBUConfig(
+        source=dict(raw),
+        dataset=dataset,
+        dim=dim,
+        n_samples=n_samples,
+        batch_size=batch_size,
+        data_seed=data_seed,
+        variable_names=variable_names,
+    )
 
 
 def _next_pure_edge(
@@ -350,7 +440,7 @@ def evaluate_single(
     )
     metrics: dict[str, Any]
     var_names: list[str]
-    per_var_weights: list[npt.NDArray[np.double]]
+    per_var_weights: list[NDArray[np.double]]
 
     metrics, var_names, per_var_weights = _run_and_evaluate(
         config,

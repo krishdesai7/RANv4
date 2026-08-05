@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import fire
 import numpy as np
 import numpy.typing as npt
 
@@ -31,9 +30,12 @@ from ran.evaluate import (
 from ran.train import EPS
 
 
+DEFAULT_PURITY_THRESHOLD = np.sqrt(0.5, dtype=np.double)
+
+
 def _purity_bins(
     gen: npt.NDArray[np.double], reco: npt.NDArray[np.double],
-    purity_threshold: np.double = np.sqrt(0.5, dtype=np.double), max_bins: int = 50,
+    purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD, max_bins: int = 50,
 ) -> npt.NDArray:
     """Determine bin edges where purity exceeds threshold.
 
@@ -224,7 +226,7 @@ def _run_and_evaluate(
 
 def evaluate_single(
     run_dir: str | Path, force: bool = False,
-    n_iterations: int = 10, purity_threshold: np.double = np.sqrt(0.5, dtype=np.double),
+    n_iterations: int = 10, purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, Any]:
     """Run IBU on a single RAN run's dataset and save comparison metrics."""
     run_dir = Path(run_dir)
@@ -253,9 +255,9 @@ def evaluate_single(
     return metrics
 
 
-def main(
+def evaluate_runs(
     run_dir: str | Path = "runs", force: bool = False,
-    n_iterations: int = 10, purity_threshold: np.double = np.sqrt(0.5, dtype=np.double),
+    n_iterations: int = 10, purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> None:
     """Run IBU baseline on completed RAN runs.
 
@@ -282,7 +284,3 @@ def main(
                                 purity_threshold=purity_threshold)
             except Exception as e:
                 print(f"  {d.name}: FAILED — {e}")
-
-
-if __name__ == "__main__":
-    fire.Fire(main)

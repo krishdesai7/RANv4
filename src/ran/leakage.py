@@ -1,13 +1,7 @@
 """Quick leakage check: poison z_true to a silly value and verify training is unaffected.
 
-Run both arms and compare:
-    python scripts/leakage_check.py --poison=False
-    python scripts/leakage_check.py --poison=True
-
-Both arms must use the same `init_seed` (they do by default) or the comparison
-is meaningless: with random initialization the run-to-run spread swamps the
-effect being tested, and the two arms differ visibly even when there is no
-leakage at all.
+Both arms must use the same `init_seed` or the comparison is meaningless: with
+random initialization the run-to-run spread swamps the effect being tested.
 """
 
 from typing import Any, Literal
@@ -16,7 +10,7 @@ import keras
 import numpy as np
 import numpy.typing as npt
 import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax; must precede `import keras`
-from fire import Fire
+
 from ran.data.datasets import RAN_Dataset
 from ran.evaluate import (
     _collect_test_data,
@@ -27,7 +21,7 @@ from ran.evaluate import (
 from ran.train import train
 
 
-def run(poison: bool, seed: int = 42, init_seed: int = 0) -> None:
+def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) -> None:
     _: Any
     tag: Literal["CLEAN", "POISONED"] = "POISONED" if poison else "CLEAN"
     print(
@@ -87,7 +81,3 @@ def run(poison: bool, seed: int = 42, init_seed: int = 0) -> None:
             f"  {level:>10}  Wasserstein: {wd_b:.4f} → {wd_a:.4f} ({_improvement(wd_b, wd_a):+.1f}%)"
             f"   Δ × 1e3: {td_b:.2f} → {td_a:.2f} ({_improvement(td_b, td_a):+.1f}%)"
         )
-
-
-if __name__ == "__main__":
-    Fire(run)

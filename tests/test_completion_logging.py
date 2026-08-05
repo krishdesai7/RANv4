@@ -39,7 +39,9 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
     )
 
 
-def test_evaluation_records_metrics_artifact_completion(monkeypatch, tmp_path, caplog) -> None:
+def test_evaluation_records_metrics_artifact_completion(
+    monkeypatch, tmp_path, caplog
+) -> None:
     import numpy as np
     from ran import evaluate
 

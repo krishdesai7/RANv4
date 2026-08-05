@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 import yaml
 from scipy.linalg import cholesky
 
+if TYPE_CHECKING:
+    from typing import Any
 
-def _scalar_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.double]:
+    from numpy.typing import NDArray
+
+
+def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """σ²I from a single sigma."""
     val: np.double = arr.ravel()[0]
     if val < 0:
@@ -15,9 +21,7 @@ def _scalar_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.
     return val**2 * np.identity(dim, dtype=np.double)
 
 
-def _diagonal_covariance(
-    arr: npt.NDArray[np.double], dim: int
-) -> npt.NDArray[np.double]:
+def _diagonal_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """diag(σ²) from a per-dimension sigma vector."""
     if arr.shape[0] != dim:
         raise ValueError(f"sigma vector has length {arr.shape[0]}, expected {dim = }")
@@ -26,7 +30,7 @@ def _diagonal_covariance(
     return np.diag(arr**2).astype(np.double)
 
 
-def _full_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.double]:
+def _full_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """An already-formed covariance matrix, checked for shape and symmetry."""
     if arr.shape != (dim, dim):
         raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
@@ -36,22 +40,12 @@ def _full_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.do
 
 
 def sigma_to_covariance(
-    sigma: float | list | npt.NDArray,
+    sigma: float | list | NDArray,
     dim: int,
-) -> npt.NDArray[np.double]:
-    """Promote sigma (scalar, vector, or matrix)
-    to a (dim, dim) covariance matrix,
-    where dim is the dimension of the data.
+) -> NDArray[np.double]:
+    arr: NDArray[np.double] = np.atleast_1d(np.asarray(sigma, dtype=np.double))
 
-    - scalar: σ²I
-    - (dim,) vector: diag(σ²)
-    - (dim, dim) matrix: used as-is
-
-    Validates positive-definiteness via Cholesky decomposition.
-    """
-    arr: npt.NDArray[np.double] = np.atleast_1d(np.asarray(sigma, dtype=np.double))
-
-    cov: npt.NDArray[np.double]
+    cov: NDArray[np.double]
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
         cov = _scalar_covariance(arr, dim)
     elif arr.ndim == 1:
@@ -89,20 +83,16 @@ def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
     if missing:
         raise ValueError(f"Config missing required keys: {missing}")
 
-    mu_gen: npt.NDArray[np.double] = np.asarray(raw["mu_gen"], dtype=np.double).ravel()
-    mu_true: npt.NDArray[np.double] = np.asarray(
-        raw["mu_true"], dtype=np.double
-    ).ravel()
+    mu_gen: NDArray[np.double] = np.asarray(raw["mu_gen"], dtype=np.double).ravel()
+    mu_true: NDArray[np.double] = np.asarray(raw["mu_true"], dtype=np.double).ravel()
 
     dim: int = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
         raise ValueError(f"mu_true has dim {mu_true.shape[0]}, mu_gen has {dim=}")
 
-    cov_gen: npt.NDArray[np.double] = sigma_to_covariance(raw["sigma_gen"], dim)
-    cov_true: npt.NDArray[np.double] = sigma_to_covariance(raw["sigma_true"], dim)
-    cov_detector: npt.NDArray[np.double] = sigma_to_covariance(
-        raw["sigma_detector"], dim
-    )
+    cov_gen: NDArray[np.double] = sigma_to_covariance(raw["sigma_gen"], dim)
+    cov_true: NDArray[np.double] = sigma_to_covariance(raw["sigma_true"], dim)
+    cov_detector: NDArray[np.double] = sigma_to_covariance(raw["sigma_detector"], dim)
 
     return {
         "dim": dim,

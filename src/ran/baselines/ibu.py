@@ -20,13 +20,14 @@ from ran.evaluate import (
 from ran.train import EPS
 
 if TYPE_CHECKING:
+    from logging import Logger
     from typing import Any, Final, Literal
 
     from numpy.typing import NDArray
 
     from ran.data import ArrayDataset, DatasetSplits
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(__name__)
 
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5, dtype=np.double)

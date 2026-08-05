@@ -60,6 +60,16 @@ class GaussianConfig(NamedTuple):
     cov_true: NDArray[np.double]
     cov_detector: NDArray[np.double]
 
+    def model_dump(self) -> dict[str, Any]:
+        return {
+            "dim": self.dim,
+            "mu_gen": self.mu_gen.tolist(),
+            "mu_true": self.mu_true.tolist(),
+            "cov_gen": self.cov_gen.tolist(),
+            "cov_true": self.cov_true.tolist(),
+            "cov_detector": self.cov_detector.tolist(),
+        }
+
 
 class DatasetSplits(NamedTuple):
     train: ArrayDataset
@@ -67,18 +77,22 @@ class DatasetSplits(NamedTuple):
     test: ArrayDataset
 
 
-REQUIRED_KEYS: Final[set[str]] = {
-    "mu_gen",
-    "mu_true",
-    "sigma_gen",
-    "sigma_true",
-    "sigma_detector",
-}
+REQUIRED_KEYS: Final[frozenset[str]] = frozenset(
+    (
+        "mu_gen",
+        "mu_true",
+        "sigma_gen",
+        "sigma_true",
+        "sigma_detector",
+    )
+)
 
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[str, str]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17
-SUBSTRUCTURE_VARIABLES: Final[set[str]] = {"m", "M", "w", "tau21", "zg", "sdm"}
+SUBSTRUCTURE_VARIABLES: Final[frozenset[str]] = frozenset(
+    ("m", "M", "w", "tau21", "zg", "sdm")
+)
 
 # Cache-safe filenames: avoid case collisions on case-insensitive filesystems
 # (macOS APFS default), where "m.npz" and "M.npz" resolve to the same path.

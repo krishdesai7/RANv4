@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+import ran.experiments.cubic_sweep as cs
+import ran.train
 from ran.experiments.cubic_sweep import (
+    _sweep_point,
+    collect,
     make_particles,
     response,
     unfolded_wasserstein,
 )
+from ran.rantypes import TrainResult
 from scipy.stats import wasserstein_distance
-
-if TYPE_CHECKING:
-    from ran.train import TrainResult
 
 
 def test_response_identity_at_zero() -> None:
@@ -52,14 +53,12 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
     fake and we only check that run_ran draws the right s, normalizes weights,
     computes the metric, and writes the JSON.
     """
-    import ran.experiments.cubic_sweep as cs
-    import ran.train
 
     def fake_train(_splits, *, seed=None, **_kwargs) -> TrainResult:
         # Generator returns uniform raw weights for any z (shape (n, 1)).
         # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
         # run_ran passes a seed through.
-        return ran.train.TrainResult(
+        return TrainResult(
             # TrainResult declares g/d as keras.Model; run_ran only calls g and
             # reads seed, so a lambda and None are enough to exercise it.
             g=lambda z: np.ones((len(z), 1)),  # ty:ignore[invalid-argument-type]
@@ -87,7 +86,6 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
 
 def test_run_ran_and_run_omnifold_see_identical_particles() -> None:
     """Both subcommands must unfold the same sample to be comparable."""
-    from ran.experiments.cubic_sweep import _sweep_point
 
     a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
     b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
@@ -111,7 +109,6 @@ def _write_points(
 
 
 def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path) -> None:
-    from ran.experiments.cubic_sweep import collect
 
     _write_points(tmp_path, [0, 1], [0.0, 10.0])
     collect(sweep_dir=tmp_path, n_points=2)
@@ -127,7 +124,6 @@ def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path) -> Non
 
 def test_collect_skips_points_missing_one_method(tmp_path, caplog) -> None:
     """A point where only one side finished must not be half-plotted."""
-    from ran.experiments.cubic_sweep import collect
 
     _write_points(tmp_path, [0], [0.0])
     _write_points(tmp_path, [1], [10.0], omnifold=False)  # RAN only
@@ -140,7 +136,6 @@ def test_collect_skips_points_missing_one_method(tmp_path, caplog) -> None:
 
 
 def test_collect_raises_when_no_point_is_complete(tmp_path) -> None:
-    from ran.experiments.cubic_sweep import collect
 
     _write_points(tmp_path, [0], [0.0], omnifold=False)
     with pytest.raises(FileNotFoundError, match="both"):

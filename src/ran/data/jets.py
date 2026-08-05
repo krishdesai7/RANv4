@@ -29,7 +29,7 @@ def load_jet_dataset(
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
-    variables: set[str] = SUBSTRUCTURE_VARIABLES,
+    variables: frozenset[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
 ) -> tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]:
     """Load jet substructure data and return DatasetSplits.

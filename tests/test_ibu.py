@@ -7,7 +7,7 @@ import pytest
 from ran.baselines import _shared as shared
 from ran.baselines import ibu
 from ran.data import ArrayDataset
-from ran.schema import DatasetSplits
+from ran.rantypes import DatasetSplits
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray

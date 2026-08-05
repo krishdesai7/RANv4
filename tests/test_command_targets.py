@@ -1,6 +1,7 @@
-def test_primary_workflow_has_a_domain_entry_point() -> None:
-    from ran.workflow import run
+from ran import run
 
+
+def test_primary_workflow_has_a_domain_entry_point() -> None:
     assert callable(run)
 
 

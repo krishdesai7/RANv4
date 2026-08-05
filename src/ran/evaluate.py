@@ -116,7 +116,7 @@ def _load_splits(config: dict) -> DatasetSplits:
         splits, _, _ = load_jet_dataset(
             n_samples=n_samples,
             batch_size=batch_size,
-            variables=set(config["variables"]),
+            variables=frozenset(config["variables"]),
             seed=data_seed,
         )
         return splits

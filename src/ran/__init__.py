@@ -50,3 +50,4 @@ from .plotting import plot_particle_level as plot_particle_level
 from .train import normalize_weights as normalize_weights
 from .train import train as train
 from .train import weighted_bce as weighted_bce
+from .workflow import run as run

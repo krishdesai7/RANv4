@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -194,6 +194,116 @@ class VarInfo(TypedDict):
     sigma: float
 
 
+class _PanelSpec(NamedTuple):
+    """Everything that varies between the panels of one figure."""
+
+    nature: npt.NDArray[np.double]
+    mc: npt.NDArray[np.double]
+    bins: npt.NDArray[np.double]
+    xlabel: str
+    title: str
+
+
+class _LevelStyle(NamedTuple):
+    """Everything that differs between the detector-level and particle-level figures."""
+
+    level: str  # "detector" / "particle", used in axis labels
+    symbol: str  # "x" / "z"
+    title_prefix: str  # "Detector Level" / "Particle Level"
+    nature_label: str  # legend entry for the reference sample
+    mc_label: str  # legend entry for the simulated sample
+    height_per_dim: float  # figure inches per dimension
+    bins_span_both: bool  # default binning covers both samples, not just nature
+
+
+_DETECTOR = _LevelStyle("detector", "x", "Detector Level", "Data", "Sim", 6, False)
+_PARTICLE = _LevelStyle("particle", "z", "Particle Level", "Truth", "Gen.", 10, True)
+
+
+def _panel_spec(
+    i: int,
+    dim: int,
+    nature: npt.NDArray[np.double],
+    mc: npt.NDArray[np.double],
+    var_info: list[VarInfo] | None,
+    style: _LevelStyle,
+) -> _PanelSpec:
+    """Decide what dimension `i` shows: the arrays, binning, and labels."""
+    if var_info:
+        cfg: VarInfo = var_info[i]
+        mu: float = cfg["mu"]
+        sigma: float = cfg["sigma"]
+        return _PanelSpec(
+            nature=nature[:, i] * sigma + mu,
+            mc=mc[:, i] * sigma + mu,
+            bins=np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21),
+            xlabel=cfg["symbol"],
+            title=f"{cfg['xlabel']} ({style.level} level)",
+        )
+
+    nature_i = nature[:, i]
+    mc_i = mc[:, i]
+    lo = min(nature_i.min(), mc_i.min()) if style.bins_span_both else nature_i.min()
+    hi = max(nature_i.max(), mc_i.max()) if style.bins_span_both else nature_i.max()
+    return _PanelSpec(
+        nature=nature_i,
+        mc=mc_i,
+        bins=np.linspace(lo, hi, 51),
+        xlabel=(
+            f"${style.symbol}_{{{i}}}$ ({style.level} level)"
+            if dim > 1
+            else f"{style.symbol} ({style.level} level)"
+        ),
+        title=(
+            f"{style.title_prefix} — Dim {i}" if dim > 1 else style.title_prefix
+        ),
+    )
+
+
+def _plot_level(
+    nature: npt.NDArray[np.double],
+    mc: npt.NDArray[np.double],
+    w: npt.NDArray[np.double],
+    style: _LevelStyle,
+    save_path: str | Path,
+    var_info: list[VarInfo] | None,
+    omnifold_weights: npt.NDArray[np.double] | None,
+    ibu_weights: list[npt.NDArray[np.double]] | None,
+) -> None:
+    """Draw one stacked hist+ratio panel per dimension and save the figure.
+
+    The detector-level and particle-level figures differ only in their data and
+    their `style`, so both entry points below funnel through here.
+    """
+    dim: int = nature.shape[1]
+    fig: figure.Figure = plt.figure(figsize=(8, style.height_per_dim * dim))
+    outer_grid: gridspec.GridSpec = fig.add_gridspec(dim, 1, hspace=0.35)
+    for i in range(dim):
+        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
+            2, 1, height_ratios=[3, 1], hspace=0.0
+        )
+        ax: axes.Axes = fig.add_subplot(inner_grid[0])
+        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
+        ax.tick_params(labelbottom=False)
+
+        panel = _panel_spec(i, dim, nature, mc, var_info, style)
+        _hist_ratio_panel(
+            ax,
+            ax_r,
+            x_nature=panel.nature,
+            x_mc=panel.mc,
+            w_ran=w,
+            bins=panel.bins.tolist(),
+            nature_label=style.nature_label,
+            mc_label=style.mc_label,
+            xlabel=panel.xlabel,
+            title=panel.title,
+            w_omnifold=omnifold_weights,
+            w_ibu=ibu_weights[i] if ibu_weights is not None else None,
+        )
+    _save_fig(fig, Path(save_path))
+
+
 def plot_detector_level(
     test_dataset: ArrayDataset,
     g: keras.Model,
@@ -216,66 +326,16 @@ def plot_detector_level(
     y: npt.NDArray[np.ubyte]
     z, x, y = _collect_data(test_dataset)
 
-    x_data: npt.NDArray[np.double] = x[y == 1]
-    x_sim: npt.NDArray[np.double] = x[y == 0]
-    z_gen: npt.NDArray[np.double] = z[y == 0]
-    w: npt.NDArray[np.double] = _get_weights(g, z_gen)
-
-    save_path = Path(save_path)
-    dim: int = x.shape[1]
-    fig: figure.Figure
-    outer_grid: gridspec.GridSpec
-    fig = plt.figure(figsize=(8, 6 * dim))
-    outer_grid = fig.add_gridspec(dim, 1, hspace=0.35)
-    for i in range(dim):
-        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
-            2, 1, height_ratios=[3, 1], hspace=0.0
-        )
-        ax: axes.Axes = fig.add_subplot(inner_grid[0])
-        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
-        ax.tick_params(labelbottom=False)
-
-        x_nature: npt.NDArray[np.double]
-        x_mc: npt.NDArray[np.double]
-        bins: npt.NDArray[np.double]
-        xlabel: str
-        title: str
-        if var_info:
-            cfg: VarInfo = var_info[i]
-            mu: float = cfg["mu"]
-            sigma: float = cfg["sigma"]
-            x_nature = x_data[:, i] * sigma + mu
-            x_mc = x_sim[:, i] * sigma + mu
-            bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
-            xlabel = cfg["symbol"]
-            title = f"{cfg['xlabel']} (detector level)"
-        else:
-            x_nature = x_data[:, i]
-            x_mc = x_sim[:, i]
-            bins = np.linspace(x_nature.min(), x_nature.max(), 51)
-            xlabel = (
-                f"$x_{{{i}}}$ (detector level)" if dim > 1 else "x (detector level)"
-            )
-            title = f"Detector Level — Dim {i}" if dim > 1 else "Detector Level"
-
-        ibu_w_i: npt.NDArray[np.double] | None = (
-            ibu_weights[i] if ibu_weights is not None else None
-        )
-        _hist_ratio_panel(
-            ax,
-            ax_r,
-            x_nature=x_nature,
-            x_mc=x_mc,
-            w_ran=w,
-            bins=bins.tolist(),
-            nature_label="Data",
-            mc_label="Sim",
-            xlabel=xlabel,
-            title=title,
-            w_omnifold=omnifold_weights,
-            w_ibu=ibu_w_i,
-        )
-    _save_fig(fig, save_path)
+    _plot_level(
+        nature=x[y == 1],
+        mc=x[y == 0],
+        w=_get_weights(g, z[y == 0]),
+        style=_DETECTOR,
+        save_path=save_path,
+        var_info=var_info,
+        omnifold_weights=omnifold_weights,
+        ibu_weights=ibu_weights,
+    )
 
 
 def plot_particle_level(
@@ -300,66 +360,16 @@ def plot_particle_level(
     y: npt.NDArray[np.ubyte]
     z, _, y = _collect_data(test_dataset)
 
-    z_true: npt.NDArray[np.double] = z[y == 1]
-    z_gen: npt.NDArray[np.double] = z[y == 0]
-    w: npt.NDArray[np.double] = _get_weights(g, z_gen)
-
-    save_path = Path(save_path)
-    dim: int = z.shape[1]
-    fig: figure.Figure = plt.figure(figsize=(8, 10 * dim))
-    outer_grid: gridspec.GridSpec = fig.add_gridspec(dim, 1, hspace=0.35)
-    for i in range(dim):
-        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
-            2, 1, height_ratios=[3, 1], hspace=0.0
-        )
-        ax: axes.Axes = fig.add_subplot(inner_grid[0])
-        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
-        ax.tick_params(labelbottom=False)
-
-        z_nature: npt.NDArray[np.double]
-        z_mc: npt.NDArray[np.double]
-        bins: npt.NDArray[np.double]
-        xlabel: str
-        title: str
-
-        if var_info:
-            cfg: VarInfo = var_info[i]
-            mu: float = cfg["mu"]
-            sigma: float = cfg["sigma"]
-            z_nature = z_true[:, i] * sigma + mu
-            z_mc = z_gen[:, i] * sigma + mu
-            bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
-            xlabel = cfg["symbol"]
-            title = f"{cfg['xlabel']} (particle level)"
-        else:
-            z_nature = z_true[:, i]
-            z_mc = z_gen[:, i]
-            lo: float = min(z_nature.min(), z_mc.min())
-            hi: float = max(z_nature.max(), z_mc.max())
-            bins = np.linspace(lo, hi, 51)
-            xlabel = (
-                f"$z_{{{i}}}$ (particle level)" if dim > 1 else "z (particle level)"
-            )
-            title = f"Particle Level — Dim {i}" if dim > 1 else "Particle Level"
-
-        ibu_w_i: npt.NDArray[np.double] | None = (
-            ibu_weights[i] if ibu_weights is not None else None
-        )
-        _hist_ratio_panel(
-            ax,
-            ax_r,
-            x_nature=z_nature,
-            x_mc=z_mc,
-            w_ran=w,
-            bins=bins.tolist(),
-            nature_label="Truth",
-            mc_label="Gen.",
-            xlabel=xlabel,
-            title=title,
-            w_omnifold=omnifold_weights,
-            w_ibu=ibu_w_i,
-        )
-    _save_fig(fig, save_path)
+    _plot_level(
+        nature=z[y == 1],
+        mc=z[y == 0],
+        w=_get_weights(g, z[y == 0]),
+        style=_PARTICLE,
+        save_path=save_path,
+        var_info=var_info,
+        omnifold_weights=omnifold_weights,
+        ibu_weights=ibu_weights,
+    )
 
 
 def plot_losses(

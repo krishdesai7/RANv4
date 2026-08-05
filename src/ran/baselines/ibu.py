@@ -39,6 +39,29 @@ logger = logging.getLogger(__name__)
 DEFAULT_PURITY_THRESHOLD = np.sqrt(0.5, dtype=np.double)
 
 
+def _next_pure_edge(
+    gen: npt.NDArray[np.double],
+    reco: npt.NDArray[np.double],
+    lo: np.double,
+    purity_threshold: np.double,
+) -> np.double | None:
+    """Lowest edge above `lo` whose bin clears the purity threshold, else None.
+
+    Scans 100 candidate edges between `lo` and the top of the gen range,
+    returning the first that qualifies. None means no bin starting at `lo` is
+    ever pure enough, which is what stops the caller's loop.
+    """
+    for binhigh in np.linspace(lo + 0.01, gen.max(), 100, dtype=np.double):
+        in_truth = (gen >= lo) & (gen < binhigh)
+        n_truth = np.sum(in_truth)
+        if n_truth == 0:
+            continue
+        purity = np.sum(in_truth & (reco >= lo) & (reco < binhigh)) / n_truth
+        if purity > purity_threshold:
+            return binhigh
+    return None
+
+
 def _purity_bins(
     gen: npt.NDArray[np.double],
     reco: npt.NDArray[np.double],
@@ -55,21 +78,11 @@ def _purity_bins(
     binvals: list[np.double] = [gen.min()]
     i = 0
     while binvals[-1] < gen.max() and i < len(binvals) and len(binvals) <= max_bins:
-        found = False
-        for binhigh in np.linspace(binvals[i] + 0.01, gen.max(), 100, dtype=np.double):
-            in_truth = (gen >= binvals[i]) & (gen < binhigh)
-            n_truth = np.sum(in_truth)
-            if n_truth > 0:
-                purity = (
-                    np.sum(in_truth & (reco >= binvals[i]) & (reco < binhigh)) / n_truth
-                )
-                if purity > purity_threshold:
-                    binvals.append(binhigh)
-                    i += 1
-                    found = True
-                    break
-        if not found:
+        edge = _next_pure_edge(gen, reco, binvals[i], purity_threshold)
+        if edge is None:
             break
+        binvals.append(edge)
+        i += 1
     return np.array(binvals)
 
 

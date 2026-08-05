@@ -7,6 +7,36 @@ import yaml
 from scipy.linalg import cholesky
 
 
+def _scalar_covariance(
+    arr: npt.NDArray[np.double], dim: int
+) -> npt.NDArray[np.double]:
+    """σ²I from a single sigma."""
+    val: np.double = arr.ravel()[0]
+    if val < 0:
+        raise ValueError(f"sigma scalar must be non-negative, got {val}")
+    return val**2 * np.identity(dim, dtype=np.double)
+
+
+def _diagonal_covariance(
+    arr: npt.NDArray[np.double], dim: int
+) -> npt.NDArray[np.double]:
+    """diag(σ²) from a per-dimension sigma vector."""
+    if arr.shape[0] != dim:
+        raise ValueError(f"sigma vector has length {arr.shape[0]}, expected {dim = }")
+    if np.any(arr < 0):
+        raise ValueError("sigma vector elements must be non-negative")
+    return np.diag(arr**2).astype(np.double)
+
+
+def _full_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.double]:
+    """An already-formed covariance matrix, checked for shape and symmetry."""
+    if arr.shape != (dim, dim):
+        raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
+    if not np.allclose(arr, arr.T):
+        raise ValueError("sigma matrix must be symmetric")
+    return arr
+
+
 def sigma_to_covariance(
     sigma: float | list | npt.NDArray,
     dim: int,
@@ -25,24 +55,11 @@ def sigma_to_covariance(
 
     cov: npt.NDArray[np.double]
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
-        val: np.double = arr.ravel()[0]
-        if val < 0:
-            raise ValueError(f"sigma scalar must be non-negative, got {val}")
-        cov = val**2 * np.identity(dim, dtype=np.double)
+        cov = _scalar_covariance(arr, dim)
     elif arr.ndim == 1:
-        if arr.shape[0] != dim:
-            raise ValueError(
-                f"sigma vector has length {arr.shape[0]}, expected {dim = }"
-            )
-        if np.any(arr < 0):
-            raise ValueError("sigma vector elements must be non-negative")
-        cov = np.diag(arr**2).astype(np.double)
+        cov = _diagonal_covariance(arr, dim)
     elif arr.ndim == 2:
-        if arr.shape != (dim, dim):
-            raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
-        if not np.allclose(arr, arr.T):
-            raise ValueError("sigma matrix must be symmetric")
-        cov = arr
+        cov = _full_covariance(arr, dim)
     else:
         raise ValueError(f"sigma must be 0D, 1D, or 2D, got {arr.ndim = }")
 

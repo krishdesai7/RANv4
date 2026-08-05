@@ -18,13 +18,17 @@ import fire
 import numpy as np
 import numpy.typing as npt
 
+from ran.data import DatasetSplits
 from ran.evaluate import (
-    _load_splits, _collect_test_data,
-    _wd_per_dim, _js_per_dim, _triangular_per_dim,
-    _improvement, _print_metrics,
+    _collect_test_data,
+    _improvement,
+    _js_per_dim,
+    _load_splits,
+    _print_metrics,
+    _triangular_per_dim,
+    _wd_per_dim,
 )
 from ran.train import EPS
-from ran.data import DatasetSplits
 
 
 def _purity_bins(
@@ -192,8 +196,8 @@ def _run_and_evaluate(
         key: str
 
         for level, ref, comp in [
-            ("detector", x_data_t[:, d:d+1], x_mc_t[:, d:d+1]),
-            ("particle", z_data_t[:, d:d+1], z_mc_t[:, d:d+1]),
+            ("detector", x_data_t[:, d:d + 1], x_mc_t[:, d:d + 1]),
+            ("particle", z_data_t[:, d:d + 1], z_mc_t[:, d:d + 1]),
         ]:
             wd_before = _wd_per_dim(ref, comp)
             wd_after = _wd_per_dim(ref, comp, weights=w)
@@ -243,7 +247,7 @@ def evaluate_single(
     json.dump(metrics, out_path.open("w"), indent=2)
     np.savez(
         run_dir / "ibu_weights.npz",
-        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)}, # type: ignore
+        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # type: ignore
     )
     _print_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
     return metrics

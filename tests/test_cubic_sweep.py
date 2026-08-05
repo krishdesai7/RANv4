@@ -1,13 +1,13 @@
 import json
+
 import numpy as np
 import pytest
-from scipy.stats import wasserstein_distance
-
 from ran.experiments.cubic_sweep import (
-    response,
     make_particles,
+    response,
     unfolded_wasserstein,
 )
+from scipy.stats import wasserstein_distance
 
 
 def test_response_identity_at_zero():
@@ -66,7 +66,8 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch):
     assert out["s"] == float(np.linspace(0.0, 20.0, 25)[3])
     assert np.isfinite(out["ran_wd"])
     # Both seeds recorded, so the point can be reproduced from its own JSON.
-    assert out["seed"] == 0 and out["init_seed"] == 5
+    assert out["seed"] == 0
+    assert out["init_seed"] == 5
 
     assert json.loads((tmp_path / "ran_03.json").read_text()) == out
 

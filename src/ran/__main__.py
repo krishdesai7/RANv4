@@ -1,23 +1,23 @@
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-import json
+
 import fire
-
-from ran.data import DatasetSplits, RAN_Dataset, load_jet_dataset, JET_OBS
-from ran.evaluate import evaluate_run
-from ran.data.config import parse_gaussian_config
-from ran.train import train
-from ran.plotting import (
-    plot_detector_level,
-    plot_particle_level,
-    plot_losses,
-    VarInfo,
-)
-
 import keras
 import numpy as np
 import numpy.typing as npt
+
+from ran.data import JET_OBS, DatasetSplits, RAN_Dataset, load_jet_dataset
+from ran.data.config import parse_gaussian_config
+from ran.evaluate import evaluate_run
+from ran.plotting import (
+    VarInfo,
+    plot_detector_level,
+    plot_losses,
+    plot_particle_level,
+)
+from ran.train import train
 
 
 def main(
@@ -127,7 +127,7 @@ def main(
             seed=seed,
         )
 
-        run_dir: Path = Path("runs") / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+        run_dir: Path = Path("runs") / datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
         run_dir.mkdir(parents=True, exist_ok=True)
 
         g.save(run_dir / "generator.keras")

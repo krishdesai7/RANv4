@@ -27,10 +27,10 @@ import json
 from pathlib import Path
 
 import fire
+import keras
 import numpy as np
 import numpy.typing as npt
-import keras
-from omnifold import MultiFold, DataLoader, MLP
+from omnifold import MLP, DataLoader, MultiFold
 from omnifold.net import weighted_binary_crossentropy
 
 # OmniFold's custom loss isn't registered with Keras serialization,
@@ -38,9 +38,13 @@ from omnifold.net import weighted_binary_crossentropy
 keras.saving.get_custom_objects()["weighted_binary_crossentropy"] = weighted_binary_crossentropy
 
 from ran.evaluate import (
-    _load_splits, _collect_test_data,
-    _wd_per_dim, _js_per_dim, _triangular_per_dim,
-    _improvement, _print_metrics,
+    _collect_test_data,
+    _improvement,
+    _js_per_dim,
+    _load_splits,
+    _print_metrics,
+    _triangular_per_dim,
+    _wd_per_dim,
 )
 
 

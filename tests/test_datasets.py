@@ -1,9 +1,8 @@
-import numpy as np
-import pytest
 from pathlib import Path
 
+import numpy as np
+import pytest
 import yaml
-
 from ran.data.datasets import RAN_Dataset
 
 
@@ -177,7 +176,9 @@ class TestArrayDataset:
         ids = [set(ds.as_arrays()[0].ravel().tolist()) for ds in splits]
         assert sum(len(s) for s in ids) == 400
         assert set.union(*ids) == set(range(400))
-        assert not (ids[0] & ids[1]) and not (ids[0] & ids[2]) and not (ids[1] & ids[2])
+        assert not (ids[0] & ids[1])
+        assert not (ids[0] & ids[2])
+        assert not (ids[1] & ids[2])
 
     def test_default_split_fractions(self):
         splits = _toy_splits(n=500)
@@ -207,7 +208,8 @@ class TestArrayDataset:
         sizes = [len(y) for _, y in train]
         assert len(sizes) == len(train)
         assert sum(sizes) == train.n_events
-        assert all(s == 32 for s in sizes[:-1]) and sizes[-1] == train.n_events % 32
+        assert all(s == 32 for s in sizes[:-1])
+        assert sizes[-1] == train.n_events % 32
 
     def test_train_reshuffles_each_epoch_but_val_does_not(self):
         splits = _toy_splits(n=200)

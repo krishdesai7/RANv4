@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
 import yaml
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
+
 
 class TestSigmaToCovariance:
     """Test the three sigma forms: scalar, vector, matrix."""

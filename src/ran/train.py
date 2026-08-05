@@ -213,6 +213,38 @@ def _as_batch(
     )
 
 
+def _run_epoch(
+    state: TrainState,
+    train_ds: ArrayDataset,
+    disc_step: JitWrapped,
+    gen_step: JitWrapped,
+    n_disc_steps: int,
+) -> tuple[TrainState, float, float]:
+    """One pass over the training split; returns the new state and mean losses.
+
+    `d` updates every batch and `g` every `n_disc_steps`-th batch -- the usual
+    adversarial cadence, giving the discriminator a head start each round. The
+    generator loss is negated back to d's sign convention so the two curves stay
+    directly comparable in the history.
+
+    Losses are reduced to plain floats so every history series has one element
+    type (`np.mean` would give np.floating).
+    """
+    d_losses: list[float] = []
+    g_losses: list[float] = []
+    for step, (features, y) in enumerate(train_ds):
+        z, x, y_f = _as_batch(features, y)
+
+        state, d_loss = disc_step(state, z, x, y_f)
+        d_losses.append(float(d_loss))
+
+        if step % n_disc_steps == 0:
+            state, g_loss = gen_step(state, z, x, y_f)
+            g_losses.append(-float(g_loss))
+
+    return state, float(np.mean(d_losses)), float(np.mean(g_losses))
+
+
 def _eval_dataset(
     eval_step: JitWrapped, state: TrainState, dataset: ArrayDataset
 ) -> tuple[float, float]:
@@ -311,22 +343,9 @@ def train(
     wait: int = 0
 
     for epoch in range(n_epochs):
-        d_losses: list[float] = []
-        g_losses: list[float] = []
-        for step, (features, y) in enumerate(splits.train):
-            z, x, y_f = _as_batch(features, y)
-
-            state, d_loss = disc_step(state, z, x, y_f)
-            d_losses.append(float(d_loss))
-
-            if step % n_disc_steps == 0:
-                state, g_loss = gen_step(state, z, x, y_f)
-                g_losses.append(-float(g_loss))
-
-        # Narrowed to plain float so every history series has one element type;
-        # the val losses below are already floats.
-        mean_td: float = float(np.mean(d_losses))
-        mean_tg: float = float(np.mean(g_losses))
+        state, mean_td, mean_tg = _run_epoch(
+            state, splits.train, disc_step, gen_step, n_disc_steps
+        )
         mean_val: tuple[float, float] = _eval_dataset(eval_step, state, splits.val)
 
         history["train_d"].append(mean_td)

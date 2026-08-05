@@ -117,7 +117,7 @@ def _save_run(
         run_dir / "history.npz",
         # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
         # key could in principle be "allow_pickle", which is declared bool.
-        **{k: np.array(v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]
+        **{k: np.array(v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
     )
 
     config_out: dict[str, Any] = {
@@ -142,6 +142,16 @@ def _save_run(
     json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
     logger.info("Saved run to %s", run_dir)
     return run_dir
+
+
+def _load_artifacts(run_dir: Path) -> tuple[keras.Model, dict[str, list[float]]]:
+    """Reload a finished run's generator and training history."""
+    g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
+    history: dict[str, list[float]] = {
+        k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
+    }
+    logger.info("Loaded run from %s", run_dir)
+    return g, history
 
 
 def _load_baseline_weights(
@@ -219,13 +229,11 @@ def run(
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
+    g: keras.Model
+    history: dict[str, list[float]]
     if load_run is not None:
         run_dir = Path(load_run)
-        g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
-        history: dict[str, list[float]] = {
-            k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
-        }
-        logger.info("Loaded run from %s", run_dir)
+        g, history = _load_artifacts(run_dir)
     else:
         d: keras.Model
         init_seed: int

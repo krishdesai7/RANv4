@@ -115,8 +115,8 @@ def _save_run(
     d.save(run_dir / "discriminator.keras")
     np.savez(
         run_dir / "history.npz",
-        # See ran.baselines.ibu: **dict into savez trips the stub's
-        # `allow_pickle` parameter rather than its **kwds catch-all.
+        # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
+        # key could in principle be "allow_pickle", which is declared bool.
         **{k: np.array(v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]
     )
 

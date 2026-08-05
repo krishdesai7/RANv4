@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import yaml
+from numpy import dtype, float64, ndarray
 from ran.data.datasets import ArrayDataset, DatasetSplits, RAN_Dataset
 
 if TYPE_CHECKING:
@@ -224,7 +225,7 @@ class TestArrayDataset:
     def test_train_reshuffles_each_epoch_but_val_does_not(self) -> None:
         splits = _toy_splits(n=200)
 
-        def first(ds: ArrayDataset):
+        def first(ds: ArrayDataset) -> ndarray[tuple[int], dtype[float64]]:
             return next(iter(ds))[0]["z"].ravel().copy()
 
         assert not np.array_equal(first(splits.train), first(splits.train))

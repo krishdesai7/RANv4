@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 runner = CliRunner()
 
 
-def _command_names(typer_app: Typer):
+def _command_names(typer_app: Typer) -> set[str | None]:
     command_names = {command.name for command in typer_app.registered_commands}
     group_names = {group.name for group in typer_app.registered_groups}
     return command_names | group_names

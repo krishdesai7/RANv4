@@ -11,7 +11,6 @@ import keras
 import numpy as np
 import numpy.typing as npt
 
-import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax; must precede `import keras`
 from ran.data.datasets import RAN_Dataset
 from ran.evaluate import (
     _collect_test_data,

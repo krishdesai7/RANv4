@@ -255,9 +255,16 @@ def evaluate_single(
     )
 
     json.dump(metrics, out_path.open("w"), indent=2)
+    weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
-        run_dir / "ibu_weights.npz",
+        weights_path,
         **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # type: ignore
+    )
+    logger.info(
+        "%s: saved IBU metrics to %s and weights to %s",
+        run_dir.name,
+        out_path,
+        weights_path,
     )
     render_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
     return metrics

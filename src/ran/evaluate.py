@@ -234,6 +234,7 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
             }
 
     json.dump(metrics, out_path.open("w"), indent=2)
+    logger.info("%s: saved metrics to %s", run_dir.name, out_path)
     render_metrics(run_dir.name, metrics, var_names)
     return metrics
 

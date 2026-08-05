@@ -180,7 +180,14 @@ def evaluate_single(run_dir: str | Path, force: bool = False,
     metrics, var_names, w = _run_and_evaluate(config, niter=niter, epochs=epochs)
 
     json.dump(metrics, out_path.open("w"), indent=2)
-    np.savez(run_dir / "omnifold_weights.npz", weights=w)
+    weights_path = run_dir / "omnifold_weights.npz"
+    np.savez(weights_path, weights=w)
+    logger.info(
+        "%s: saved OmniFold metrics to %s and weights to %s",
+        run_dir.name,
+        out_path,
+        weights_path,
+    )
     render_metrics(f"{run_dir.name} [OmniFold]", metrics, var_names)
     return metrics
 

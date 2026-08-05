@@ -34,7 +34,7 @@ def test_render_metrics_outputs_named_columns_and_values():
 
 
 def test_download_file_updates_a_rich_progress_task(monkeypatch, tmp_path):
-    import ran.data.download as download
+    from ran.data import download
 
     completed = []
 

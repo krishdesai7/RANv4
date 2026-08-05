@@ -1,11 +1,10 @@
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import] -- import isolation
 import sys
 from types import ModuleType
 
-from typer.testing import CliRunner
-
-import ran.cli as cli
+from ran import cli
 from ran.cli import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -49,7 +48,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path):
     calls = []
     configured_levels = []
     fake_workflow = ModuleType("ran.workflow")
-    fake_workflow.run = lambda **kwargs: calls.append(kwargs)
+    fake_workflow.__dict__["run"] = lambda **kwargs: calls.append(kwargs)
     monkeypatch.setitem(sys.modules, "ran.workflow", fake_workflow)
     monkeypatch.setattr(cli, "configure_logging", configured_levels.append)
 

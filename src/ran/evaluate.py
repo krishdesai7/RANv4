@@ -11,9 +11,12 @@ Usage:
     uv run -m ran evaluate --force                  # recompute existing
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import keras
 import numpy as np
@@ -26,7 +29,39 @@ from scipy.stats import wasserstein_distance
 
 from ran.data import ArrayDataset, DatasetSplits, RANDataset
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
 logger = logging.getLogger(__name__)
+
+
+def apply_to_runs(
+    run_dir: str | Path,
+    evaluate_one: Callable[[Path], object],
+    description: str,
+    log: logging.Logger,
+) -> None:
+    """Apply `evaluate_one` to a single run directory, or to every run inside one.
+
+    A directory is a run if it holds a config.json; otherwise it is treated as a
+    parent of runs. In the multi-run case one failure is logged and skipped
+    rather than abandoning the remaining runs -- the baselines are long jobs and
+    a partial sweep is more useful than none.
+    """
+    run_dir = Path(run_dir)
+    if (run_dir / "config.json").exists():
+        evaluate_one(run_dir)
+        return
+
+    run_dirs = sorted(
+        d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
+    )
+    log.info("Found %d runs to %s", len(run_dirs), description)
+    for d in run_dirs:
+        try:
+            evaluate_one(d)
+        except Exception:
+            log.warning("%s: failed", d.name, exc_info=True)
 
 
 def _load_splits(config: dict) -> DatasetSplits:
@@ -107,6 +142,39 @@ def _wd_per_dim(
     return result
 
 
+def _normalized_histograms(
+    ref: npt.NDArray,
+    comp: npt.NDArray,
+    weights: npt.NDArray | None = None,
+    n_bins: int = 100,
+) -> Iterator[tuple[npt.NDArray[np.double], npt.NDArray[np.double]]]:
+    """Yield the (p, q) probability histograms for each dimension of ref/comp.
+
+    Both histograms share one binning per dimension -- `n_bins` uniform bins
+    over the combined range -- which is what makes the divergences below
+    comparable across dimensions. `weights` reweights `comp` only, and an
+    all-zero histogram is left unnormalized rather than divided by zero.
+    """
+    dim = ref.shape[1] if ref.ndim > 1 else 1
+    for i in range(dim):
+        r = ref[:, i] if dim > 1 else ref.ravel()
+        c = comp[:, i] if dim > 1 else comp.ravel()
+
+        bins = np.linspace(min(r.min(), c.min()), max(r.max(), c.max()), n_bins + 1)
+        # weights=None is np.histogram's own default, so the unweighted and
+        # weighted cases need no branch here.
+        h_ref = np.histogram(r, bins=bins)[0].astype(np.double)
+        h_comp = np.histogram(c, bins=bins, weights=weights)[0].astype(np.double)
+
+        s_ref = h_ref.sum()
+        s_comp = h_comp.sum()
+        if s_ref > 0:
+            h_ref /= s_ref
+        if s_comp > 0:
+            h_comp /= s_comp
+        yield h_ref, h_comp
+
+
 def _js_per_dim(
     ref: npt.NDArray,
     comp: npt.NDArray,
@@ -117,35 +185,10 @@ def _js_per_dim(
 
     Returns JS divergence (squared JS distance) per dimension.
     """
-    dim = ref.shape[1] if ref.ndim > 1 else 1
-    result: list[float] = []
-    for i in range(dim):
-        r = ref[:, i] if dim > 1 else ref.ravel()
-        c = comp[:, i] if dim > 1 else comp.ravel()
-
-        lo = min(r.min(), c.min())
-        hi = max(r.max(), c.max())
-        bins = np.linspace(lo, hi, n_bins + 1)
-
-        h_ref, _ = np.histogram(r, bins=bins)
-        if weights is not None:
-            h_comp, _ = np.histogram(c, bins=bins, weights=weights)
-        else:
-            h_comp, _ = np.histogram(c, bins=bins)
-
-        # Normalize to probability distributions
-        h_ref = h_ref.astype(np.float64)
-        h_comp = h_comp.astype(np.float64)
-        s_ref = h_ref.sum()
-        s_comp = h_comp.sum()
-        if s_ref > 0:
-            h_ref /= s_ref
-        if s_comp > 0:
-            h_comp /= s_comp
-
-        # JS divergence = (JS distance)^2
-        result.append(float(jensenshannon(h_ref, h_comp) ** 2))
-    return result
+    return [
+        float(jensenshannon(p, q) ** 2)
+        for p, q in _normalized_histograms(ref, comp, weights, n_bins)
+    ]
 
 
 def _triangular_per_dim(
@@ -161,35 +204,11 @@ def _triangular_per_dim(
     where p_i, q_i are histogram probability masses. The bin-width factor
     cancels analytically, so this works directly on normalized histograms.
     """
-    dim = ref.shape[1] if ref.ndim > 1 else 1
     result: list[float] = []
-    for i in range(dim):
-        r = ref[:, i] if dim > 1 else ref.ravel()
-        c = comp[:, i] if dim > 1 else comp.ravel()
-
-        lo = min(r.min(), c.min())
-        hi = max(r.max(), c.max())
-        bins = np.linspace(lo, hi, n_bins + 1)
-
-        h_ref, _ = np.histogram(r, bins=bins)
-        if weights is not None:
-            h_comp, _ = np.histogram(c, bins=bins, weights=weights)
-        else:
-            h_comp, _ = np.histogram(c, bins=bins)
-
-        # Normalize to probability mass
-        h_ref = h_ref.astype(np.float64)
-        h_comp = h_comp.astype(np.float64)
-        s_ref = h_ref.sum()
-        s_comp = h_comp.sum()
-        if s_ref > 0:
-            h_ref /= s_ref
-        if s_comp > 0:
-            h_comp /= s_comp
-
-        denom = h_ref + h_comp
+    for p, q in _normalized_histograms(ref, comp, weights, n_bins):
+        denom = p + q
         mask = denom > 0
-        diff = h_ref - h_comp
+        diff = p - q
         result.append(float(np.sum(diff[mask] ** 2 / denom[mask]) * 1e3))
     return result
 
@@ -312,17 +331,4 @@ def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
         run_dir: Path to a single run or a directory containing multiple runs.
         force: Recompute even if metrics.json already exists.
     """
-    run_dir = Path(run_dir)
-
-    if (run_dir / "config.json").exists():
-        evaluate_run(run_dir, force=force)
-    else:
-        run_dirs = sorted(
-            d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
-        )
-        logger.info("Found %d runs to evaluate", len(run_dirs))
-        for d in run_dirs:
-            try:
-                evaluate_run(d, force=force)
-            except Exception:
-                logger.warning("%s: failed", d.name, exc_info=True)
+    apply_to_runs(run_dir, lambda d: evaluate_run(d, force=force), "evaluate", logger)

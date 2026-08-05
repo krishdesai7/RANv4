@@ -25,6 +25,7 @@ from ran.evaluate import (
     _load_splits,
     _triangular_per_dim,
     _wd_per_dim,
+    apply_to_runs,
     render_metrics,
 )
 from ran.train import EPS
@@ -322,27 +323,14 @@ def evaluate_runs(
         n_iterations: Number of IBU iterations.
         purity_threshold: Purity threshold for automatic binning.
     """
-    run_dir = Path(run_dir)
-
-    if (run_dir / "config.json").exists():
-        evaluate_single(
-            run_dir,
+    apply_to_runs(
+        run_dir,
+        lambda d: evaluate_single(
+            d,
             force=force,
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
-        )
-    else:
-        run_dirs: list[Path] = sorted(
-            d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
-        )
-        logger.info("Found %d runs to evaluate with IBU", len(run_dirs))
-        for d in run_dirs:
-            try:
-                evaluate_single(
-                    d,
-                    force=force,
-                    n_iterations=n_iterations,
-                    purity_threshold=purity_threshold,
-                )
-            except Exception:
-                logger.warning("%s: failed", d.name, exc_info=True)
+        ),
+        "evaluate with IBU",
+        logger,
+    )

@@ -21,13 +21,14 @@ import jax
 import keras
 import numpy as np
 import numpy.typing as npt
-from jax._src.basearray import Array
-from jax._src.pjit import JitWrapped
 from keras import ops
 
 from ran.models import build_discriminator, build_generator
 
 if TYPE_CHECKING:
+    from jax._src.basearray import Array
+    from jax._src.pjit import JitWrapped
+
     from ran.data import ArrayDataset, DatasetSplits
 
 logger = logging.getLogger(__name__)

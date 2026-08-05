@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- import isolation
 import sys
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
 from ran import cli
 from ran.cli import app, baseline_app, sweep_app
-from typer.main import Typer
 from typer.testing import CliRunner
+
+if TYPE_CHECKING:
+    from typer.main import Typer
 
 runner = CliRunner()
 

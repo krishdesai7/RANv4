@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import pytest
 from scipy.stats import wasserstein_distance
 
 from ran.experiments.cubic_sweep import (
@@ -38,56 +39,65 @@ def test_unfolded_wasserstein_uniform_weights_equals_unweighted():
     np.testing.assert_allclose(got, expected, rtol=1e-12)
 
 
-class _FakeTensor:
-    """Minimal stand-in for a Keras tensor: only needs .numpy()."""
+def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch):
+    """Verify run_ran's orchestration WITHOUT training any models.
 
-    def __init__(self, arr):
-        self._arr = arr
-
-    def numpy(self):
-        return self._arr
-
-
-def test_run_point_wiring_with_stubbed_training(tmp_path, monkeypatch):
-    """Verify run_point's orchestration WITHOUT training any models.
-
-    Real RAN/OmniFold training is cluster work; here we stub train() and
-    omnifold_unfold() with instant fakes and only check that run_point draws
-    the right s, normalizes weights, computes both metrics, and writes the JSON.
+    Real RAN training is cluster work; here train() is stubbed with an instant
+    fake and we only check that run_ran draws the right s, normalizes weights,
+    computes the metric, and writes the JSON.
     """
     import ran.experiments.cubic_sweep as cs
+    import ran.train
 
-    def fake_train(splits, dim=1, n_epochs=100):
+    def fake_train(splits, dim=1, n_epochs=100, seed=None):
         # Generator returns uniform raw weights for any z (shape (n, 1)).
-        def g(z):
-            return _FakeTensor(np.ones((len(z), 1)))
+        return ran.train.TrainResult(
+            g=lambda z: np.ones((len(z), 1)), d=None, history=None, seed=seed or 0
+        )
 
-        return g, None, None
+    # run_ran imports train() lazily from ran.train, so patch it at the source.
+    monkeypatch.setattr(ran.train, "train", fake_train)
 
-    def fake_omnifold(x_data, x_sim, z_gen, niter=3, epochs=50, batch_size=512):
-        return np.ones(len(z_gen))
-
-    monkeypatch.setattr(cs, "train", fake_train)
-    monkeypatch.setattr(cs, "omnifold_unfold", fake_omnifold)
-
-    out = cs.run_point(s_index=3, sweep_dir=tmp_path, n_samples=2000, n_points=25, seed=0)
+    out = cs.run_ran(
+        s_index=3, sweep_dir=tmp_path, n_samples=2000, n_points=25, seed=0, init_seed=5
+    )
 
     assert out["s_index"] == 3
     assert out["s"] == float(np.linspace(0.0, 20.0, 25)[3])
     assert np.isfinite(out["ran_wd"])
-    assert np.isfinite(out["omnifold_wd"])
+    # Both seeds recorded, so the point can be reproduced from its own JSON.
+    assert out["seed"] == 0 and out["init_seed"] == 5
 
-    written = json.loads((tmp_path / "s_03.json").read_text())
-    assert written == out
+    assert json.loads((tmp_path / "ran_03.json").read_text()) == out
 
 
-def test_collect_writes_results_and_plot(tmp_path):
+def test_run_ran_and_run_omnifold_see_identical_particles():
+    """Both subcommands must unfold the same sample to be comparable."""
+    from ran.experiments.cubic_sweep import _sweep_point
+
+    a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
+    b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
+    for lhs, rhs in zip(a[1:], b[1:]):
+        np.testing.assert_array_equal(lhs, rhs)
+    assert a[0] == b[0]
+
+
+def _write_points(tmp_path, indices, s_values, ran=True, omnifold=True):
+    for i, s in zip(indices, s_values):
+        if ran:
+            (tmp_path / f"ran_{i:02d}.json").write_text(
+                json.dumps({"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1)})
+            )
+        if omnifold:
+            (tmp_path / f"omnifold_{i:02d}.json").write_text(
+                json.dumps({"s_index": i, "s": s, "omnifold_wd": 0.2 * (i + 1)})
+            )
+
+
+def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path):
     from ran.experiments.cubic_sweep import collect
 
-    for i, s in enumerate([0.0, 10.0]):
-        rec = {"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1), "omnifold_wd": 0.2 * (i + 1)}
-        (tmp_path / f"s_{i:02d}.json").write_text(json.dumps(rec))
-
+    _write_points(tmp_path, [0, 1], [0.0, 10.0])
     collect(sweep_dir=tmp_path, n_points=2)
 
     assert (tmp_path / "results.npz").exists()
@@ -97,3 +107,24 @@ def test_collect_writes_results_and_plot(tmp_path):
     np.testing.assert_array_equal(data["s"], [0.0, 10.0])
     np.testing.assert_allclose(data["ran"], [0.1, 0.2])
     np.testing.assert_allclose(data["omnifold"], [0.2, 0.4])
+
+
+def test_collect_skips_points_missing_one_method(tmp_path, capsys):
+    """A point where only one side finished must not be half-plotted."""
+    from ran.experiments.cubic_sweep import collect
+
+    _write_points(tmp_path, [0], [0.0])
+    _write_points(tmp_path, [1], [10.0], omnifold=False)  # RAN only
+    collect(sweep_dir=tmp_path, n_points=2)
+
+    data = np.load(tmp_path / "results.npz")
+    np.testing.assert_array_equal(data["s"], [0.0])
+    assert "missing s_index values" in capsys.readouterr().out
+
+
+def test_collect_raises_when_no_point_is_complete(tmp_path):
+    from ran.experiments.cubic_sweep import collect
+
+    _write_points(tmp_path, [0], [0.0], omnifold=False)
+    with pytest.raises(FileNotFoundError, match="both"):
+        collect(sweep_dir=tmp_path, n_points=1)

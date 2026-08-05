@@ -1,32 +1,148 @@
+[build-system]
+requires = ["uv_build>=0.11.30,<0.12"]
+build-backend = "uv_build"
+
+
 [project]
-name = "ranv4"
-version = "0.1.0"
+name = "ran"
+version = "0.1.5"
 description = "Reweighting Adversarial Networks"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fire>=0.7.1",
+    "jax>=0.11.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "jax[cuda12]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
     "keras>=3.13.2",
     "matplotlib>=3.10.8",
     "numpy>=2.4.3",
     "omnifold>=0.1.36",
     "pyyaml>=6.0",
     "scipy>=1.15.0",
+    # TensorFlow is here only for `omnifold`, which hard-depends on it and whose
+    # loss calls raw tf ops (so it must run under KERAS_BACKEND=tensorflow --
+    # see ran/baselines/omnifold.py). No first-party RAN module imports it.
     "tensorflow>=2.21.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "tensorflow[and-cuda]>=2.21.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 
+[project.urls]
+repository = "https://github.com/krishdesai7/RANv4"
+Changelog = "https://github.com/krishdesai7/RANv4/blob/main/CHANGELOG.md"
+Releases = "https://github.com/krishdesai7/RANv4/releases"
+
+[[project.authors]]
+name = "Krish Desai"
+email = "krish@desai.ml"
+
+
 [dependency-groups]
 dev = [
+    "complexipy>=6.2.0",
     "ipykernel>=7.2.0",
+    "pyrefly>=1.2.0",
     "pytest>=8.0",
+    "ruff>=0.16.1",
+    "rust-just>=1.58.0",
+]
+release = [
+    "rooster>=0.1.1",
 ]
 
-[tool.pytest.ini_options]
-pythonpath = ["."]
 
 [tool.uv]
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
+required-version = ">=0.11.30"
+preview-features = true
+cache-keys = [
+    { file = "pyproject.toml" },
+]
+
+[tool.uv.build-backend]
+editable-profile = "dev"
+module-name = "ran"
+
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+
+[tool.pyrefly]
+python-interpreter-path = ".venv/bin/python"
+search-path = ["."]
+site-package-path = []
+check-unannotated-defs = true
+infer-return-types = "checked"
+
+
+[tool.ruff]
+src = ["."]
+line-length = 88
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+future-annotations = true
+preview = true
+extend-select = [
+    "B",   # flake8-bugbear: likely bugs / footguns
+    "I",   # isort-style import checks
+    "UP",  # pyupgrade: modern Python syntax
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes (catches undefined variables, broken logic, unused imports)
+    "C90", # mccabe: Cyclomatic complexity limits (keeps functions small and readable)
+    "N",   # pep8-naming: Enforces PEP 8 naming conventions (PascalCase classes, snake_case functions)
+    "ASYNC", # flake8-async: Catches bad async programming practices and deadlocks
+    "S",   # flake8-bandit: Security auditing (e.g., hardcoded credentials, unsafe temp files)
+    "A",   # flake8-builtins: Prevents shadowing built-in names (e.g., re-defining `id`, `list`, or `format`)
+    "FA",  # flake8-future-annotations: Enforces modern postponed annotations behavior
+    "PIE", # flake8-pie: Code simplification suggestions
+    "PT",  # flake8-pytest-style: Enforces idiomatic pytest fixture/assertion style
+    "RET", # flake8-return: Simplifies return statements (removes unnecessary else/elif blocks)
+    "SIM", # flake8-simplify: Refactors unnecessarily complex logic into cleaner idiomatic Python
+    "ARG", # flake8-unused-arguments: Flags unused function arguments
+    "PTH", # flake8-use-pathlib: Forces the use of modern `pathlib.Path` over legacy `os.path`
+    "PGH", # pygrep-hooks: Prevents generic blanket `# type: ignore` or `# noqa` directives without specific error codes
+    "RUF", # Ruff-specific rules: Catches edge-cases, invalid regexes, and native Ruff optimization hints
+    "PERF", # Perflint: Highlights performance anti-patterns in loops and data structures
+    "FURB", # refurb: Modernizes older idiom patterns to modern Python standards
+    "T20",  # (flake8-print): Disallows print() statements in production code. Useful if you want to force all output through logging or dedicated output pipelines.
+    "LOG",  # (flake8-logging): Flags logging anti-patterns (such as string formatting inside logger calls instead of passing lazy arguments).
+    "TCH",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["assert"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+
+[tool.rooster]
+changelog-contributors = false
+major-labels = []
+minor-labels = ["breaking"]
+ignore-labels = ["internal", "ci", "testing", "automations"]
+
+[tool.rooster.section-labels]
+"Breaking changes" = ["breaking"]
+"Enhancements" = ["enhancement", "compatibility", "error messages"]
+"Preview features" = ["preview"]
+"Configuration" = ["configuration"]
+"Performance" = ["performance"]
+"Bug fixes" = ["bug"]
+"Rust API" = ["rustlib"]
+"Documentation" = ["documentation"]
+"Other changes" = ["__unknown__"]
+
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+stubPath = ""
+extraPaths = []

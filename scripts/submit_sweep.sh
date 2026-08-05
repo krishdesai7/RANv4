@@ -48,16 +48,21 @@ cd "${PROJECT_DIR}"
 step="srun --exact --nodes=1 --ntasks=1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56G"
 
 for i in $(seq 0 $((N_POINTS - 1))); do
-  # Fan out one point per GPU; capture its log so a crash in one point is easy to
-  # find and never sinks the others (collect tolerates missing s_*.json files).
-  $step uv run -m ran.experiments.cubic_sweep run_point \
-      --s_index="${i}" --sweep_dir="${SWEEP_DIR}" --n_points="${N_POINTS}" \
-      > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
+  # RAN (JAX) and OmniFold (TensorFlow) cannot share a process -- one Keras
+  # backend per interpreter -- so each point is two sequential subcommands in
+  # one GPU step. Capture the log so a crash in one point is easy to find and
+  # never sinks the others (collect tolerates missing point files).
+  $step bash -c "
+      uv run -m ran.experiments.cubic_sweep run_ran \
+          --s_index='${i}' --sweep_dir='${SWEEP_DIR}' --n_points='${N_POINTS}'
+      uv run -m ran.experiments.cubic_sweep run_omnifold \
+          --s_index='${i}' --sweep_dir='${SWEEP_DIR}' --n_points='${N_POINTS}'
+    " > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
 
   # Throttle to GPUS_TOTAL concurrent steps; start the next as soon as one frees
   # a GPU (dynamic, so an uneven 25-over-16 split wastes no idle GPU time).
   # `|| true`: a point that crashes must not abort the sweep under set -e — it
-  # just leaves its s_*.json missing, and collect tolerates the gap.
+  # just leaves its point file missing, and collect tolerates the gap.
   while (( $(jobs -rp | wc -l) >= GPUS_TOTAL )); do
     wait -n || true
   done
@@ -65,8 +70,8 @@ for i in $(seq 0 $((N_POINTS - 1))); do
 done
 wait || true  # let the final wave of points finish (ignore individual failures)
 
-# Gather all s_*.json into results.npz + wasserstein_vs_s.pdf (runs on the head
-# node of the allocation; afterany-style resilience is built into collect).
+# Join the per-method point files into results.npz + wasserstein_vs_s.pdf (runs
+# on the head node of the allocation; resilience to gaps is built into collect).
 uv run -m ran.experiments.cubic_sweep collect --sweep_dir="${SWEEP_DIR}" --n_points="${N_POINTS}"
 EOF
 )

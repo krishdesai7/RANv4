@@ -10,9 +10,6 @@ Usage:
     python -m ran.baselines.ibu --run_dir=runs  # all runs
 """
 
-import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 import json
 from pathlib import Path
 from typing import Any
@@ -114,10 +111,10 @@ def _run_and_evaluate(
     xs: list[npt.NDArray[np.double]] = []
     ys: list[npt.NDArray[np.double]] = []
     for split in [splits.train, splits.val, splits.test]:
-        for features, y_batch in split:
-            zs.append(features["z"].numpy())
-            xs.append(features["x"].numpy())
-            ys.append(y_batch.numpy().reshape(-1))
+        z_split, x_split, y_split = split.as_arrays()
+        zs.append(z_split)
+        xs.append(x_split)
+        ys.append(y_split)
     z_all: npt.NDArray[np.double] = np.concatenate(zs, axis=0)
     x_all: npt.NDArray[np.double] = np.concatenate(xs, axis=0)
     y_all: npt.NDArray[np.double] = np.concatenate(ys, axis=0)

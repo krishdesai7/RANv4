@@ -2,8 +2,8 @@
 
 Checks .cache/ for per-variable .npz files. If missing, invokes
 download_jet_data to fetch from Zenodo. Loads, subsamples, z-score
-standardizes (using MC gen-level statistics only), and builds a
-tf.data.Dataset via RAN_Dataset.
+standardizes (using MC gen-level statistics only), and builds the
+train/val/test splits via RAN_Dataset.
 """
 
 from pathlib import Path
@@ -32,6 +32,7 @@ def load_jet_dataset(
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
     variables: tuple[str, ...] = SUBSTRUCTURE_VARIABLES,
+    seed: int = 42,
 ) -> tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]:
     """Load jet substructure data and return DatasetSplits.
 
@@ -42,9 +43,12 @@ def load_jet_dataset(
 
     Args:
         n_samples: Number of events to use per class (data and MC).
-        batch_size: Batch size for tf.data.Dataset.
+        batch_size: Batch size for the returned splits.
         cache_dir: Directory containing per-variable .npz files.
         variables: Which substructure variables to use.
+        seed: Dataset seed, controlling the shuffle, the train/val/test split
+            and the per-epoch batch order. Independent of the weight-init seed
+            passed to `train`.
 
     Returns:
         (splits, dim, std_params): DatasetSplits, feature dimensionality,
@@ -101,7 +105,5 @@ def load_jet_dataset(
         np.zeros(n_samples, dtype=np.ubyte),
     ])
 
-    ds = RAN_Dataset(batch_size=batch_size)
-    ds.dataset = ds._build_dataset(z, x, y)
-    ds.splits = ds._split_dataset(ds.dataset)
-    return ds.splits, n_features, std_params
+    splits = RAN_Dataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
+    return splits, n_features, std_params

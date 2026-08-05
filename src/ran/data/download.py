@@ -99,6 +99,37 @@ def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:
     raise ValueError(f"Unknown variable '{var}'")
 
 
+def _ensure_shard(path: Path, gen: str, idx: int, progress: Progress) -> None:
+    """Download one shard unless it is already cached."""
+    if path.exists():
+        logger.info("%s: already downloaded", path.name)
+        return
+    task_id = progress.add_task(path.name, total=None)
+    _download_file(_download_url(gen, idx), path, progress, task_id)
+    progress.remove_task(task_id)
+
+
+def _fetch_generator(
+    gen: str, cache_dir: Path, progress: Progress, all_raw_paths: list[Path]
+) -> dict[str, npt.NDArray]:
+    """Fetch every shard for one generator and concatenate the keys we need.
+
+    Appends each shard path to `all_raw_paths` so the caller can delete the raw
+    downloads once the per-variable caches have been written.
+    """
+    logger.info("Downloading %s (%d files)", gen, N_FILES)
+    arrays: dict[str, list[npt.NDArray]] = {}
+    for i in range(N_FILES):
+        path = cache_dir / f"{gen}_Zjet_pTZ-200GeV_{i}.npz"
+        all_raw_paths.append(path)
+        _ensure_shard(path, gen, i, progress)
+        with np.load(path) as f:
+            for key in _NEEDED_KEYS:
+                if key in f:
+                    arrays.setdefault(key, []).append(f[key])
+    return {k: np.concatenate(v, axis=0) for k, v in arrays.items()}
+
+
 def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
     """Download Pythia26/Herwig data from Zenodo, extract variables, save to cache."""
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -108,27 +139,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
 
     with Progress() as progress:
         for gen in GENERATORS:
-            logger.info("Downloading %s (%d files)", gen, N_FILES)
-
-            arrays: dict[str, list[npt.NDArray]] = {}
-
-            for i in range(N_FILES):
-                path = cache_dir / f"{gen}_Zjet_pTZ-200GeV_{i}.npz"
-                all_raw_paths.append(path)
-
-                if not path.exists():
-                    task_id = progress.add_task(path.name, total=None)
-                    _download_file(_download_url(gen, i), path, progress, task_id)
-                    progress.remove_task(task_id)
-                else:
-                    logger.info("%s: already downloaded", path.name)
-
-                with np.load(path) as f:
-                    for key in _NEEDED_KEYS:
-                        if key in f:
-                            arrays.setdefault(key, []).append(f[key])
-
-            raw_data[gen] = {k: np.concatenate(v, axis=0) for k, v in arrays.items()}
+            raw_data[gen] = _fetch_generator(gen, cache_dir, progress, all_raw_paths)
             n_events = len(next(iter(raw_data[gen].values())))
             logger.info("%s: %d events loaded", gen, n_events)
 

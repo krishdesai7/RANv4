@@ -20,7 +20,6 @@ Usage:
 import json
 from pathlib import Path
 
-import fire
 import numpy as np
 import numpy.typing as npt
 from scipy.stats import wasserstein_distance
@@ -229,10 +228,4 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
     print(
         f"Wrote {sweep_dir / 'results.npz'} and "
         f"{sweep_dir / 'wasserstein_vs_s.pdf'} ({len(complete)} points)"
-    )
-
-
-if __name__ == "__main__":
-    fire.Fire(
-        {"run_ran": run_ran, "run_omnifold": run_omnifold, "collect": collect}
     )

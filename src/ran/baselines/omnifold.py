@@ -26,7 +26,6 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import json
 from pathlib import Path
 
-import fire
 import keras
 import numpy as np
 import numpy.typing as npt
@@ -180,8 +179,12 @@ def evaluate_single(run_dir: str | Path, force: bool = False,
     return metrics
 
 
-def main(run_dir: str = "runs", force: bool = False,
-         niter: int = 3, epochs: int = 50):
+def evaluate_runs(
+    run_dir: str | Path = "runs",
+    force: bool = False,
+    niter: int = 3,
+    epochs: int = 50,
+) -> None:
     """Run OmniFold baseline on completed RAN runs.
 
     Args:
@@ -205,7 +208,3 @@ def main(run_dir: str = "runs", force: bool = False,
                 evaluate_single(d, force=force, niter=niter, epochs=epochs)
             except Exception as e:
                 print(f"  {d.name}: FAILED — {e}")
-
-
-if __name__ == "__main__":
-    fire.Fire(main)

@@ -14,7 +14,6 @@ Usage:
 import json
 from pathlib import Path
 
-import fire
 import keras
 import numpy as np
 import numpy.typing as npt
@@ -268,7 +267,7 @@ def _print_metrics(run_name: str, metrics: dict, var_names: list[str]) -> None:
             )
 
 
-def main(run_dir: str = "runs", force: bool = False):
+def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
     """Compute distance metrics for completed runs.
 
     Args:
@@ -290,7 +289,3 @@ def main(run_dir: str = "runs", force: bool = False):
                 evaluate_run(d, force=force)
             except Exception as e:
                 print(f"  {d.name}: FAILED — {e}")
-
-
-if __name__ == "__main__":
-    fire.Fire(main)

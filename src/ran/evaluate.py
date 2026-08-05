@@ -15,13 +15,13 @@ import json
 from pathlib import Path
 
 import fire
+import keras
 import numpy as np
 import numpy.typing as npt
-import keras
-
-from ran.data import ArrayDataset, RAN_Dataset, DatasetSplits
-from scipy.stats import wasserstein_distance
 from scipy.spatial.distance import jensenshannon
+from scipy.stats import wasserstein_distance
+
+from ran.data import ArrayDataset, DatasetSplits, RAN_Dataset
 
 
 def _load_splits(config: dict) -> DatasetSplits:
@@ -52,15 +52,14 @@ def _load_splits(config: dict) -> DatasetSplits:
         return RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
             params=raw_params, n_samples=n_samples,
         )
-    elif dataset == "jets":
+    if dataset == "jets":
         from ran.data import load_jet_dataset
         splits, _, _ = load_jet_dataset(
             n_samples=n_samples, batch_size=batch_size,
             variables=tuple(config["variables"]), seed=data_seed,
         )
         return splits
-    else:
-        raise ValueError(f"Unknown dataset: {dataset!r}")
+    raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
 def _collect_test_data(test_ds: ArrayDataset):
@@ -236,14 +235,14 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
 
 
 def _print_metrics(run_name: str, metrics: dict, var_names: list[str]) -> None:
-    print(f"\n{'='*72}")
+    print(f"\n{'=' * 72}")
     print(f"  Run: {run_name}")
-    print(f"{'='*72}")
+    print(f"{'=' * 72}")
 
     for level in ("detector", "particle"):
         print(f"\n  {level.upper()} LEVEL")
         print(f"  {'Var':<10} {'Metric':<14} {'Before':>10} {'After':>10} {'Improv.':>10}")
-        print(f"  {'-'*56}")
+        print(f"  {'-' * 56}")
         for var in var_names:
             key = f"{level}_{var}"
             if key not in metrics:
@@ -262,7 +261,7 @@ def _print_metrics(run_name: str, metrics: dict, var_names: list[str]) -> None:
                 f" {m['jensenshannon_improvement_pct']:>+9.1f}%"
             )
             print(
-                f"  {'':<10} {chr(916)+' (x1e3)':<14}"
+                f"  {'':<10} {chr(916) + ' (x1e3)':<14}"
                 f" {m['triangular_before']:>10.4f}"
                 f" {m['triangular_after']:>10.4f}"
                 f" {m['triangular_improvement_pct']:>+9.1f}%"

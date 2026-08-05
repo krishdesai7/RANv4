@@ -1,7 +1,8 @@
+import hashlib
+import json
 from collections.abc import Iterator
-from typing import Any, NamedTuple, SupportsFloat, cast
 from pathlib import Path
-import hashlib, json
+from typing import Any, NamedTuple, SupportsFloat, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -111,7 +112,8 @@ class DatasetSplits(NamedTuple):
     val: ArrayDataset
     test: ArrayDataset
 
-class RAN_Dataset():
+
+class RAN_Dataset:
     """
     Dataset class for RAN.
     Arguments:
@@ -255,10 +257,10 @@ class RAN_Dataset():
             )
         parsed: dict[str, Any]
         if config_path is not None:
-            parsed= parse_gaussian_config(config_path)
+            parsed = parse_gaussian_config(config_path)
         else:
-            mu_gen: npt.NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel() # type: ignore
-            mu_true: npt.NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel() # type: ignore
+            mu_gen: npt.NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel()  # type: ignore
+            mu_true: npt.NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel()  # type: ignore
             dim: np.ubyte = mu_gen.shape[0]
             if mu_true.shape[0] != dim:
                 raise ValueError(
@@ -268,12 +270,12 @@ class RAN_Dataset():
                 "dim": dim,
                 "mu_gen": mu_gen,
                 "mu_true": mu_true,
-                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim), # type: ignore
-                "cov_true": sigma_to_covariance(params["sigma_true"], dim), # type: ignore
-                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim), # type: ignore
+                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),  # type: ignore
+                "cov_true": sigma_to_covariance(params["sigma_true"], dim),  # type: ignore
+                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),  # type: ignore
             }
 
-        dim: np.ubyte = parsed["dim"] # type: ignore
+        dim: np.ubyte = parsed["dim"]  # type: ignore
         mu_gen: npt.NDArray[np.double] = parsed["mu_gen"]
         mu_true: npt.NDArray[np.double] = parsed["mu_true"]
         cov_gen: npt.NDArray[np.double] = parsed["cov_gen"]
@@ -301,7 +303,7 @@ class RAN_Dataset():
                 check_valid='raise', method='svd',
             )
 
-            L_det: npt.NDArray[np.double] = np.linalg.cholesky(cast(npt.NDArray, cov_detector), upper=False)
+            L_det: npt.NDArray[np.double] = np.linalg.cholesky(cast("npt.NDArray", cov_detector), upper=False)
 
             s_data: npt.NDArray[np.double] = rng.standard_normal(size=z_true.shape)
             x_data: npt.NDArray[np.double] = z_true + s_data @ L_det.T

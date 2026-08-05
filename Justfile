@@ -21,8 +21,8 @@ infer:
     just fix
 
 # Check formatting without modifying files.
-format-check:
-    uv format --check
+format-check *args:
+    uv format --check {{ args }}
 
 # Run Ruff lint checks.
 lint:

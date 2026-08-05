@@ -21,7 +21,7 @@ import numpy.typing as npt
 from keras import ops
 
 from ran.data import ArrayDataset, DatasetSplits
-from ran.models import build_generator, build_discriminator
+from ran.models import build_discriminator, build_generator
 
 if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
@@ -273,7 +273,7 @@ def train(
     )
     disc_step, gen_step, eval_step = _make_steps(g, d, opt_g, opt_d)
 
-    history: dict[str, list[float | np.floating]] = { "train_d": [], "train_g": [], "val_d": [], "val_g": [], }
+    history: dict[str, list[float | np.floating]] = {"train_d": [], "train_g": [], "val_d": [], "val_g": [], }
     best_val_d: float = -np.inf
     best_state: TrainState | None = None
     wait: int = 0

@@ -5,8 +5,8 @@ extracts 6 substructure variables, saves per-variable .npz files to .cache/,
 and deletes the raw downloads.
 """
 
-from pathlib import Path
 import urllib.request
+from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
@@ -60,20 +60,19 @@ def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:
     """
     if var == "m":
         return data[f"{ptype}_jets"][:, 3]
-    elif var == "M":
+    if var == "M":
         return data[f"{ptype}_mults"].astype(np.float64)
-    elif var == "w":
+    if var == "w":
         return data[f"{ptype}_widths"]
-    elif var == "tau21":
+    if var == "tau21":
         return data[f"{ptype}_tau2s"] / (data[f"{ptype}_widths"] + 1e-50)
-    elif var == "zg":
+    if var == "zg":
         return data[f"{ptype}_zgs"]
-    elif var == "sdm":
+    if var == "sdm":
         jet_pt_sq: npt.NDArray = data[f"{ptype}_jets"][:, 0] ** 2
         eps: float = 1e-12 * np.mean(jet_pt_sq)
         return np.log(data[f"{ptype}_sdms"] ** 2 / np.maximum(jet_pt_sq, eps) + eps)
-    else:
-        raise ValueError(f"Unknown variable '{var}'")
+    raise ValueError(f"Unknown variable '{var}'")
 
 
 def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
@@ -112,7 +111,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
     nature = raw_data["Herwig"]
     synthetic = raw_data["Pythia26"]
 
-    print(f"\nExtracting substructure variables...")
+    print("\nExtracting substructure variables...")
     for var in SUBSTRUCTURE_VARIABLES:
         out_path = cache_dir / f"{CACHE_FILENAMES[var]}.npz"
         np.savez_compressed(

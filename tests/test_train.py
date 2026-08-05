@@ -4,14 +4,9 @@ These exercise the loss math and a couple of real gradient steps on tiny
 models. They do NOT train to convergence -- that is cluster work.
 """
 
-import numpy as np
-import pytest
-
-import ran  # noqa: F401  -- pins KERAS_BACKEND=jax before keras is imported
-
 import keras
-from keras import ops
-
+import numpy as np
+import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax before keras is imported
 from ran.data.datasets import RAN_Dataset
 from ran.train import (
     EPS,
@@ -255,7 +250,8 @@ class TestSeeding:
         """A run left unseeded must still be reproducible after the fact."""
         splits = self._splits()
         drawn = self._run(splits, None)
-        assert isinstance(drawn.seed, int) and drawn.seed >= 0
+        assert isinstance(drawn.seed, int)
+        assert drawn.seed >= 0
 
         probe = np.linspace(-2, 2, 16).reshape(-1, 1)
         replay = self._run(splits, drawn.seed)

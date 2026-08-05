@@ -1,11 +1,10 @@
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import numpy.typing as npt
-from scipy.linalg import cholesky
-from typing import Any, cast
-
 import yaml
+from scipy.linalg import cholesky
 
 
 def sigma_to_covariance(
@@ -30,7 +29,7 @@ def sigma_to_covariance(
         val: np.double = arr.ravel()[0]
         if val < 0:
             raise ValueError(f"sigma scalar must be non-negative, got {val}")
-        cov = val ** 2 * np.identity(cast(int, dim), dtype=np.double)
+        cov = val ** 2 * np.identity(cast("int", dim), dtype=np.double)
     elif arr.ndim == 1:
         if arr.shape[0] != dim:
             raise ValueError(
@@ -66,7 +65,7 @@ def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
         cov_gen, cov_true, cov_detector (2D covariance matrices).
     """
     config_path = Path(config_path)
-    with open(config_path) as f:
+    with Path(config_path).open() as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
     missing: set[str] = REQUIRED_KEYS - raw.keys()

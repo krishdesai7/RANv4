@@ -1,16 +1,13 @@
 from collections.abc import Sequence
-from typing import TypedDict
 from pathlib import Path
-
-import numpy as np
-import numpy.typing as npt
-from typing import Any
-
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import figure, axes, font_manager, gridspec
+from typing import Any, TypedDict
 
 import keras
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
+from matplotlib import axes, figure, font_manager, gridspec
 
 from ran.data import ArrayDataset
 
@@ -112,7 +109,6 @@ def _hist_ratio_panel(
         alpha=0.35,
     )
 
-
     if w_omnifold is not None:
         h_of: tuple = ax.hist(
             x_mc,
@@ -136,7 +132,6 @@ def _hist_ratio_panel(
             linestyle="--",
             alpha=0.35,
         )
-
 
     if w_ibu is not None:
         h_ibu: tuple = ax.hist(
@@ -264,7 +259,7 @@ def plot_detector_level(
             mc_label="Sim",
             xlabel=xlabel,
             title=title,
-            w_omnifold=omnifold_weights,   
+            w_omnifold=omnifold_weights,
             w_ibu=ibu_w_i,
         )
     _save_fig(fig, save_path)

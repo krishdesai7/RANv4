@@ -10,25 +10,29 @@ effect being tested, and the two arms differ visibly even when there is no
 leakage at all.
 """
 
-import ran  # noqa: F401  -- pins KERAS_BACKEND=jax; must precede `import keras`
-
 from typing import Any, Literal
+
 import keras
 import numpy as np
 import numpy.typing as npt
+import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax; must precede `import keras`
 from fire import Fire
-
 from ran.data.datasets import RAN_Dataset
-from ran.train import train
 from ran.evaluate import (
-    _collect_test_data, _wd_per_dim,
-    _triangular_per_dim, _improvement,
+    _collect_test_data,
+    _improvement,
+    _triangular_per_dim,
+    _wd_per_dim,
 )
+from ran.train import train
+
 
 def run(poison: bool, seed: int = 42, init_seed: int = 0) -> None:
     _: Any
-    tag: Literal['CLEAN', 'POISONED'] = "POISONED" if poison else "CLEAN"
-    print(f"  Running {tag} (z_true = {'-999' if poison else 'N(0,1)'}), init seed {init_seed}")
+    tag: Literal["CLEAN", "POISONED"] = "POISONED" if poison else "CLEAN"
+    print(
+        f"  Running {tag} (z_true = {'-999' if poison else 'N(0,1)'}), init seed {init_seed}"
+    )
 
     # Generate: z_true ~ N(0,1), z_gen ~ N(-0.5, 1), sigma_det = 0.25
     rng: np.random.Generator = np.random.default_rng(seed)
@@ -44,7 +48,9 @@ def run(poison: bool, seed: int = 42, init_seed: int = 0) -> None:
 
     z: npt.NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
     x: npt.NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: npt.NDArray[np.ubyte] = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+    y: npt.NDArray[np.ubyte] = np.concatenate(
+        [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
+    )
 
     splits = RAN_Dataset(batch_size=1024, seed=seed).splits_from_arrays(z, x, y)
 
@@ -69,13 +75,18 @@ def run(poison: bool, seed: int = 42, init_seed: int = 0) -> None:
     raw_w: npt.NDArray[np.double] = np.asarray(g(z_mc_t)).flatten()
     w: npt.NDArray[np.double] = raw_w / raw_w.mean()
 
-    for level, ref, comp in [("DETECTOR", x_data_t, x_mc_t), ("PARTICLE", z_data_t, z_mc_t)]:
+    for level, ref, comp in [
+        ("DETECTOR", x_data_t, x_mc_t),
+        ("PARTICLE", z_data_t, z_mc_t),
+    ]:
         wd_b: float = _wd_per_dim(ref, comp)[0]
         wd_a: float = _wd_per_dim(ref, comp, weights=w)[0]
         td_b: float = _triangular_per_dim(ref, comp)[0]
         td_a: float = _triangular_per_dim(ref, comp, weights=w)[0]
-        print(f"  {level:>10}  Wasserstein: {wd_b:.4f} → {wd_a:.4f} ({_improvement(wd_b, wd_a):+.1f}%)"
-              f"   Δ × 1e3: {td_b:.2f} → {td_a:.2f} ({_improvement(td_b, td_a):+.1f}%)")
+        print(
+            f"  {level:>10}  Wasserstein: {wd_b:.4f} → {wd_a:.4f} ({_improvement(wd_b, wd_a):+.1f}%)"
+            f"   Δ × 1e3: {td_b:.2f} → {td_a:.2f} ({_improvement(td_b, td_a):+.1f}%)"
+        )
 
 
 if __name__ == "__main__":

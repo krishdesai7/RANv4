@@ -11,19 +11,19 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from ran.data.datasets import RAN_Dataset, DatasetSplits
+from ran.data.datasets import DatasetSplits, RAN_Dataset
 from ran.data.download import CACHE_FILENAMES
 
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
 
 JET_OBS: dict[str, dict] = {
-    "m":     {"xlim": (0, 75),   "xlabel": "Jet Mass",                       "symbol": r"$m$ [GeV]"},
-    "M":     {"xlim": (0, 80),   "xlabel": "Jet Constituent Multiplicity",   "symbol": r"$M$"},
-    "w":     {"xlim": (0, 0.6),  "xlabel": "Jet Width",                      "symbol": r"$w$"},
-    "tau21": {"xlim": (0, 1.2),  "xlabel": r"$N$-subjettiness Ratio",        "symbol": r"$\tau_{21}^{(\beta=1)}$"},
-    "zg":    {"xlim": (0, 0.5),  "xlabel": "Groomed Jet Momentum Fraction",  "symbol": r"$z_g$"},
-    "sdm":   {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass",             "symbol": r"$\ln\rho$"},
+    "m":     {"xlim": (0, 75), "xlabel": "Jet Mass", "symbol": r"$m$ [GeV]"},
+    "M":     {"xlim": (0, 80), "xlabel": "Jet Constituent Multiplicity", "symbol": r"$M$"},
+    "w":     {"xlim": (0, 0.6), "xlabel": "Jet Width", "symbol": r"$w$"},
+    "tau21": {"xlim": (0, 1.2), "xlabel": r"$N$-subjettiness Ratio", "symbol": r"$\tau_{21}^{(\beta=1)}$"},
+    "zg":    {"xlim": (0, 0.5), "xlabel": "Groomed Jet Momentum Fraction", "symbol": r"$z_g$"},
+    "sdm":   {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass", "symbol": r"$\ln\rho$"},
 }
 
 

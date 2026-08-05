@@ -6,6 +6,7 @@ standardizes (using MC gen-level statistics only), and builds the
 train/val/test splits via RAN_Dataset.
 """
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,8 @@ import numpy.typing as npt
 
 from ran.data.datasets import DatasetSplits, RAN_Dataset
 from ran.data.download import CACHE_FILENAMES
+
+logger = logging.getLogger(__name__)
 
 SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
@@ -59,7 +62,7 @@ def load_jet_dataset(
                if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()]
     if missing:
         from ran.data.download import download_jet_data
-        print("Cached jet data not found. Downloading from Zenodo...")
+        logger.info("Cached jet data not found. Downloading from Zenodo...")
         download_jet_data(cache_dir)
 
     n_features: int = len(variables)

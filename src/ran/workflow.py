@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ from ran.plotting import (
     plot_particle_level,
 )
 from ran.train import train
+
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -117,7 +120,7 @@ def run(
         history: dict[str, list] = {
             k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
         }
-        print(f"Loaded run from {run_dir}")
+        logger.info("Loaded run from %s", run_dir)
     else:
         d: keras.Model
         init_seed: int
@@ -168,7 +171,7 @@ def run(
         else:
             config_out["variables"] = list(variables)
         json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
-        print(f"Saved run to {run_dir}")
+        logger.info("Saved run to %s", run_dir)
 
     # Load baseline weights if available
     omnifold_weights = None
@@ -177,11 +180,11 @@ def run(
     ibu_path: Path = run_dir / "ibu_weights.npz"
     if of_path.exists():
         omnifold_weights = np.load(of_path)["weights"]
-        print(f"Loaded OmniFold weights from {of_path}")
+        logger.info("Loaded OmniFold weights from %s", of_path)
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
         ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
-        print(f"Loaded IBU weights from {ibu_path}")
+        logger.info("Loaded IBU weights from %s", ibu_path)
 
     # Plots
     plot_detector_level(
@@ -205,5 +208,5 @@ def run(
     # Metrics (run last so failures don't block plots/checkpoints)
     try:
         evaluate_run(run_dir, force=(load_run is None))
-    except Exception as e:
-        print(f"Metric evaluation failed: {e}")
+    except Exception:
+        logger.exception("Metric evaluation failed")

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple, SupportsFloat, cast
@@ -8,6 +9,8 @@ import numpy as np
 import numpy.typing as npt
 
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
+
+logger = logging.getLogger(__name__)
 
 type Nested[T] = T | list[Nested[T]]
 
@@ -286,7 +289,7 @@ class RAN_Dataset:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         if cache_path.exists():
-            print(f"Loading dataset from cache: {cache_path}")
+            logger.info("Loading dataset from cache: %s", cache_path)
             with np.load(cache_path) as data:
                 z = data["z"]
                 x = data["x"]
@@ -319,7 +322,7 @@ class RAN_Dataset:
             y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
-            print(f"Generated and saved dataset to cache: {cache_path}")
+            logger.info("Generated and saved dataset to cache: %s", cache_path)
 
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)

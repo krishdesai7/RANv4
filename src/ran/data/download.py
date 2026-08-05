@@ -5,11 +5,14 @@ extracts 6 substructure variables, saves per-variable .npz files to .cache/,
 and deletes the raw downloads.
 """
 
+import logging
 import urllib.request
 from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+
+logger = logging.getLogger(__name__)
 
 ZENODO_RECORD = 3548091
 GENERATORS = ("Pythia26", "Herwig")
@@ -83,9 +86,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
     all_raw_paths: list[Path] = []
 
     for gen in GENERATORS:
-        print(f"\n{'=' * 60}")
-        print(f"Downloading {gen} ({N_FILES} files)")
-        print(f"{'=' * 60}")
+        logger.info("Downloading %s (%d files)", gen, N_FILES)
 
         arrays: dict[str, list[npt.NDArray]] = {}
 
@@ -96,7 +97,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
             if not path.exists():
                 _download_file(_download_url(gen, i), path)
             else:
-                print(f"  {path.name}: already downloaded")
+                logger.info("%s: already downloaded", path.name)
 
             with np.load(path) as f:
                 for key in _NEEDED_KEYS:
@@ -105,13 +106,13 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
 
         raw_data[gen] = {k: np.concatenate(v, axis=0) for k, v in arrays.items()}
         n_events = len(next(iter(raw_data[gen].values())))
-        print(f"  {gen}: {n_events:,} events loaded")
+        logger.info("%s: %d events loaded", gen, n_events)
 
     # Herwig = data (nature), Pythia26 = MC (synthetic)
     nature = raw_data["Herwig"]
     synthetic = raw_data["Pythia26"]
 
-    print("\nExtracting substructure variables...")
+    logger.info("Extracting substructure variables...")
     for var in SUBSTRUCTURE_VARIABLES:
         out_path = cache_dir / f"{CACHE_FILENAMES[var]}.npz"
         np.savez_compressed(
@@ -121,14 +122,14 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
             z_gen=_get_var(synthetic, var, "gen"),
             x_sim=_get_var(synthetic, var, "sim"),
         )
-        print(f"  Saved {out_path}")
+        logger.info("Saved %s", out_path)
 
     # Clean up raw files
     for path in all_raw_paths:
         if path.exists():
             path.unlink()
-    print(f"\nCleaned up {len(all_raw_paths)} raw files.")
-    print("Done! Jet data cached.")
+    logger.info("Cleaned up %d raw files.", len(all_raw_paths))
+    logger.info("Jet data cached.")
 
 
 if __name__ == "__main__":

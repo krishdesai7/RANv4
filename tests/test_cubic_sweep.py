@@ -110,17 +110,18 @@ def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path):
     np.testing.assert_allclose(data["omnifold"], [0.2, 0.4])
 
 
-def test_collect_skips_points_missing_one_method(tmp_path, capsys):
+def test_collect_skips_points_missing_one_method(tmp_path, caplog):
     """A point where only one side finished must not be half-plotted."""
     from ran.experiments.cubic_sweep import collect
 
     _write_points(tmp_path, [0], [0.0])
     _write_points(tmp_path, [1], [10.0], omnifold=False)  # RAN only
-    collect(sweep_dir=tmp_path, n_points=2)
+    with caplog.at_level("WARNING"):
+        collect(sweep_dir=tmp_path, n_points=2)
 
     data = np.load(tmp_path / "results.npz")
     np.testing.assert_array_equal(data["s"], [0.0])
-    assert "missing s_index values" in capsys.readouterr().out
+    assert "missing s_index values" in caplog.text
 
 
 def test_collect_raises_when_no_point_is_complete(tmp_path):

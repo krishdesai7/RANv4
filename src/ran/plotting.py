@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TypedDict
@@ -10,6 +11,8 @@ import numpy.typing as npt
 from matplotlib import axes, figure, font_manager, gridspec
 
 from ran.data import ArrayDataset
+
+logger = logging.getLogger(__name__)
 
 mpl.rcParams["font.family"] = "serif"
 available_fonts: set[str] = {f.name for f in font_manager.fontManager.ttflist}
@@ -170,7 +173,7 @@ def _save_fig(fig: figure.Figure, save_path: Path) -> None:
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved {save_path}")
+    logger.info("Saved %s", save_path)
 
 
 class VarInfo(TypedDict):
@@ -393,4 +396,4 @@ def plot_losses(
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path)
     plt.close(fig)
-    print(f"Saved {save_path}")
+    logger.info("Saved %s", save_path)

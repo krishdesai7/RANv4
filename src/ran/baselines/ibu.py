@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ from ran.evaluate import (
     _wd_per_dim,
 )
 from ran.train import EPS
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_PURITY_THRESHOLD = np.sqrt(0.5, dtype=np.double)
@@ -157,7 +160,7 @@ def _run_and_evaluate(
         n_bins: np.ubyte = bins.shape[0] - 1
 
         if n_bins < 2:
-            print(f"  {var_names[d]}: only {n_bins} bin(s), skipping")
+            logger.warning("%s: only %d bin(s), skipping", var_names[d], n_bins)
             per_var_weights.append(np.ones(z_mc_t.shape[0], dtype=np.double))
             continue
 
@@ -172,7 +175,7 @@ def _run_and_evaluate(
 
         # IBU
         unfolded: npt.NDArray[np.double] = _ibu(prior, data_hist, R, n_iterations)
-        print(f"  {var_names[d]}: {n_bins} bins, {n_iterations} iterations")
+        logger.info("%s: %d bins, %d iterations", var_names[d], n_bins, n_iterations)
 
         # Convert unfolded histogram to per-event weights for test MC.
         # Weight per bin = unfolded / prior; test MC events in that
@@ -233,11 +236,16 @@ def evaluate_single(
     out_path: Path = run_dir / "metrics_ibu.json"
 
     if out_path.exists() and not force:
-        print(f"  {run_dir.name}: metrics_ibu.json exists, skipping (use --force)")
+        logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
         return json.loads(out_path.read_text())
 
     config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
-    print(f"  {run_dir.name}: running IBU (niter={n_iterations}, purity={purity_threshold:.4f})...")
+    logger.info(
+        "%s: running IBU (niter=%d, purity=%.4f)...",
+        run_dir.name,
+        n_iterations,
+        purity_threshold,
+    )
     metrics: dict[str, Any]
     var_names: list[str]
     per_var_weights: list[npt.NDArray[np.double]]
@@ -277,10 +285,10 @@ def evaluate_runs(
             d for d in run_dir.iterdir()
             if d.is_dir() and (d / "config.json").exists()
         )
-        print(f"Found {len(run_dirs)} runs to evaluate with IBU")
+        logger.info("Found %d runs to evaluate with IBU", len(run_dirs))
         for d in run_dirs:
             try:
                 evaluate_single(d, force=force, n_iterations=n_iterations,
                                 purity_threshold=purity_threshold)
-            except Exception as e:
-                print(f"  {d.name}: FAILED — {e}")
+            except Exception:
+                logger.warning("%s: failed", d.name, exc_info=True)

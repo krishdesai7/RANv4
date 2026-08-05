@@ -1,14 +1,18 @@
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
-from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, NamedTuple, SupportsFloat, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, SupportsFloat, cast
 
 import numpy as np
 import numpy.typing as npt
 
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 

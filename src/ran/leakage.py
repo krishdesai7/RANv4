@@ -5,9 +5,8 @@ random initialization the run-to-run spread swamps the effect being tested.
 """
 
 import logging
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-import keras
 import numpy as np
 import numpy.typing as npt
 
@@ -19,6 +18,9 @@ from ran.evaluate import (
     _wd_per_dim,
 )
 from ran.train import train
+
+if TYPE_CHECKING:
+    import keras
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,14 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 import yaml
 from ran.data.datasets import RAN_Dataset
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _write_config(params: dict, tmp_path: Path) -> Path:
@@ -43,7 +48,7 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         ds = RAN_Dataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=2000)
-        for features, y in splits.test:
+        for features, _y in splits.test:
             assert features["z"].shape[1] == 2
             assert features["x"].shape[1] == 2
             break
@@ -111,7 +116,7 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         ds = RAN_Dataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
-        for features, y in splits.test:
+        for features, _y in splits.test:
             z = features["z"]
             x = features["x"]
             for d in range(2):
@@ -218,7 +223,9 @@ class TestArrayDataset:
 
     def test_train_reshuffles_each_epoch_but_val_does_not(self):
         splits = _toy_splits(n=200)
-        first = lambda ds: next(iter(ds))[0]["z"].ravel().copy()
+
+        def first(ds):
+            return next(iter(ds))[0]["z"].ravel().copy()
         assert not np.array_equal(first(splits.train), first(splits.train))
         np.testing.assert_array_equal(first(splits.val), first(splits.val))
 
@@ -230,11 +237,13 @@ class TestArrayDataset:
         seed to how many runs preceded it.
         """
         train = _toy_splits(n=200).train
-        firsts = lambda: [next(iter(train))[0]["z"].ravel().copy() for _ in range(2)]
+
+        def firsts():
+            return [next(iter(train))[0]["z"].ravel().copy() for _ in range(2)]
         before = firsts()
         assert not np.array_equal(before[0], before[1]), "passes should differ"
         train.reset()
-        for a, b in zip(before, firsts()):
+        for a, b in zip(before, firsts(), strict=False):
             np.testing.assert_array_equal(a, b)
 
     def test_shuffle_order_is_independent_of_other_iterations(self):

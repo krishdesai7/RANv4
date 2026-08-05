@@ -78,13 +78,13 @@ def test_run_ran_and_run_omnifold_see_identical_particles():
 
     a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
     b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
-    for lhs, rhs in zip(a[1:], b[1:]):
+    for lhs, rhs in zip(a[1:], b[1:], strict=False):
         np.testing.assert_array_equal(lhs, rhs)
     assert a[0] == b[0]
 
 
 def _write_points(tmp_path, indices, s_values, ran=True, omnifold=True):
-    for i, s in zip(indices, s_values):
+    for i, s in zip(indices, s_values, strict=False):
         if ran:
             (tmp_path / f"ran_{i:02d}.json").write_text(
                 json.dumps({"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1)})

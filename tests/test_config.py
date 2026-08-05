@@ -1,9 +1,14 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 import yaml
 from ran.data.config import parse_gaussian_config, sigma_to_covariance
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestSigmaToCovariance:

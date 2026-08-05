@@ -1,16 +1,21 @@
-import logging
-from collections.abc import Sequence
-from pathlib import Path
-from typing import Any, TypedDict
+from __future__ import annotations
 
-import keras
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypedDict
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from matplotlib import axes, figure, font_manager, gridspec
 
-from ran.data import ArrayDataset
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import keras
+
+    from ran.data import ArrayDataset
 
 logger = logging.getLogger(__name__)
 

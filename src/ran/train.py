@@ -11,9 +11,10 @@ returned objects are ordinary, saveable `keras.Model`s.
 The loss math below is written in backend-agnostic `keras.ops`; only the
 gradient transform and jit are native JAX.
 """
+from __future__ import annotations
 
 import logging
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import jax
 import keras
@@ -21,8 +22,10 @@ import numpy as np
 import numpy.typing as npt
 from keras import ops
 
-from ran.data import ArrayDataset, DatasetSplits
 from ran.models import build_discriminator, build_generator
+
+if TYPE_CHECKING:
+    from ran.data import ArrayDataset, DatasetSplits
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +221,7 @@ def _eval_dataset(
 
 def _assign(variables: list[keras.Variable], values: Variables) -> None:
     """Write JAX arrays back into a model's `keras.Variable`s."""
-    for var, val in zip(variables, values):
+    for var, val in zip(variables, values, strict=False):
         var.assign(val)
 
 

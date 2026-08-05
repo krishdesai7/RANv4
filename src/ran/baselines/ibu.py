@@ -13,12 +13,11 @@ Usage:
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
 
-from ran.data import DatasetSplits
 from ran.evaluate import (
     _collect_test_data,
     _improvement,
@@ -29,6 +28,9 @@ from ran.evaluate import (
     render_metrics,
 )
 from ran.train import EPS
+
+if TYPE_CHECKING:
+    from ran.data import DatasetSplits
 
 logger = logging.getLogger(__name__)
 

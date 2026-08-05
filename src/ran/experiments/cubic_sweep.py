@@ -27,9 +27,9 @@ import numpy.typing as npt
 from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
+from .. import train
 from ..baselines import omnifold_unfold
 from ..data import RANDataset
-from ..train import train
 
 logger = logging.getLogger(__name__)
 

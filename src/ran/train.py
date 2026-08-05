@@ -20,19 +20,20 @@ from typing import TYPE_CHECKING, cast
 import jax
 import keras
 import numpy as np
-import numpy.typing as npt
 from keras import ops
 
 from .models import build_discriminator, build_generator
-from .schema import TrainResult, TrainState
+from .rantypes import EPS, TrainResult, TrainState
 
 if TYPE_CHECKING:
+    from logging import Logger
+
     from jax._src.pjit import JitWrapped
 
-    from .data import ArrayDataset, DatasetSplits
-    from .types import Variables
+    from .data import ArrayDataset
+    from .rantypes import DatasetSplits, Variables
 
-logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(__name__)
 
 if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
@@ -42,8 +43,6 @@ if keras.backend.backend() != "jax":
         "Import `ran` (or any ran.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )
-
-EPS: float = keras.config.epsilon()
 
 
 def normalize_weights(raw_w, y):

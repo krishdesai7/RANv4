@@ -131,7 +131,9 @@ def evaluate_single(
         )
         return json.loads(out_path.read_text())
 
-    config = parse_run_config(json.loads((run_dir / "config.json").read_text()))
+    config: RunConfig = parse_run_config(
+        json.loads((run_dir / "config.json").read_text())
+    )
     logger.info(
         "%s: running OmniFold (niter=%d, epochs=%d)...", run_dir.name, niter, epochs
     )

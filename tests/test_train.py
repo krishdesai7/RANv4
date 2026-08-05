@@ -9,8 +9,8 @@ import numpy as np
 import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND=jax before keras is imported
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
+from ran.rantypes import EPS
 from ran.train import (
-    EPS,
     TrainResult,
     TrainState,
     _make_steps,

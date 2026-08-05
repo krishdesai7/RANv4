@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from ran.logging_config import configure_logging
-
+from . import configure_logging
 from .rantypes import SUBSTRUCTURE_VARIABLES, DatasetName, LogLevel
 
 if TYPE_CHECKING:

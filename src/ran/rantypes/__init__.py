@@ -1,6 +1,7 @@
 from .schema import CACHE_DIR as CACHE_DIR
 from .schema import CACHE_FILENAMES as CACHE_FILENAMES
 from .schema import DEFAULT_PURITY_THRESHOLD as DEFAULT_PURITY_THRESHOLD
+from .schema import EPS as EPS
 from .schema import GENERATORS as GENERATORS
 from .schema import JET_OBS as JET_OBS
 from .schema import N_FILES as N_FILES

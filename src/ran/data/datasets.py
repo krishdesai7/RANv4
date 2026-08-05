@@ -200,7 +200,7 @@ class RANDataset:
     def generate_gaussian_dataset(
         self,
         config_path: Path | None = None,
-        params: dict | None = None,
+        params: GaussianConfig | None = None,
         n_samples: int = 10**6,
     ) -> DatasetSplits:
         # Written as a nested check rather than a single XOR so that each branch
@@ -208,7 +208,7 @@ class RANDataset:
         if params is not None:
             if config_path is not None:
                 raise ValueError(_ONE_SOURCE_ONLY)
-            parsed: GaussianConfig = _parse_params(params)
+            parsed: GaussianConfig = params
         elif config_path is None:
             raise ValueError(_ONE_SOURCE_ONLY)
         else:

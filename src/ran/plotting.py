@@ -7,18 +7,19 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 from matplotlib import axes, figure, font_manager, gridspec
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from logging import Logger
 
     import keras
+    from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import VarInfo
 
-logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(__name__)
 
 mpl.rcParams["font.family"] = "serif"
 available_fonts: set[str] = {f.name for f in font_manager.fontManager.ttflist}
@@ -58,31 +59,29 @@ class _LevelStyle(NamedTuple):
 
 def _collect_data(
     dataset: ArrayDataset,
-) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
+) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
     # zs: (n_events, dim), xs: (n_events, dim), ys: (n_events,)
     return dataset.as_arrays()
 
 
-def _get_weights(
-    g: keras.Model, z_gen: npt.NDArray[np.double]
-) -> npt.NDArray[np.double]:
-    raw_w: npt.NDArray[np.double] = np.asarray(g(z_gen)).flatten()
+def _get_weights(g: keras.Model, z_gen: NDArray[np.double]) -> NDArray[np.double]:
+    raw_w: NDArray[np.double] = np.asarray(g(z_gen)).flatten()
     return raw_w / raw_w.mean()
 
 
 def _hist_ratio_panel(
     ax: axes.Axes,
     ax_r: axes.Axes,
-    x_nature: npt.NDArray[np.double],
-    x_mc: npt.NDArray[np.double],
-    w_ran: npt.NDArray[np.double],
+    x_nature: NDArray[np.double],
+    x_mc: NDArray[np.double],
+    w_ran: NDArray[np.double],
     bins: Sequence[float] | int,
     nature_label: str,
     mc_label: str,
     xlabel: str,
     title: str,
-    w_omnifold: npt.NDArray[np.double] | None = None,
-    w_ibu: npt.NDArray[np.double] | None = None,
+    w_omnifold: NDArray[np.double] | None = None,
+    w_ibu: NDArray[np.double] | None = None,
 ) -> None:
     h_nature: tuple = ax.hist(
         x_nature,
@@ -110,15 +109,15 @@ def _hist_ratio_panel(
         label="RAN",
     )
 
-    bin_edges: npt.NDArray[np.double] = h_nature[1]
-    centres: npt.NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
-    safe: npt.NDArray[np.bool] = h_nature[0] > 0
-    ratio_mc: npt.NDArray[np.double] = np.full_like(
+    bin_edges: NDArray[np.double] = h_nature[1]
+    centres: NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
+    safe: NDArray[np.bool] = h_nature[0] > 0
+    ratio_mc: NDArray[np.double] = np.full_like(
         h_nature[0],
         np.nan,
         dtype=np.double,
     )
-    ratio_ran: npt.NDArray[np.double] = np.full_like(
+    ratio_ran: NDArray[np.double] = np.full_like(
         h_ran[0],
         np.nan,
         dtype=np.double,
@@ -155,9 +154,7 @@ def _hist_ratio_panel(
             alpha=0.35,
             label="OmniFold",
         )
-        ratio_of: npt.NDArray[np.double] = np.full_like(
-            h_of[0], np.nan, dtype=np.double
-        )
+        ratio_of: NDArray[np.double] = np.full_like(h_of[0], np.nan, dtype=np.double)
         ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
         ax_r.plot(
             centres,
@@ -183,9 +180,7 @@ def _hist_ratio_panel(
         ax.set_ylabel("Events")
         ax.legend()
         ax.set_title(title)
-        ratio_ibu: npt.NDArray[np.double] = np.full_like(
-            h_ibu[0], np.nan, dtype=np.double
-        )
+        ratio_ibu: NDArray[np.double] = np.full_like(h_ibu[0], np.nan, dtype=np.double)
         ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
         ax_r.plot(
             centres,
@@ -216,8 +211,8 @@ _PARTICLE = _LevelStyle("particle", "z", "Particle Level", "Truth", "Gen.", 10, 
 def _panel_spec(
     i: int,
     dim: int,
-    nature: npt.NDArray[np.double],
-    mc: npt.NDArray[np.double],
+    nature: NDArray[np.double],
+    mc: NDArray[np.double],
     var_info: list[VarInfo] | None,
     style: _LevelStyle,
 ) -> _PanelSpec:
@@ -252,14 +247,14 @@ def _panel_spec(
 
 
 def _plot_level(
-    nature: npt.NDArray[np.double],
-    mc: npt.NDArray[np.double],
-    w: npt.NDArray[np.double],
+    nature: NDArray[np.double],
+    mc: NDArray[np.double],
+    w: NDArray[np.double],
     style: _LevelStyle,
     save_path: str | Path,
     var_info: list[VarInfo] | None,
-    omnifold_weights: npt.NDArray[np.double] | None,
-    ibu_weights: list[npt.NDArray[np.double]] | None,
+    omnifold_weights: NDArray[np.double] | None,
+    ibu_weights: list[NDArray[np.double]] | None,
 ) -> None:
     """Draw one stacked hist+ratio panel per dimension and save the figure.
 
@@ -300,8 +295,8 @@ def plot_detector_level(
     g: keras.Model,
     save_path: str | Path = "plots/detector_level.pdf",
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: npt.NDArray[np.double] | None = None,
-    ibu_weights: list[npt.NDArray[np.double]] | None = None,
+    omnifold_weights: NDArray[np.double] | None = None,
+    ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
     """Generate detector level plots.
     Arguments:
@@ -312,9 +307,9 @@ def plot_detector_level(
         omnifold_weights: Per-event OmniFold weights for MC events.
         ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
-    z: npt.NDArray[np.double]
-    x: npt.NDArray[np.double]
-    y: npt.NDArray[np.ubyte]
+    z: NDArray[np.double]
+    x: NDArray[np.double]
+    y: NDArray[np.ubyte]
     z, x, y = _collect_data(test_dataset)
 
     _plot_level(
@@ -334,8 +329,8 @@ def plot_particle_level(
     g: keras.Model,
     save_path: str | Path = "plots/particle_level.pdf",
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: npt.NDArray[np.double] | None = None,
-    ibu_weights: list[npt.NDArray[np.double]] | None = None,
+    omnifold_weights: NDArray[np.double] | None = None,
+    ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
     """Generate particle level plots.
     Arguments:
@@ -347,8 +342,8 @@ def plot_particle_level(
         ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
     _: Any
-    z: npt.NDArray[np.double]
-    y: npt.NDArray[np.ubyte]
+    z: NDArray[np.double]
+    y: NDArray[np.ubyte]
     z, _, y = _collect_data(test_dataset)
 
     _plot_level(
@@ -374,18 +369,18 @@ def plot_losses(
     """
     if isinstance(save_path, str):
         save_path = Path(save_path)
-    epochs: npt.NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
+    epochs: NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
 
     fig: figure.Figure
     ax: axes.Axes
     fig, ax = plt.subplots(figsize=(8, 5))
-    train_d: npt.NDArray[np.double] = np.array(
+    train_d: NDArray[np.double] = np.array(
         history["train_d"],
         dtype=np.double,
     )
-    val_d: npt.NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
-    train_g: npt.NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
-    val_g: npt.NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
+    val_d: NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
+    train_g: NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
+    val_g: NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
     ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
     ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)

@@ -1,4 +1,7 @@
-"""Quick leakage check: poison z_true to a silly value and verify training is unaffected.
+"""Quick leakage check: poison z_true and verify training is unaffected.
+
+Sets z_true to a silly value in one arm and compares against a clean arm; if any
+network can see z_true, the two diverge.
 
 Both arms must use the same `init_seed` or the comparison is meaningless: with
 random initialization the run-to-run spread swamps the effect being tested.

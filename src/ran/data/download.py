@@ -66,6 +66,13 @@ def _download_file(url: str, dest: Path, progress: Progress, task_id: TaskID) ->
                 completed=min(block_num * block_size, total_size),
             )
 
+    # urlretrieve honours file:// and any other scheme urllib knows, so pin it to
+    # https before opening. Callers only ever pass _download_url output, which is
+    # built from a hardcoded https://zenodo.org prefix; this keeps that true if
+    # the helper ever grows another caller.
+    if not url.startswith("https://"):
+        raise ValueError(f"refusing to fetch non-https URL: {url!r}")
+    # ruff: ignore[suspicious-url-open-usage] -- scheme checked immediately above
     urllib.request.urlretrieve(url, dest, reporthook=_progress)
     logger.info("Downloaded %s", dest)
 

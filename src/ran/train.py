@@ -11,6 +11,7 @@ returned objects are ordinary, saveable `keras.Model`s.
 The loss math below is written in backend-agnostic `keras.ops`; only the
 gradient transform and jit are native JAX.
 """
+
 from __future__ import annotations
 
 import logging

@@ -90,6 +90,10 @@ extend-exclude = ["*.ipynb"]
 [tool.ruff.lint]
 future-annotations = true
 preview = true
+# Physics notation, used deliberately in docstrings and log lines: σ for standard
+# deviation, × for the 1e3 scale factor on the triangular discriminator, Δ for a
+# difference. Confusable with o/x/A only to a reader who is not reading physics.
+allowed-confusables = ["σ", "×", "Δ"]
 extend-select = [
     "B",   # flake8-bugbear: likely bugs / footguns
     "I",   # isort-style import checks
@@ -120,6 +124,10 @@ extend-select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
+# The package __init__ is the backend bootstrap: it must set KERAS_BACKEND and
+# JAX_ENABLE_X64 before anything imports jax or keras, which is exactly the
+# import-time side effect RUF067 exists to prevent. See the module docstring.
+"src/ran/__init__.py" = ["non-empty-init-module"]
 
 [tool.ruff.format]
 quote-style = "double"

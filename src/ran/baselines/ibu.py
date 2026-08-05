@@ -78,12 +78,12 @@ def _build_response(
     n_bins: np.ubyte,
 ) -> npt.NDArray[np.double]:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
-    R: npt.NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
-    np.add.at(R, (gen_bins, reco_bins), 1)
-    row_sums: npt.NDArray[np.double] = R.sum(axis=1, keepdims=True)
+    response: npt.NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
+    np.add.at(response, (gen_bins, reco_bins), 1)
+    row_sums: npt.NDArray[np.double] = response.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1
-    R /= row_sums
-    return R
+    response /= row_sums
+    return response
 
 
 def _ibu(
@@ -116,7 +116,7 @@ def _ibu(
 def _run_and_evaluate(
     config: dict[str, Any],
     n_iterations: int = 10,
-    purity_threshold: np.double = np.sqrt(0.5, dtype=np.double),
+    purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> tuple[dict[str, Any], list[str], list[npt.NDArray[np.double]]]:
     """Run 1D IBU per variable and evaluate on test set."""
     splits: DatasetSplits = _load_splits(config)
@@ -179,14 +179,18 @@ def _run_and_evaluate(
         sim_binned: npt.NDArray[np.long] = (
             np.clip(np.digitize(x_sim_all[:, d], bins), 1, n_bins) - 1
         )
-        R: npt.NDArray[np.double] = _build_response(gen_binned, sim_binned, n_bins)
+        response: npt.NDArray[np.double] = _build_response(
+            gen_binned, sim_binned, n_bins
+        )
 
         # Prior (MC gen) and data reco histogram
         prior: npt.NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[0]
         data_hist: npt.NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[0]
 
         # IBU
-        unfolded: npt.NDArray[np.double] = _ibu(prior, data_hist, R, n_iterations)
+        unfolded: npt.NDArray[np.double] = _ibu(
+            prior, data_hist, response, n_iterations
+        )
         logger.info("%s: %d bins, %d iterations", var_names[d], n_bins, n_iterations)
 
         # Convert unfolded histogram to per-event weights for test MC.
@@ -281,7 +285,10 @@ def evaluate_single(
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
-        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # type: ignore
+        # savez is `savez(file, *args, allow_pickle=True, **kwds)`, so a **dict
+        # unpack is checked against `allow_pickle` instead of the **kwds catch-all.
+        # Stub limitation, not a real mismatch.
+        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # pyrefly: ignore[bad-argument-type]
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",

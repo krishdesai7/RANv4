@@ -53,7 +53,7 @@ class TestGenerateGaussianDataset:
             assert features["x"].shape[1] == 2
             break
 
-    def test_params_dict_interface(self, tmp_path):
+    def test_params_dict_interface(self):
         """Passing params dict directly should work (for --load_run)."""
         params = {
             "mu_gen": [0.0],
@@ -226,6 +226,7 @@ class TestArrayDataset:
 
         def first(ds):
             return next(iter(ds))[0]["z"].ravel().copy()
+
         assert not np.array_equal(first(splits.train), first(splits.train))
         np.testing.assert_array_equal(first(splits.val), first(splits.val))
 
@@ -240,6 +241,7 @@ class TestArrayDataset:
 
         def firsts():
             return [next(iter(train))[0]["z"].ravel().copy() for _ in range(2)]
+
         before = firsts()
         assert not np.array_equal(before[0], before[1]), "passes should differ"
         train.reset()

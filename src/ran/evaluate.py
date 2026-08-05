@@ -18,6 +18,8 @@ from pathlib import Path
 import keras
 import numpy as np
 import numpy.typing as npt
+from rich.console import Console
+from rich.table import Table
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
@@ -232,42 +234,55 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
             }
 
     json.dump(metrics, out_path.open("w"), indent=2)
-    _print_metrics(run_dir.name, metrics, var_names)
+    render_metrics(run_dir.name, metrics, var_names)
     return metrics
 
 
-def _print_metrics(run_name: str, metrics: dict, var_names: list[str]) -> None:
-    print(f"\n{'=' * 72}")
-    print(f"  Run: {run_name}")
-    print(f"{'=' * 72}")
-
+def render_metrics(
+    run_name: str,
+    metrics: dict,
+    var_names: list[str],
+    console: Console | None = None,
+) -> None:
+    """Render evaluation metrics as one Rich table per available level."""
+    active_console = console or Console()
     for level in ("detector", "particle"):
-        print(f"\n  {level.upper()} LEVEL")
-        print(f"  {'Var':<10} {'Metric':<14} {'Before':>10} {'After':>10} {'Improv.':>10}")
-        print(f"  {'-' * 56}")
-        for var in var_names:
-            key = f"{level}_{var}"
-            if key not in metrics:
-                continue
-            m = metrics[key]
-            print(
-                f"  {var:<10} {'Wasserstein':<14}"
-                f" {m['wasserstein_before']:>10.4f}"
-                f" {m['wasserstein_after']:>10.4f}"
-                f" {m['wasserstein_improvement_pct']:>+9.1f}%"
+        level_metrics = [
+            (var, metrics[f"{level}_{var}"])
+            for var in var_names
+            if f"{level}_{var}" in metrics
+        ]
+        if not level_metrics:
+            continue
+        table = Table(title=f"{run_name} — {level.title()} level")
+        table.add_column("Variable")
+        table.add_column("Metric")
+        table.add_column("Before", justify="right")
+        table.add_column("After", justify="right")
+        table.add_column("Improvement", justify="right")
+        for var, m in level_metrics:
+            table.add_row(
+                var,
+                "Wasserstein",
+                f"{m['wasserstein_before']:.4f}",
+                f"{m['wasserstein_after']:.4f}",
+                f"{m['wasserstein_improvement_pct']:+.1f}%",
             )
-            print(
-                f"  {'':<10} {'JS div':<14}"
-                f" {m['jensenshannon_before']:>10.6f}"
-                f" {m['jensenshannon_after']:>10.6f}"
-                f" {m['jensenshannon_improvement_pct']:>+9.1f}%"
+            table.add_row(
+                "",
+                "JS div",
+                f"{m['jensenshannon_before']:.6f}",
+                f"{m['jensenshannon_after']:.6f}",
+                f"{m['jensenshannon_improvement_pct']:+.1f}%",
             )
-            print(
-                f"  {'':<10} {chr(916) + ' (x1e3)':<14}"
-                f" {m['triangular_before']:>10.4f}"
-                f" {m['triangular_after']:>10.4f}"
-                f" {m['triangular_improvement_pct']:>+9.1f}%"
+            table.add_row(
+                "",
+                "Delta (x1e3)",
+                f"{m['triangular_before']:.4f}",
+                f"{m['triangular_after']:.4f}",
+                f"{m['triangular_improvement_pct']:+.1f}%",
             )
+        active_console.print(table)
 
 
 def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:

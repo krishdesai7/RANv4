@@ -24,9 +24,9 @@ from ran.evaluate import (
     _improvement,
     _js_per_dim,
     _load_splits,
-    _print_metrics,
     _triangular_per_dim,
     _wd_per_dim,
+    render_metrics,
 )
 from ran.train import EPS
 
@@ -259,7 +259,7 @@ def evaluate_single(
         run_dir / "ibu_weights.npz",
         **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # type: ignore
     )
-    _print_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
+    render_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
     return metrics
 
 

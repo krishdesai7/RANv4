@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+from rich.progress import Progress, TaskID
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +44,16 @@ def _download_url(generator: str, file_idx: int) -> str:
     )
 
 
-def _download_file(url: str, dest: Path) -> None:
+def _download_file(url: str, dest: Path, progress: Progress, task_id: TaskID) -> None:
     def _progress(block_num: int, block_size: int, total_size: int) -> None:
         if total_size > 0:
-            mb_done = block_num * block_size / 1_000_000
-            mb_total = total_size / 1_000_000
-            pct = min(100, block_num * block_size * 100 // total_size)
-            print(f"\r  {dest.name}: {pct:3d}% ({mb_done:.0f}/{mb_total:.0f} MB)",
-                  end="", flush=True)
+            progress.update(
+                task_id,
+                total=total_size,
+                completed=min(block_num * block_size, total_size),
+            )
 
     urllib.request.urlretrieve(url, dest, reporthook=_progress)
-    print()
 
 
 def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:
@@ -85,28 +85,31 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
     raw_data: dict[str, dict[str, npt.NDArray]] = {}
     all_raw_paths: list[Path] = []
 
-    for gen in GENERATORS:
-        logger.info("Downloading %s (%d files)", gen, N_FILES)
+    with Progress() as progress:
+        for gen in GENERATORS:
+            logger.info("Downloading %s (%d files)", gen, N_FILES)
 
-        arrays: dict[str, list[npt.NDArray]] = {}
+            arrays: dict[str, list[npt.NDArray]] = {}
 
-        for i in range(N_FILES):
-            path = cache_dir / f"{gen}_Zjet_pTZ-200GeV_{i}.npz"
-            all_raw_paths.append(path)
+            for i in range(N_FILES):
+                path = cache_dir / f"{gen}_Zjet_pTZ-200GeV_{i}.npz"
+                all_raw_paths.append(path)
 
-            if not path.exists():
-                _download_file(_download_url(gen, i), path)
-            else:
-                logger.info("%s: already downloaded", path.name)
+                if not path.exists():
+                    task_id = progress.add_task(path.name, total=None)
+                    _download_file(_download_url(gen, i), path, progress, task_id)
+                    progress.remove_task(task_id)
+                else:
+                    logger.info("%s: already downloaded", path.name)
 
-            with np.load(path) as f:
-                for key in _NEEDED_KEYS:
-                    if key in f:
-                        arrays.setdefault(key, []).append(f[key])
+                with np.load(path) as f:
+                    for key in _NEEDED_KEYS:
+                        if key in f:
+                            arrays.setdefault(key, []).append(f[key])
 
-        raw_data[gen] = {k: np.concatenate(v, axis=0) for k, v in arrays.items()}
-        n_events = len(next(iter(raw_data[gen].values())))
-        logger.info("%s: %d events loaded", gen, n_events)
+            raw_data[gen] = {k: np.concatenate(v, axis=0) for k, v in arrays.items()}
+            n_events = len(next(iter(raw_data[gen].values())))
+            logger.info("%s: %d events loaded", gen, n_events)
 
     # Herwig = data (nature), Pythia26 = MC (synthetic)
     nature = raw_data["Herwig"]

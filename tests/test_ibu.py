@@ -2,8 +2,35 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pytest
 from ran.baselines import ibu
+from ran.data import ArrayDataset, DatasetSplits
+
+
+def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
+    return ArrayDataset(
+        np.asarray(z, dtype=np.double),
+        np.asarray(x, dtype=np.double),
+        np.asarray(y, dtype=np.ubyte),
+        batch_size=8,
+    )
+
+
+def _splits() -> DatasetSplits:
+    return DatasetSplits(
+        train=_split(
+            [[0.2], [0.4], [1.2], [1.4]],
+            [[-1.0], [0.5], [1.1], [3.0]],
+            [0, 1, 0, 1],
+        ),
+        val=_split([[0.6], [1.6]], [[0.7], [1.7]], [0, 1]),
+        test=_split(
+            [[0.8], [1.8], [0.9], [1.9]],
+            [[0.9], [2.5], [0.8], [2.2]],
+            [0, 0, 1, 1],
+        ),
+    )
 
 
 def _config(**overrides: Any) -> dict[str, Any]:
@@ -64,3 +91,58 @@ def test_parse_config_rejects_unknown_dataset() -> None:
 def test_parse_config_rejects_non_string_jet_variable() -> None:
     with pytest.raises(ValueError, match=r"variables.*strings"):
         ibu._parse_config(_config(dataset="jets", variables=["mass", 4], dim=2))
+
+
+def test_assign_bins_saturates_underflow_and_overflow() -> None:
+    edges = np.array([0.0, 1.0, 2.0], dtype=np.double)
+    values = np.array([-3.0, 0.0, 0.4, 1.0, 2.0, 8.0], dtype=np.double)
+
+    indices = ibu._assign_bins(values, edges)
+
+    np.testing.assert_array_equal(indices, [0, 0, 0, 1, 1, 1])
+    np.testing.assert_array_equal(ibu._bin_counts(indices, 2), [3.0, 3.0])
+
+
+def test_saturating_counts_conserve_observed_population() -> None:
+    edges = np.array([0.0, 1.0, 2.0], dtype=np.double)
+    observed = np.array([-2.0, 0.5, 4.0], dtype=np.double)
+
+    counts = ibu._bin_counts(ibu._assign_bins(observed, edges), 2)
+
+    assert counts.sum() == observed.size
+    np.testing.assert_array_equal(counts, [2.0, 1.0])
+
+
+def test_prepare_data_names_response_and_test_populations() -> None:
+    data = ibu._prepare_data(_splits(), expected_dim=1)
+
+    assert data.response_gen.shape == (5, 1)
+    assert data.response_sim.shape == (5, 1)
+    assert data.observed_reco.shape == (5, 1)
+    assert data.test_mc_gen.shape == (2, 1)
+    assert data.test_data_reco.shape == (2, 1)
+
+
+def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
+    with pytest.raises(ValueError, match="expected dim=2"):
+        ibu._prepare_data(_splits(), expected_dim=2)
+
+
+def test_prepare_data_rejects_nonfinite_values() -> None:
+    splits = _splits()
+    splits.train.x[0, 0] = np.nan
+
+    with pytest.raises(ValueError, match="finite"):
+        ibu._prepare_data(splits, expected_dim=1)
+
+
+def test_prepare_data_rejects_empty_test_data_population() -> None:
+    splits = _splits()
+    without_test_data = DatasetSplits(
+        train=splits.train,
+        val=splits.val,
+        test=_split([[0.8], [1.8]], [[0.9], [2.5]], [0, 0]),
+    )
+
+    with pytest.raises(ValueError, match="test data"):
+        ibu._prepare_data(without_test_data, expected_dim=1)

@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from ran.data import DatasetSplits
+    from ran.data import ArrayDataset, DatasetSplits
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -70,6 +70,17 @@ class IBUResult:
     variable_names: tuple[str, ...]
     weights: NDArray[np.double]
     outcomes: tuple[VariableOutcome, ...]
+
+
+@dataclass(frozen=True)
+class _IBUData:
+    response_gen: NDArray[np.double]
+    response_sim: NDArray[np.double]
+    observed_reco: NDArray[np.double]
+    test_data_gen: NDArray[np.double]
+    test_data_reco: NDArray[np.double]
+    test_mc_gen: NDArray[np.double]
+    test_mc_reco: NDArray[np.double]
 
 
 def _positive_int(value: object, key: str) -> int:
@@ -120,6 +131,80 @@ def _parse_config(raw: object) -> IBUConfig:
         data_seed=data_seed,
         variable_names=variable_names,
     )
+
+
+def _validated_arrays(
+    split: ArrayDataset, expected_dim: int
+) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
+    z, x, y = split.as_arrays()
+    if z.ndim != 2 or x.ndim != 2 or z.shape != x.shape:
+        raise ValueError("z and x must be identically shaped two-dimensional arrays")
+    if z.shape[1] != expected_dim:
+        raise ValueError(f"array dimension {z.shape[1]}, expected dim={expected_dim}")
+    if y.ndim != 1 or y.shape[0] != z.shape[0]:
+        raise ValueError("y must be one-dimensional with one label per row")
+    if not np.all(np.isfinite(z)) or not np.all(np.isfinite(x)):
+        raise ValueError("z and x values must be finite")
+    if np.any((y != 0) & (y != 1)):
+        raise ValueError("labels must be only zero or one")
+    return z, x, y
+
+
+def _prepare_data(splits: DatasetSplits, expected_dim: int) -> _IBUData:
+    """Validate dataset arrays and separate response and evaluation populations."""
+    arrays = [
+        _validated_arrays(split, expected_dim)
+        for split in (splits.train, splits.val, splits.test)
+    ]
+
+    z_all: NDArray[np.double] = np.concatenate([item[0] for item in arrays], axis=0)
+    x_all: NDArray[np.double] = np.concatenate([item[1] for item in arrays], axis=0)
+    y_all: NDArray[np.ubyte] = np.concatenate([item[2] for item in arrays], axis=0)
+    z_test, x_test, y_test = arrays[-1]
+
+    response_mask = y_all == 0
+    observed_mask = y_all == 1
+    test_mc_mask = y_test == 0
+    test_data_mask = y_test == 1
+    if not np.any(response_mask):
+        raise ValueError("response MC population must not be empty")
+    if not np.any(observed_mask):
+        raise ValueError("observed data population must not be empty")
+    if not np.any(test_mc_mask):
+        raise ValueError("test MC population must not be empty")
+    if not np.any(test_data_mask):
+        raise ValueError("test data population must not be empty")
+
+    return _IBUData(
+        response_gen=z_all[response_mask],
+        response_sim=x_all[response_mask],
+        observed_reco=x_all[observed_mask],
+        test_data_gen=z_test[test_data_mask],
+        test_data_reco=x_test[test_data_mask],
+        test_mc_gen=z_test[test_mc_mask],
+        test_mc_reco=x_test[test_mc_mask],
+    )
+
+
+def _assign_bins(
+    values: NDArray[np.double], edges: NDArray[np.double]
+) -> NDArray[np.intp]:
+    if values.ndim != 1 or not np.all(np.isfinite(values)):
+        raise ValueError("bin values must be a finite one-dimensional array")
+    if edges.ndim != 1 or edges.size < 2 or not np.all(np.diff(edges) > 0):
+        raise ValueError("bin edges must be a strictly increasing 1D array")
+    n_bins = edges.size - 1
+    return (np.clip(np.digitize(values, edges), 1, n_bins) - 1).astype(
+        np.intp, copy=False
+    )
+
+
+def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.double]:
+    if n_bins < 1 or indices.ndim != 1:
+        raise ValueError("bin indices must be one-dimensional with n_bins >= 1")
+    if np.any((indices < 0) | (indices >= n_bins)):
+        raise ValueError("bin index outside configured range")
+    return np.bincount(indices, minlength=n_bins).astype(np.double)
 
 
 def _next_pure_edge(

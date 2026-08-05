@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 from ran.baselines import ibu
 from ran.data import ArrayDataset, DatasetSplits
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -146,3 +149,110 @@ def test_prepare_data_rejects_empty_test_data_population() -> None:
 
     with pytest.raises(ValueError, match="test data"):
         ibu._prepare_data(without_test_data, expected_dim=1)
+
+
+def test_unfolded_to_bin_weights_uses_explicit_zero_prior_semantics() -> None:
+    weights = ibu._unfolded_to_bin_weights(
+        np.array([4.0, 0.0], dtype=np.double),
+        np.array([2.0, 0.0], dtype=np.double),
+    )
+
+    np.testing.assert_array_equal(weights, [2.0, 0.0])
+
+
+def test_unfolded_to_bin_weights_rejects_mass_without_prior() -> None:
+    with pytest.raises(ValueError, match="zero-prior"):
+        ibu._unfolded_to_bin_weights(
+            np.array([4.0, 1.0], dtype=np.double),
+            np.array([2.0, 0.0], dtype=np.double),
+        )
+
+
+@pytest.mark.parametrize(
+    ("weights", "message"),
+    [
+        (np.array([0.0, 0.0]), "strictly positive"),
+        (np.array([-1.0, 2.0]), "nonnegative"),
+        (np.array([1.0, np.inf]), "finite"),
+        (np.array([1.0, np.nan]), "finite"),
+    ],
+)
+def test_normalize_weights_rejects_invalid_vectors(
+    weights: NDArray[np.double], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        ibu._normalize_weights(weights)
+
+
+def test_normalize_weights_returns_mean_one() -> None:
+    normalized = ibu._normalize_weights(np.array([1.0, 2.0, 3.0], dtype=np.double))
+
+    assert normalized.mean() == pytest.approx(1.0)
+    assert np.all(normalized >= 0)
+
+
+def test_unfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0], dtype=np.double),
+    )
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        response_gen=np.array([0.2, 0.8], dtype=np.double),
+        response_sim=np.array([0.3, 0.7], dtype=np.double),
+        observed_reco=np.array([-1.0, 2.0], dtype=np.double),
+        test_mc_gen=np.array([0.4, 0.6], dtype=np.double),
+        n_iterations=2,
+        purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
+    )
+
+    assert result.outcome.status == "skipped"
+    assert result.outcome.skip_reason == "fewer than two purity bins"
+    np.testing.assert_array_equal(result.weights, [1.0, 1.0])
+
+
+def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
+    )
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+        response_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
+        observed_reco=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
+        test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+        n_iterations=2,
+        purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
+    )
+
+    assert result.outcome.status == "completed"
+    assert result.outcome.n_bins == 2
+    assert np.all(np.isfinite(result.weights))
+    assert np.all(result.weights >= 0)
+    assert result.weights.mean() == pytest.approx(1.0)
+
+
+def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
+    record = ibu._evaluate_dimension(
+        reference=np.array([0.0, 1.0, 2.0], dtype=np.double),
+        comparison=np.array([0.0, 1.5, 3.0], dtype=np.double),
+        weights=np.ones(3, dtype=np.double),
+    )
+
+    assert set(record) == {
+        "wasserstein_before",
+        "wasserstein_after",
+        "wasserstein_improvement_pct",
+        "jensenshannon_before",
+        "jensenshannon_after",
+        "jensenshannon_improvement_pct",
+        "triangular_before",
+        "triangular_after",
+        "triangular_improvement_pct",
+    }
+    assert all(np.isfinite(value) for value in record.values())

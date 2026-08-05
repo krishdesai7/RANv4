@@ -83,6 +83,12 @@ class _IBUData:
     test_mc_reco: NDArray[np.double]
 
 
+@dataclass(frozen=True)
+class _VariableUnfolding:
+    weights: NDArray[np.double]
+    outcome: VariableOutcome
+
+
 def _positive_int(value: object, key: str) -> int:
     if type(value) is not int or value <= 0:
         raise ValueError(f"{key} must be a positive integer")
@@ -205,6 +211,50 @@ def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.double]:
     if np.any((indices < 0) | (indices >= n_bins)):
         raise ValueError("bin index outside configured range")
     return np.bincount(indices, minlength=n_bins).astype(np.double)
+
+
+def _unfolded_to_bin_weights(
+    unfolded: NDArray[np.double], prior: NDArray[np.double]
+) -> NDArray[np.double]:
+    if (
+        unfolded.ndim != 1
+        or prior.ndim != 1
+        or unfolded.size == 0
+        or unfolded.shape != prior.shape
+    ):
+        raise ValueError(
+            "unfolded and prior must have matching nonempty one-dimensional shapes"
+        )
+    if not np.all(np.isfinite(unfolded)) or not np.all(np.isfinite(prior)):
+        raise ValueError("unfolded and prior must be finite")
+    if np.any(unfolded < 0) or np.any(prior < 0):
+        raise ValueError("unfolded and prior must be nonnegative")
+    if np.any((prior == 0) & (unfolded > EPS)):
+        raise ValueError("unfolded mass in a zero-prior bin")
+
+    weights: NDArray[np.double] = np.zeros_like(unfolded, dtype=np.double)
+    np.divide(unfolded, prior, out=weights, where=prior > 0)
+    return weights
+
+
+def _normalize_weights(weights: NDArray[np.double]) -> NDArray[np.double]:
+    if weights.ndim != 1 or weights.size == 0:
+        raise ValueError("weights must be a nonempty one-dimensional vector")
+    if not np.all(np.isfinite(weights)):
+        raise ValueError("weights must be finite")
+    if np.any(weights < 0):
+        raise ValueError("weights must be nonnegative")
+
+    mean: np.double = np.mean(weights, dtype=np.double)
+    if not np.isfinite(mean) or mean <= 0:
+        raise ValueError("weights mean must be finite and strictly positive")
+
+    normalized: NDArray[np.double] = np.asarray(weights / mean, dtype=np.double)
+    if not np.all(np.isfinite(normalized)) or np.any(normalized < 0):
+        raise ValueError("normalized weights must be finite and nonnegative")
+    if not np.isclose(normalized.mean(), 1.0):
+        raise ValueError("normalized weights must have mean one")
+    return normalized
 
 
 def _next_pure_edge(
@@ -361,6 +411,84 @@ def _ibu(
         m /= m.sum(axis=1, keepdims=True) + EPS  # m[r,t] = P(t|r)
         posterior = m.T @ data_hist  # P(t) = sum_r P(t|r) * data(r)
     return posterior
+
+
+def _unfold_variable(
+    variable_name: str,
+    response_gen: NDArray[np.double],
+    response_sim: NDArray[np.double],
+    observed_reco: NDArray[np.double],
+    test_mc_gen: NDArray[np.double],
+    n_iterations: int,
+    purity_threshold: np.double,
+) -> _VariableUnfolding:
+    bins: NDArray[np.double] = _purity_bins(
+        response_gen, response_sim, purity_threshold
+    )
+    n_bins: int = bins.size - 1
+    if n_bins < 2:
+        logger.warning("%s: only %d bin(s), skipping", variable_name, n_bins)
+        return _VariableUnfolding(
+            weights=np.ones(test_mc_gen.size, dtype=np.double),
+            outcome=VariableOutcome(
+                variable_name,
+                "skipped",
+                n_bins,
+                "fewer than two purity bins",
+            ),
+        )
+
+    response_gen_bins: NDArray[np.intp] = _assign_bins(response_gen, bins)
+    response_sim_bins: NDArray[np.intp] = _assign_bins(response_sim, bins)
+    observed_reco_bins: NDArray[np.intp] = _assign_bins(observed_reco, bins)
+    test_mc_gen_bins: NDArray[np.intp] = _assign_bins(test_mc_gen, bins)
+
+    response: NDArray[np.double] = _build_response(
+        response_gen_bins, response_sim_bins, n_bins
+    )
+    prior: NDArray[np.double] = _bin_counts(response_gen_bins, n_bins)
+    observed: NDArray[np.double] = _bin_counts(observed_reco_bins, n_bins)
+    assert prior.sum() == response_gen.size  # ruff: ignore[assert]
+    assert observed.sum() == observed_reco.size  # ruff: ignore[assert]
+
+    unfolded: NDArray[np.double] = _ibu(prior, observed, response, n_iterations)
+    bin_weights: NDArray[np.double] = _unfolded_to_bin_weights(unfolded, prior)
+    weights: NDArray[np.double] = _normalize_weights(bin_weights[test_mc_gen_bins])
+    logger.info("%s: %d bins, %d iterations", variable_name, n_bins, n_iterations)
+    return _VariableUnfolding(
+        weights=weights,
+        outcome=VariableOutcome(variable_name, "completed", n_bins),
+    )
+
+
+def _evaluate_dimension(
+    reference: NDArray[np.double],
+    comparison: NDArray[np.double],
+    weights: NDArray[np.double],
+) -> MetricRecord:
+    wasserstein_before: float = _wd_per_dim(reference, comparison)[0]
+    wasserstein_after: float = _wd_per_dim(reference, comparison, weights=weights)[0]
+    jensenshannon_before: float = _js_per_dim(reference, comparison)[0]
+    jensenshannon_after: float = _js_per_dim(reference, comparison, weights=weights)[0]
+    triangular_before: float = _triangular_per_dim(reference, comparison)[0]
+    triangular_after: float = _triangular_per_dim(
+        reference, comparison, weights=weights
+    )[0]
+    return {
+        "wasserstein_before": wasserstein_before,
+        "wasserstein_after": wasserstein_after,
+        "wasserstein_improvement_pct": _improvement(
+            wasserstein_before, wasserstein_after
+        ),
+        "jensenshannon_before": jensenshannon_before,
+        "jensenshannon_after": jensenshannon_after,
+        "jensenshannon_improvement_pct": _improvement(
+            jensenshannon_before, jensenshannon_after
+        ),
+        "triangular_before": triangular_before,
+        "triangular_after": triangular_after,
+        "triangular_improvement_pct": _improvement(triangular_before, triangular_after),
+    }
 
 
 def _run_and_evaluate(

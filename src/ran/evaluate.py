@@ -49,18 +49,26 @@ def _load_splits(config: dict) -> DatasetSplits:
             # Legacy config format: hardcoded mu/sigma, only smearing varied
             smearing = config.get("smearing", 0.5)
             raw_params = {
-                "mu_gen": [0.5] * dim, "mu_true": [0.0] * dim,
-                "sigma_gen": 0.9, "sigma_true": 1.0,
+                "mu_gen": [0.5] * dim,
+                "mu_true": [0.0] * dim,
+                "sigma_gen": 0.9,
+                "sigma_true": 1.0,
                 "sigma_detector": smearing,
             }
-        return RAN_Dataset(batch_size=batch_size, seed=data_seed).generate_gaussian_dataset(
-            params=raw_params, n_samples=n_samples,
+        return RAN_Dataset(
+            batch_size=batch_size, seed=data_seed
+        ).generate_gaussian_dataset(
+            params=raw_params,
+            n_samples=n_samples,
         )
     if dataset == "jets":
         from ran.data import load_jet_dataset
+
         splits, _, _ = load_jet_dataset(
-            n_samples=n_samples, batch_size=batch_size,
-            variables=tuple(config["variables"]), seed=data_seed,
+            n_samples=n_samples,
+            batch_size=batch_size,
+            variables=tuple(config["variables"]),
+            seed=data_seed,
         )
         return splits
     raise ValueError(f"Unknown dataset: {dataset!r}")
@@ -71,7 +79,9 @@ def _collect_test_data(test_ds: ArrayDataset):
     return test_ds.as_arrays()
 
 
-def _get_weights(g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000) -> npt.NDArray:
+def _get_weights(
+    g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000
+) -> npt.NDArray:
     """Compute normalized generator weights in chunks to limit peak memory."""
     n = len(z_gen)
     raw = np.empty(n, dtype=np.float64)
@@ -82,7 +92,9 @@ def _get_weights(g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000) -
 
 
 def _wd_per_dim(
-    ref: npt.NDArray, comp: npt.NDArray, weights: npt.NDArray | None = None,
+    ref: npt.NDArray,
+    comp: npt.NDArray,
+    weights: npt.NDArray | None = None,
 ) -> list[float]:
     """1D Wasserstein distance per dimension using sorted-CDF fast path."""
     dim = ref.shape[1] if ref.ndim > 1 else 1
@@ -95,8 +107,10 @@ def _wd_per_dim(
 
 
 def _js_per_dim(
-    ref: npt.NDArray, comp: npt.NDArray,
-    weights: npt.NDArray | None = None, n_bins: int = 100,
+    ref: npt.NDArray,
+    comp: npt.NDArray,
+    weights: npt.NDArray | None = None,
+    n_bins: int = 100,
 ) -> list[float]:
     """Jensen-Shannon divergence per dimension via histogramming.
 
@@ -134,8 +148,10 @@ def _js_per_dim(
 
 
 def _triangular_per_dim(
-    ref: npt.NDArray, comp: npt.NDArray,
-    weights: npt.NDArray | None = None, n_bins: int = 100,
+    ref: npt.NDArray,
+    comp: npt.NDArray,
+    weights: npt.NDArray | None = None,
+    n_bins: int = 100,
 ) -> list[float]:
     """Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
@@ -227,7 +243,9 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
                 "wasserstein_improvement_pct": _improvement(wd_before[i], wd_after[i]),
                 "jensenshannon_before": js_before[i],
                 "jensenshannon_after": js_after[i],
-                "jensenshannon_improvement_pct": _improvement(js_before[i], js_after[i]),
+                "jensenshannon_improvement_pct": _improvement(
+                    js_before[i], js_after[i]
+                ),
                 "triangular_before": td_before[i],
                 "triangular_after": td_after[i],
                 "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
@@ -299,8 +317,7 @@ def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
         evaluate_run(run_dir, force=force)
     else:
         run_dirs = sorted(
-            d for d in run_dir.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
+            d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
         )
         logger.info("Found %d runs to evaluate", len(run_dirs))
         for d in run_dirs:

@@ -63,8 +63,13 @@ class TestGenerateGaussianDataset:
 
     def test_both_config_and_params_raises(self, tmp_path):
         """Providing both config_path and params should error."""
-        cfg = {"mu_gen": [0.0], "mu_true": [0.5], "sigma_gen": 1.0,
-               "sigma_true": 0.9, "sigma_detector": 0.5}
+        cfg = {
+            "mu_gen": [0.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+            "sigma_true": 0.9,
+            "sigma_detector": 0.5,
+        }
         path = _write_config(cfg, tmp_path)
         ds = RAN_Dataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
@@ -255,7 +260,9 @@ class TestArrayDataset:
         from ran.data.datasets import ArrayDataset
 
         with pytest.raises(ValueError, match="first dimension"):
-            ArrayDataset(np.zeros((5, 1)), np.zeros((4, 1)), np.zeros(5, dtype=np.ubyte))
+            ArrayDataset(
+                np.zeros((5, 1)), np.zeros((4, 1)), np.zeros(5, dtype=np.ubyte)
+            )
 
     def test_too_few_events_to_split_raises(self):
         with pytest.raises(ValueError, match="at least one event"):

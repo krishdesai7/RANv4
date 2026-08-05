@@ -34,7 +34,9 @@ from omnifold.net import weighted_binary_crossentropy
 
 # OmniFold's custom loss isn't registered with Keras serialization,
 # which breaks clone_model(). Register it here.
-keras.saving.get_custom_objects()["weighted_binary_crossentropy"] = weighted_binary_crossentropy
+keras.saving.get_custom_objects()["weighted_binary_crossentropy"] = (
+    weighted_binary_crossentropy
+)
 
 from ran.evaluate import (
     _collect_test_data,
@@ -64,6 +66,7 @@ def omnifold_unfold(
     reweights z_target (defaults to z_gen) through the gen-level model. Returns
     a 1D weight array, normalized so its mean is 1.
     """
+
     def _as2d(a: npt.NDArray) -> npt.NDArray:
         a = np.asarray(a, dtype=np.float32)
         return a[:, None] if a.ndim == 1 else a
@@ -79,8 +82,10 @@ def omnifold_unfold(
 
     unfold = MultiFold(
         "omnifold_baseline",
-        MLP(dim), MLP(dim),
-        data_dl, mc_dl,
+        MLP(dim),
+        MLP(dim),
+        data_dl,
+        mc_dl,
         niter=niter,
         epochs=epochs,
         batch_size=batch_size,
@@ -92,7 +97,9 @@ def omnifold_unfold(
     return w / w.mean()
 
 
-def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[dict, list[str], npt.NDArray[np.float64]]:
+def _run_and_evaluate(
+    config: dict, niter: int = 3, epochs: int = 50
+) -> tuple[dict, list[str], npt.NDArray[np.float64]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
     splits = _load_splits(config)
 
@@ -122,7 +129,9 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
     x_mc_t = x_test[y_test == 0]
 
     w = omnifold_unfold(
-        x_data, x_mc, z_mc,
+        x_data,
+        x_mc,
+        z_mc,
         z_target=z_mc_t,
         niter=niter,
         epochs=epochs,
@@ -135,7 +144,10 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
         var_names = [f"dim_{i}" for i in range(config["dim"])]
 
     metrics: dict = {}
-    for level, ref, comp in [("detector", x_data_t, x_mc_t), ("particle", z_data_t, z_mc_t)]:
+    for level, ref, comp in [
+        ("detector", x_data_t, x_mc_t),
+        ("particle", z_data_t, z_mc_t),
+    ]:
         wd_before = _wd_per_dim(ref, comp)
         wd_after = _wd_per_dim(ref, comp, weights=w)
         js_before = _js_per_dim(ref, comp)
@@ -151,7 +163,9 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
                 "wasserstein_improvement_pct": _improvement(wd_before[i], wd_after[i]),
                 "jensenshannon_before": js_before[i],
                 "jensenshannon_after": js_after[i],
-                "jensenshannon_improvement_pct": _improvement(js_before[i], js_after[i]),
+                "jensenshannon_improvement_pct": _improvement(
+                    js_before[i], js_after[i]
+                ),
                 "triangular_before": td_before[i],
                 "triangular_after": td_after[i],
                 "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
@@ -160,8 +174,9 @@ def _run_and_evaluate(config: dict, niter: int = 3, epochs: int = 50) -> tuple[d
     return metrics, var_names, w
 
 
-def evaluate_single(run_dir: str | Path, force: bool = False,
-                    niter: int = 3, epochs: int = 50) -> dict:
+def evaluate_single(
+    run_dir: str | Path, force: bool = False, niter: int = 3, epochs: int = 50
+) -> dict:
     """Run OmniFold on a single RAN run's dataset and save comparison metrics."""
     run_dir = Path(run_dir)
     out_path = run_dir / "metrics_omnifold.json"
@@ -212,8 +227,7 @@ def evaluate_runs(
         evaluate_single(run_dir, force=force, niter=niter, epochs=epochs)
     else:
         run_dirs = sorted(
-            d for d in run_dir.iterdir()
-            if d.is_dir() and (d / "config.json").exists()
+            d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
         )
         logger.info("Found %d runs to evaluate with OmniFold", len(run_dirs))
         for d in run_dirs:

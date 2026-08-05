@@ -198,7 +198,9 @@ def _as_batch(
     )
 
 
-def _eval_dataset(eval_step, state: TrainState, dataset: ArrayDataset) -> tuple[float, float]:
+def _eval_dataset(
+    eval_step, state: TrainState, dataset: ArrayDataset
+) -> tuple[float, float]:
     """Mean weighted BCE over a split, as (d_loss, g_loss).
 
     g's loss is the exact negation of d's, so both entries report the same BCE;
@@ -259,8 +261,12 @@ def train(
     # -- an ensemble loop over init seeds -- all see identical data.
     splits.train.reset()
 
-    g: keras.Model = build_generator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
-    d: keras.Model = build_discriminator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
+    g: keras.Model = build_generator(
+        dim=dim, hidden_units=hidden_units, n_layers=n_layers
+    )
+    d: keras.Model = build_discriminator(
+        dim=dim, hidden_units=hidden_units, n_layers=n_layers
+    )
     opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
     opt_d: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_d)
     opt_g.build(g.trainable_variables)
@@ -276,7 +282,12 @@ def train(
     )
     disc_step, gen_step, eval_step = _make_steps(g, d, opt_g, opt_d)
 
-    history: dict[str, list[float | np.floating]] = {"train_d": [], "train_g": [], "val_d": [], "val_g": [], }
+    history: dict[str, list[float | np.floating]] = {
+        "train_d": [],
+        "train_g": [],
+        "val_d": [],
+        "val_g": [],
+    }
     best_val_d: float = -np.inf
     best_state: TrainState | None = None
     wait: int = 0

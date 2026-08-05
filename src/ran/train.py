@@ -12,6 +12,7 @@ The loss math below is written in backend-agnostic `keras.ops`; only the
 gradient transform and jit are native JAX.
 """
 
+import logging
 from typing import NamedTuple
 
 import jax
@@ -22,6 +23,8 @@ from keras import ops
 
 from ran.data import ArrayDataset, DatasetSplits
 from ran.models import build_discriminator, build_generator
+
+logger = logging.getLogger(__name__)
 
 if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
@@ -308,15 +311,20 @@ def train(
         else:
             wait += 1
 
-        print(
-            f"Epoch {epoch + 1:3d}/{n_epochs}"
-            f"  D: {mean_td:.4f}  G: {mean_tg:.4f}"
-            f"  | Val D: {mean_val[0]:.4f}  G: {mean_val[1]:.4f}"
-            f"  (patience {wait}/{patience})"
+        logger.info(
+            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val D: %.4f  G: %.4f  (patience %d/%d)",
+            epoch + 1,
+            n_epochs,
+            mean_td,
+            mean_tg,
+            mean_val[0],
+            mean_val[1],
+            wait,
+            patience,
         )
 
         if wait >= patience:
-            print(f"Early stopping at epoch {epoch + 1}")
+            logger.info("Early stopping at epoch %d", epoch + 1)
             if best_state is not None:
                 state = best_state
             break
@@ -328,6 +336,6 @@ def train(
 
     # Final test evaluation
     test: tuple[float, float] = _eval_dataset(eval_step, state, splits.test)
-    print(f"Test  D: {test[0]:.4f}  G: {test[1]:.4f}  (init seed {seed})")
+    logger.info("Test  D: %.4f  G: %.4f  (init seed %d)", test[0], test[1], seed)
 
     return TrainResult(g, d, history, seed)

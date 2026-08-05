@@ -18,6 +18,7 @@ Usage:
 """
 
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,8 @@ import numpy.typing as npt
 from scipy.stats import wasserstein_distance
 
 from ran.data.datasets import RAN_Dataset
+
+logger = logging.getLogger(__name__)
 
 
 def response(s: float, z: npt.NDArray[np.double]) -> npt.NDArray[np.double]:
@@ -119,7 +122,7 @@ def run_ran(
     w_ran = _finite(raw * len(raw) / raw.sum())
 
     ran_wd = unfolded_wasserstein(z_truth, z_gen, w_ran)
-    print(f"s={s:.4f}  RAN={ran_wd:.6f}  (init seed {result.seed})")
+    logger.info("s=%.4f  RAN=%.6f  (init seed %d)", s, ran_wd, result.seed)
     return _write_point(
         Path(sweep_dir),
         "ran",
@@ -170,7 +173,7 @@ def run_omnifold(
     )
 
     of_wd = unfolded_wasserstein(z_truth, z_gen, w_of)
-    print(f"s={s:.4f}  OmniFold={of_wd:.6f}")
+    logger.info("s=%.4f  OmniFold=%.6f", s, of_wd)
     return _write_point(
         Path(sweep_dir),
         "omnifold",
@@ -203,7 +206,7 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
     present = {r["s_index"] for r in complete}
     missing = sorted(set(range(n_points)) - present)
     if missing:
-        print(f"WARNING: missing s_index values (failed/incomplete tasks): {missing}")
+        logger.warning("missing s_index values (failed/incomplete tasks): %s", missing)
 
     s = np.array([r["s"] for r in complete])
     ran = np.array([r["ran_wd"] for r in complete])
@@ -225,7 +228,9 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
     fig.tight_layout()
     fig.savefig(sweep_dir / "wasserstein_vs_s.pdf")
     plt.close(fig)
-    print(
-        f"Wrote {sweep_dir / 'results.npz'} and "
-        f"{sweep_dir / 'wasserstein_vs_s.pdf'} ({len(complete)} points)"
+    logger.info(
+        "Wrote %s and %s (%d points)",
+        sweep_dir / "results.npz",
+        sweep_dir / "wasserstein_vs_s.pdf",
+        len(complete),
     )

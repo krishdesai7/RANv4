@@ -12,6 +12,7 @@ Usage:
 """
 
 import json
+import logging
 from pathlib import Path
 
 import keras
@@ -21,6 +22,8 @@ from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
 from ran.data import ArrayDataset, DatasetSplits, RAN_Dataset
+
+logger = logging.getLogger(__name__)
 
 
 def _load_splits(config: dict) -> DatasetSplits:
@@ -35,7 +38,7 @@ def _load_splits(config: dict) -> DatasetSplits:
     dim = config["dim"]
     data_seed = config.get("data_seed", 42)
 
-    print(f"Loading dataset: {dataset}")
+    logger.info("Loading dataset: %s", dataset)
     if dataset == "gaussian":
         if "gaussian_params" in config:
             gaussian_params = config["gaussian_params"]
@@ -182,11 +185,11 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
     out_path = run_dir / "metrics.json"
 
     if out_path.exists() and not force:
-        print(f"  {run_dir.name}: metrics.json exists, skipping (use --force)")
+        logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
         return json.loads(out_path.read_text())
 
     config = json.loads((run_dir / "config.json").read_text())
-    print(f"  {run_dir.name}: loading model and data...")
+    logger.info("%s: loading model and data...", run_dir.name)
     g = keras.saving.load_model(run_dir / "generator.keras")
 
     splits = _load_splits(config)
@@ -283,9 +286,9 @@ def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
             d for d in run_dir.iterdir()
             if d.is_dir() and (d / "config.json").exists()
         )
-        print(f"Found {len(run_dirs)} runs to evaluate")
+        logger.info("Found %d runs to evaluate", len(run_dirs))
         for d in run_dirs:
             try:
                 evaluate_run(d, force=force)
-            except Exception as e:
-                print(f"  {d.name}: FAILED — {e}")
+            except Exception:
+                logger.warning("%s: failed", d.name, exc_info=True)

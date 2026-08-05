@@ -24,6 +24,7 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import json
+import logging
 from pathlib import Path
 
 import keras
@@ -45,6 +46,8 @@ from ran.evaluate import (
     _triangular_per_dim,
     _wd_per_dim,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def omnifold_unfold(
@@ -165,11 +168,15 @@ def evaluate_single(run_dir: str | Path, force: bool = False,
     out_path = run_dir / "metrics_omnifold.json"
 
     if out_path.exists() and not force:
-        print(f"  {run_dir.name}: metrics_omnifold.json exists, skipping (use --force)")
+        logger.info(
+            "%s: metrics_omnifold.json exists, skipping (use --force)", run_dir.name
+        )
         return json.loads(out_path.read_text())
 
     config = json.loads((run_dir / "config.json").read_text())
-    print(f"  {run_dir.name}: running OmniFold (niter={niter}, epochs={epochs})...")
+    logger.info(
+        "%s: running OmniFold (niter=%d, epochs=%d)...", run_dir.name, niter, epochs
+    )
 
     metrics, var_names, w = _run_and_evaluate(config, niter=niter, epochs=epochs)
 
@@ -202,9 +209,9 @@ def evaluate_runs(
             d for d in run_dir.iterdir()
             if d.is_dir() and (d / "config.json").exists()
         )
-        print(f"Found {len(run_dirs)} runs to evaluate with OmniFold")
+        logger.info("Found %d runs to evaluate with OmniFold", len(run_dirs))
         for d in run_dirs:
             try:
                 evaluate_single(d, force=force, niter=niter, epochs=epochs)
-            except Exception as e:
-                print(f"  {d.name}: FAILED — {e}")
+            except Exception:
+                logger.warning("%s: failed", d.name, exc_info=True)

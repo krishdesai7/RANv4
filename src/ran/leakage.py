@@ -4,6 +4,7 @@ Both arms must use the same `init_seed` or the comparison is meaningless: with
 random initialization the run-to-run spread swamps the effect being tested.
 """
 
+import logging
 from typing import Any, Literal
 
 import keras
@@ -20,12 +21,17 @@ from ran.evaluate import (
 )
 from ran.train import train
 
+logger = logging.getLogger(__name__)
+
 
 def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) -> None:
     _: Any
     tag: Literal["CLEAN", "POISONED"] = "POISONED" if poison else "CLEAN"
-    print(
-        f"  Running {tag} (z_true = {'-999' if poison else 'N(0,1)'}), init seed {init_seed}"
+    logger.info(
+        "Running %s (z_true = %s), init seed %d",
+        tag,
+        "-999" if poison else "N(0,1)",
+        init_seed,
     )
 
     # Generate: z_true ~ N(0,1), z_gen ~ N(-0.5, 1), sigma_det = 0.25
@@ -77,7 +83,13 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
         wd_a: float = _wd_per_dim(ref, comp, weights=w)[0]
         td_b: float = _triangular_per_dim(ref, comp)[0]
         td_a: float = _triangular_per_dim(ref, comp, weights=w)[0]
-        print(
-            f"  {level:>10}  Wasserstein: {wd_b:.4f} → {wd_a:.4f} ({_improvement(wd_b, wd_a):+.1f}%)"
-            f"   Δ × 1e3: {td_b:.2f} → {td_a:.2f} ({_improvement(td_b, td_a):+.1f}%)"
+        logger.info(
+            "%10s  Wasserstein: %.4f → %.4f (%+.1f%%)   Δ × 1e3: %.2f → %.2f (%+.1f%%)",
+            level,
+            wd_b,
+            wd_a,
+            _improvement(wd_b, wd_a),
+            td_b,
+            td_a,
+            _improvement(td_b, td_a),
         )

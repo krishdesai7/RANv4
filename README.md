@@ -50,17 +50,17 @@ Gaussian datasets are configured via YAML files in `params/`:
 
 ```bash
 # 1D uncorrelated Gaussian
-uv run -m ran --config params/1d_default.yaml
+uv run -m ran train --config params/1d_default.yaml
 
 # 2D with correlated covariance
-uv run -m ran --config params/2d_correlated.yaml
+uv run -m ran train --config params/2d_correlated.yaml
 
 # 4D and 6D correlated
-uv run -m ran --config params/4d_correlated.yaml
-uv run -m ran --config params/6d_correlated.yaml
+uv run -m ran train --config params/4d_correlated.yaml
+uv run -m ran train --config params/6d_correlated.yaml
 
 # Customize network and training
-uv run -m ran --config params/1d_default.yaml --hidden_units 128 --n_layers 3 --patience 10
+uv run -m ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --patience 10
 ```
 
 YAML config format (see `params/` for examples):
@@ -83,17 +83,20 @@ Sigma values are promoted to covariance matrices:
 
 ```bash
 # All 6 jet variables
-uv run -m ran --dataset jets
+uv run -m ran train --dataset jets
 
 # Specific variables
-uv run -m ran --dataset jets --variables='("m", "w")'
+uv run -m ran train --dataset jets --variable m --variable w
 ```
 
 ### Other Options
 
 ```bash
 # Reload an existing run (regenerate plots/metrics)
-uv run -m ran --load_run=runs/2026-03-14T061023Z
+uv run -m ran train --load-run runs/2026-03-14T061023Z
+
+# Enable debug logging for any command
+uv run -m ran --log-level DEBUG train --config params/1d_default.yaml
 
 # SLURM submission
 sbatch scripts/submit.sh --config params/2d_correlated.yaml
@@ -104,13 +107,13 @@ sbatch scripts/submit.sh --dataset jets
 | ---------------- | ---------- | ------------------------------------------- |
 | `--config`       | `None`     | Path to Gaussian YAML config                |
 | `--dataset`      | `gaussian` | Dataset type: `gaussian` or `jets`          |
-| `--n_samples`    | `500000`   | Number of events per class (data + MC)      |
-| `--batch_size`   | `1024`     | Training batch size                         |
-| `--hidden_units` | `64`       | Units per hidden layer                      |
-| `--n_layers`     | `2`        | Number of hidden layers                     |
+| `--n-samples`    | `500000`   | Number of events per class (data + MC)      |
+| `--batch-size`   | `1024`     | Training batch size                         |
+| `--hidden-units` | `64`       | Units per hidden layer                      |
+| `--n-layers`     | `2`        | Number of hidden layers                     |
 | `--patience`     | `5`        | Early stopping patience (epochs)            |
-| `--variables`    | all 6      | Jet substructure variables to use           |
-| `--load_run`     | `None`     | Path to an existing run directory to reload |
+| `--variable`     | all 6      | Repeat once for each jet substructure variable to use |
+| `--load-run`     | `None`     | Path to an existing run directory to reload |
 
 The pipeline will:
 
@@ -126,13 +129,13 @@ Distance metrics can be computed independently on existing runs:
 
 ```bash
 # Evaluate all runs
-uv run -m ran.evaluate
+uv run -m ran evaluate
 
 # Evaluate a single run
-uv run -m ran.evaluate --run_dir=runs/2026-03-14T061023Z
+uv run -m ran evaluate --run-dir runs/2026-03-14T061023Z
 
 # Recompute even if metrics.json exists
-uv run -m ran.evaluate --force
+uv run -m ran evaluate --force
 ```
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
@@ -143,33 +146,43 @@ Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) or IBU (Iterative Bay
 
 ```bash
 # OmniFold — single run
-uv run -m ran.baselines.omnifold --run_dir=runs/2026-...
+uv run -m ran baseline omnifold --run-dir runs/2026-03-14T061023Z
 
 # OmniFold — all runs
-uv run -m ran.baselines.omnifold
+uv run -m ran baseline omnifold
 
 # Customize OmniFold iterations/epochs
-uv run -m ran.baselines.omnifold --run_dir=runs/2026-... --niter=5 --epochs=100
+uv run -m ran baseline omnifold --run-dir runs/2026-03-14T061023Z --niter 5 --epochs 100
 
 # IBU — single run
-uv run -m ran.baselines.ibu --run_dir=runs/2026-...
+uv run -m ran baseline ibu --run-dir runs/2026-03-14T061023Z
 
 # IBU — all runs
-uv run -m ran.baselines.ibu
+uv run -m ran baseline ibu
 ```
 
 Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
 
+### Cubic-Response Sweep
+
+Run each step as its own process so RAN's JAX backend and OmniFold's TensorFlow backend never share an interpreter:
+
+```bash
+uv run -m ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
+uv run -m ran sweep omnifold --s-index 0 --sweep-dir runs/cubic-sweep
+uv run -m ran sweep collect --sweep-dir runs/cubic-sweep
+```
+
 ### Leakage Verification
 
-A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$ — the particle-level values of real data events, which are unknowable in a real experiment. `scripts/leakage_check.py` verifies this empirically via a **data poisoning test**:
+A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$ — the particle-level values of real data events, which are unknowable in a real experiment. The `leakage-check` command verifies this empirically via a **data poisoning test**:
 
 ```bash
 # Clean run — z_true drawn from N(0, 1) as normal
-uv run scripts/leakage_check.py --poison=False
+uv run -m ran leakage-check --clean
 
 # Poisoned run — z_true overwritten with -999 after x_data is generated
-uv run scripts/leakage_check.py --poison=True
+uv run -m ran leakage-check --poison
 ```
 
 The poisoned run corrupts every data particle-level value to a nonsense sentinel (-999) while leaving $x_\text{data}$ (the reco-level observations the discriminator actually sees) unchanged. If $g$ had any access to $z_\text{true}$, the poisoned run would produce degraded weights. Both runs should report statistically identical Wasserstein and triangular discriminator improvements. Matching results confirm that no leakage path exists.
@@ -179,7 +192,11 @@ The poisoned run corrupts every data particle-level value to a nonsense sentinel
 ```txt
 RANv4/
 ├── ran/                          Python package
-│   ├── __main__.py               Entry point (python -m ran)
+│   ├── __main__.py               Entry point (uv run -m ran)
+│   ├── cli.py                    Unified Typer command tree
+│   ├── workflow.py               Training and reload workflow
+│   ├── logging_config.py         Structured application logging
+│   ├── leakage.py                Data-poisoning leakage check
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion
 │   │   ├── datasets.py           DatasetSplits, RAN_Dataset, caching
@@ -188,6 +205,8 @@ RANv4/
 │   ├── baselines/
 │   │   ├── omnifold.py           OmniFold comparison baseline
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
+│   ├── experiments/
+│   │   └── cubic_sweep.py         Cubic-response RAN-vs-OmniFold sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  Adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -198,8 +217,8 @@ RANv4/
 │   ├── 4d_correlated.yaml
 │   └── 6d_correlated.yaml
 ├── scripts/
-│   ├── submit.sh                 SLURM submission script
-│   └── leakage_check.py          data poisoning test for z_true leakage
+│   ├── submit.sh                 Training and baseline SLURM submission script
+│   └── submit_sweep.sh           Packed cubic-response sweep launcher
 ├── tests/                        pytest tests
 ├── pyproject.toml                Project metadata and dependencies
 ├── runs/                         Output directory (timestamped subdirectories)
@@ -243,7 +262,8 @@ Each run produces a timestamped directory under `runs/` containing:
 
 ## Training Hyperparameters
 
-All configurable via CLI flags or in `ran/train.py`:
+These are internal training defaults in `src/ran/train.py`; the CLI-exposed
+training options are listed above.
 
 | Parameter      | Default | Description                                |
 | -------------- | ------- | ------------------------------------------ |
@@ -263,6 +283,7 @@ All configurable via CLI flags or in `ran/train.py`:
 - [`NumPy`](https://numpy.org/) >= 2.4
 - [`SciPy`](https://scipy.org/) >= 1.15
 - [`Matplotlib`](https://matplotlib.org/) >= 3.10
-- [`Fire`](https://github.com/google/python-fire) >= 0.7
+- [`Typer`](https://typer.tiangolo.com/) >= 0.16
+- [`Rich`](https://rich.readthedocs.io/) >= 13.0
 - [`PyYAML`](https://pyyaml.org/) >= 6.0
 - [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1

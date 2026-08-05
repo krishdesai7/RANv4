@@ -6,9 +6,9 @@ algorithms: sorted-CDF Wasserstein (O(n log n)) and histogram-based JS
 divergence.
 
 Usage:
-    python -m ran.evaluate                          # all runs in runs/
-    python -m ran.evaluate --run_dir=runs/2026-...  # single run
-    python -m ran.evaluate --force                  # recompute existing
+    uv run -m ran evaluate                          # all runs in runs/
+    uv run -m ran evaluate --run-dir runs/2026-...  # single run
+    uv run -m ran evaluate --force                  # recompute existing
 """
 
 import json

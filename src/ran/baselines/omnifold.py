@@ -1,19 +1,18 @@
 """Run OmniFold on the same dataset as a RAN run for comparison.
 
 Usage:
-    python -m ran.baselines.omnifold --run_dir=runs/2026-...
-    python -m ran.baselines.omnifold --run_dir=runs  # all runs
+    uv run -m ran baseline omnifold --run-dir runs/2026-...
+    uv run -m ran baseline omnifold --run-dir runs  # all runs
 
 RAN itself runs on the JAX backend, but the third-party `omnifold` package does
 not: its `weighted_binary_crossentropy` calls raw `tf.gather` on the label
 tensor, which raises `TracerArrayConversionError` the moment JAX traces it. So
 this module pins the backend back to TensorFlow.
 
-A process gets one Keras backend, set at first `keras` import, so this module
-has to be the entry point of its own process -- run it as `python -m
-ran.baselines.omnifold`, never import it from a module that has already touched
-JAX. `ran.experiments.cubic_sweep` keeps the two sides in separate subcommands
-for exactly this reason.
+A process gets one Keras backend, set at first `keras` import, so invoke the
+OmniFold baseline in its own process with `uv run -m ran baseline omnifold`;
+never import it from a module that has already touched JAX. The cubic sweep
+keeps the two sides in separate subcommands for exactly this reason.
 """
 
 import os

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, TypedDict
 import numpy as np
 
 from ran.evaluate import (
-    _collect_test_data,
     _improvement,
     _js_per_dim,
     _load_splits,
@@ -95,6 +94,34 @@ def _positive_int(value: object, key: str) -> int:
     return value
 
 
+def _parse_dataset(raw: dict[str, Any]) -> Literal["gaussian", "jets"]:
+    dataset: object = raw.get("dataset", "gaussian")
+    if dataset == "gaussian":
+        return "gaussian"
+    if dataset == "jets":
+        return "jets"
+    raise ValueError(f"Unknown dataset: {dataset!r}")
+
+
+def _parse_variable_names(
+    raw: dict[str, Any], dataset: Literal["gaussian", "jets"], dim: int
+) -> tuple[str, ...]:
+    if dataset == "gaussian":
+        return tuple(f"dim_{i}" for i in range(dim))
+
+    variables: object = raw.get("variables")
+    if not isinstance(variables, (list, tuple)) or any(
+        not isinstance(name, str) or not name for name in variables
+    ):
+        raise ValueError("variables must be a sequence of nonempty strings")
+    variable_names = tuple(variables)
+    if len(variable_names) != dim:
+        raise ValueError(
+            f"variables has length {len(variable_names)}, expected dim={dim}"
+        )
+    return variable_names
+
+
 def _parse_config(raw: object) -> IBUConfig:
     if not isinstance(raw, dict):
         raise ValueError("IBU config must be a JSON object")  # ruff: ignore[type-check-without-type-error]
@@ -106,27 +133,8 @@ def _parse_config(raw: object) -> IBUConfig:
     if type(data_seed) is not int:
         raise ValueError("data_seed must be an integer")
 
-    dataset_raw: object = raw.get("dataset", "gaussian")
-    if dataset_raw == "gaussian":
-        dataset: Literal["gaussian", "jets"] = "gaussian"
-    elif dataset_raw == "jets":
-        dataset = "jets"
-    else:
-        raise ValueError(f"Unknown dataset: {dataset_raw!r}")
-
-    if dataset == "gaussian":
-        variable_names: tuple[str, ...] = tuple(f"dim_{i}" for i in range(dim))
-    else:
-        variables: object = raw.get("variables")
-        if not isinstance(variables, (list, tuple)) or any(
-            not isinstance(name, str) or not name for name in variables
-        ):
-            raise ValueError("variables must be a sequence of nonempty strings")
-        variable_names = tuple(variables)
-        if len(variable_names) != dim:
-            raise ValueError(
-                f"variables has length {len(variable_names)}, expected dim={dim}"
-            )
+    dataset = _parse_dataset(raw)
+    variable_names = _parse_variable_names(raw, dataset, dim)
 
     return IBUConfig(
         source=dict(raw),
@@ -492,142 +500,50 @@ def _evaluate_dimension(
 
 
 def _run_and_evaluate(
-    config: dict[str, Any],
+    config: IBUConfig,
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
-) -> tuple[dict[str, Any], list[str], list[NDArray[np.double]]]:
+) -> IBUResult:
     """Run 1D IBU per variable and evaluate on test set."""
-    splits: DatasetSplits = _load_splits(config)
+    _positive_int(n_iterations, "n_iterations")
+    if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
+        raise ValueError("purity_threshold must be finite and between zero and one")
 
-    # Collect all splits for building response matrix (same as OmniFold)
-    zs: list[NDArray[np.double]] = []
-    xs: list[NDArray[np.double]] = []
-    ys: list[NDArray[np.ubyte]] = []
-    for split in [splits.train, splits.val, splits.test]:
-        z_split, x_split, y_split = split.as_arrays()
-        zs.append(z_split)
-        xs.append(x_split)
-        ys.append(y_split)
-    z_all: NDArray[np.double] = np.concatenate(zs, axis=0)
-    x_all: NDArray[np.double] = np.concatenate(xs, axis=0)
-    y_all: NDArray[np.ubyte] = np.concatenate(ys, axis=0)
+    splits = _load_splits(config.source)
+    data = _prepare_data(splits, config.dim)
+    weights = np.empty((config.dim, data.test_mc_gen.shape[0]), dtype=np.double)
+    metrics: dict[str, MetricRecord] = {}
+    outcomes: list[VariableOutcome] = []
 
-    z_gen_all: NDArray[np.double] = z_all[y_all == 0]
-    x_sim_all: NDArray[np.double] = x_all[y_all == 0]
-    x_data_all: NDArray[np.double] = x_all[y_all == 1]
-
-    # Test split for evaluation
-    z_test: NDArray[np.double]
-    x_test: NDArray[np.double]
-    y_test: NDArray[np.double]
-    z_test, x_test, y_test = _collect_test_data(splits.test)
-    z_data_t: NDArray[np.double] = z_test[y_test == 1]
-    x_data_t: NDArray[np.double] = x_test[y_test == 1]
-    z_mc_t: NDArray[np.double] = z_test[y_test == 0]
-    x_mc_t: NDArray[np.double] = x_test[y_test == 0]
-
-    dim: int = z_all.shape[1]
-    dataset: str = config.get("dataset", "gaussian")
-    if dataset == "jets":
-        var_names: list[str] = config["variables"]
-    else:
-        var_names = [f"dim_{i}" for i in range(dim)]
-
-    metrics: dict = {}
-    per_var_weights: list[NDArray[np.double]] = []
-
-    for d in range(dim):
-        # Purity-based binning from all MC
-        bins: NDArray[np.double] = _purity_bins(
-            z_gen_all[:, d],
-            x_sim_all[:, d],
-            purity_threshold,
+    for dimension, variable_name in enumerate(config.variable_names):
+        unfolding = _unfold_variable(
+            variable_name=variable_name,
+            response_gen=data.response_gen[:, dimension],
+            response_sim=data.response_sim[:, dimension],
+            observed_reco=data.observed_reco[:, dimension],
+            test_mc_gen=data.test_mc_gen[:, dimension],
+            n_iterations=n_iterations,
+            purity_threshold=purity_threshold,
         )
-        n_bins: int = bins.shape[0] - 1
-
-        if n_bins < 2:
-            logger.warning("%s: only %d bin(s), skipping", var_names[d], n_bins)
-            per_var_weights.append(np.ones(z_mc_t.shape[0], dtype=np.double))
-            continue
-
-        # Response matrix from all MC
-        gen_binned: NDArray[np.long] = (
-            np.clip(np.digitize(z_gen_all[:, d], bins), 1, n_bins) - 1
+        weights[dimension] = unfolding.weights
+        outcomes.append(unfolding.outcome)
+        metrics[f"detector_{variable_name}"] = _evaluate_dimension(
+            data.test_data_reco[:, dimension],
+            data.test_mc_reco[:, dimension],
+            unfolding.weights,
         )
-        sim_binned: NDArray[np.long] = (
-            np.clip(np.digitize(x_sim_all[:, d], bins), 1, n_bins) - 1
+        metrics[f"particle_{variable_name}"] = _evaluate_dimension(
+            data.test_data_gen[:, dimension],
+            data.test_mc_gen[:, dimension],
+            unfolding.weights,
         )
-        response: NDArray[np.double] = _build_response(gen_binned, sim_binned, n_bins)
 
-        # Prior (MC gen) and data reco histogram
-        # np.histogram returns integer counts; _ibu divides and accumulates into
-        # these, so promote once here rather than relying on operand coercion.
-        prior: NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[0].astype(
-            np.double
-        )
-        data_hist: NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[
-            0
-        ].astype(np.double)
-
-        # IBU
-        unfolded: NDArray[np.double] = _ibu(prior, data_hist, response, n_iterations)
-        logger.info("%s: %d bins, %d iterations", var_names[d], n_bins, n_iterations)
-
-        # Convert unfolded histogram to per-event weights for test MC.
-        # Weight per bin = unfolded / prior; test MC events in that
-        # gen-level bin receive the corresponding weight.
-        bin_weights: NDArray[np.double] = unfolded / (prior + EPS)
-        mc_test_binned: NDArray[np.long] = (
-            np.clip(
-                np.digitize(z_mc_t[:, d], bins),
-                1,
-                n_bins,
-            )
-            - 1
-        )
-        w: NDArray[np.double] = bin_weights[mc_test_binned]
-        w: NDArray[np.double] = w / w.mean()
-        per_var_weights.append(w)
-
-        # Metrics per variable (IBU is 1D, so weights differ per variable)
-        wd_before: list[float]
-        wd_after: list[float]
-        js_before: list[float]
-        js_after: list[float]
-        td_before: list[float]
-        td_after: list[float]
-        level: str
-        ref: NDArray[np.double]
-        comp: NDArray[np.double]
-        key: str
-
-        for level, ref, comp in [
-            ("detector", x_data_t[:, d : d + 1], x_mc_t[:, d : d + 1]),
-            ("particle", z_data_t[:, d : d + 1], z_mc_t[:, d : d + 1]),
-        ]:
-            wd_before = _wd_per_dim(ref, comp)
-            wd_after = _wd_per_dim(ref, comp, weights=w)
-            js_before = _js_per_dim(ref, comp)
-            js_after = _js_per_dim(ref, comp, weights=w)
-            td_before = _triangular_per_dim(ref, comp)
-            td_after = _triangular_per_dim(ref, comp, weights=w)
-
-            key = f"{level}_{var_names[d]}"
-            metrics[key] = {
-                "wasserstein_before": wd_before[0],
-                "wasserstein_after": wd_after[0],
-                "wasserstein_improvement_pct": _improvement(wd_before[0], wd_after[0]),
-                "jensenshannon_before": js_before[0],
-                "jensenshannon_after": js_after[0],
-                "jensenshannon_improvement_pct": _improvement(
-                    js_before[0], js_after[0]
-                ),
-                "triangular_before": td_before[0],
-                "triangular_after": td_after[0],
-                "triangular_improvement_pct": _improvement(td_before[0], td_after[0]),
-            }
-
-    return metrics, var_names, per_var_weights
+    return IBUResult(
+        metrics=metrics,
+        variable_names=config.variable_names,
+        weights=weights,
+        outcomes=tuple(outcomes),
+    )
 
 
 def evaluate_single(
@@ -635,7 +551,7 @@ def evaluate_single(
     force: bool = False,
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
-) -> dict[str, Any]:
+) -> dict[str, MetricRecord]:
     """Run IBU on a single RAN run's dataset and save comparison metrics."""
     run_dir = Path(run_dir)
     out_path: Path = run_dir / "metrics_ibu.json"
@@ -644,24 +560,21 @@ def evaluate_single(
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
         return json.loads(out_path.read_text())
 
-    config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
+    raw_config: object = json.loads((run_dir / "config.json").read_text())
+    config = _parse_config(raw_config)
     logger.info(
         "%s: running IBU (niter=%d, purity=%.4f)...",
         run_dir.name,
         n_iterations,
         purity_threshold,
     )
-    metrics: dict[str, Any]
-    var_names: list[str]
-    per_var_weights: list[NDArray[np.double]]
-
-    metrics, var_names, per_var_weights = _run_and_evaluate(
+    result = _run_and_evaluate(
         config,
         n_iterations=n_iterations,
         purity_threshold=purity_threshold,
     )
 
-    json.dump(metrics, out_path.open("w"), indent=2)
+    json.dump(result.metrics, out_path.open("w"), indent=2)
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
@@ -670,7 +583,7 @@ def evaluate_single(
         # be "allow_pickle", which is declared bool. The complaint is therefore
         # sound rather than a stub bug (ty reports it too); it just cannot happen
         # here. A literal-key dict checks clean, but ours cannot be one.
-        **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
+        **{f"weights_{i}": weights for i, weights in enumerate(result.weights)},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",
@@ -678,8 +591,8 @@ def evaluate_single(
         out_path,
         weights_path,
     )
-    render_metrics(f"{run_dir.name} [IBU]", metrics, var_names)
-    return metrics
+    render_metrics(f"{run_dir.name} [IBU]", result.metrics, list(result.variable_names))
+    return result.metrics
 
 
 def evaluate_runs(

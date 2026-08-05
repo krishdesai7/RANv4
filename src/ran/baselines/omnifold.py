@@ -14,8 +14,17 @@ OmniFold baseline in its own process with `uv run -m ran baseline omnifold`;
 never import it from a module that has already touched JAX. The cubic sweep
 keeps the two sides in separate subcommands for exactly this reason.
 """
-
 import os
+
+from ran.evaluate import (
+    _collect_test_data,
+    _improvement,
+    _js_per_dim,
+    _load_splits,
+    _triangular_per_dim,
+    _wd_per_dim,
+    render_metrics,
+)
 
 # Must precede every keras import, including the transitive one via `ran`
 # (whose __init__ only *defaults* the backend to jax, so this hard set wins).
@@ -38,15 +47,6 @@ keras.saving.get_custom_objects()["weighted_binary_crossentropy"] = (
     weighted_binary_crossentropy
 )
 
-from ran.evaluate import (
-    _collect_test_data,
-    _improvement,
-    _js_per_dim,
-    _load_splits,
-    _triangular_per_dim,
-    _wd_per_dim,
-    render_metrics,
-)
 
 logger = logging.getLogger(__name__)
 

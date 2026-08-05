@@ -19,6 +19,7 @@ Usage:
 
 import json
 import logging
+import operator
 from pathlib import Path
 
 import numpy as np
@@ -196,7 +197,7 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
 
     complete = sorted(
         (r for r in records.values() if "ran_wd" in r and "omnifold_wd" in r),
-        key=lambda r: r["s"],
+        key=operator.itemgetter("s"),
     )
     if not complete:
         raise FileNotFoundError(

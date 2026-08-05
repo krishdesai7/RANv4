@@ -143,22 +143,22 @@ class TestTrainSteps:
         (disc_step, _, _), state, batch = self._setup()
         new, loss = disc_step(state, *batch)
         assert np.isfinite(float(loss))
-        for before, after in zip(state.d_trainable, new.d_trainable):
+        for before, after in zip(state.d_trainable, new.d_trainable, strict=False):
             assert not np.allclose(np.asarray(before), np.asarray(after))
-        for before, after in zip(state.g_trainable, new.g_trainable):
+        for before, after in zip(state.g_trainable, new.g_trainable, strict=False):
             np.testing.assert_array_equal(np.asarray(before), np.asarray(after))
 
     def test_gen_step_updates_only_the_generator(self):
         (_, gen_step, _), state, batch = self._setup()
         new, loss = gen_step(state, *batch)
         assert np.isfinite(float(loss))
-        for before, after in zip(state.g_trainable, new.g_trainable):
+        for before, after in zip(state.g_trainable, new.g_trainable, strict=False):
             assert not np.allclose(np.asarray(before), np.asarray(after))
-        for before, after in zip(state.d_trainable, new.d_trainable):
+        for before, after in zip(state.d_trainable, new.d_trainable, strict=False):
             np.testing.assert_array_equal(np.asarray(before), np.asarray(after))
 
     def test_gen_and_disc_losses_are_opposite(self):
-        (disc_step, gen_step, eval_step), state, batch = self._setup()
+        (disc_step, gen_step, _eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
         _, g_loss = gen_step(state, *batch)
         np.testing.assert_allclose(float(g_loss), -float(d_loss), rtol=1e-12)
@@ -182,7 +182,7 @@ def test_train_runs_and_returns_usable_models(tmp_path):
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
     splits = RAN_Dataset(batch_size=128, seed=0).splits_from_arrays(z, x, y)
 
-    g, d, history, seed = train(
+    g, _d, history, seed = train(
         splits, dim=1, n_epochs=3, patience=99, hidden_units=8, n_layers=1
     )
 

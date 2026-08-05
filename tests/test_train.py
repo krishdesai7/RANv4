@@ -95,7 +95,9 @@ class TestWeightedBCE:
         y = np.array([1.0, 1.0, 0.0, 0.0])
         d_out = np.full(4, 0.5)
         w = np.ones(4)
-        np.testing.assert_allclose(float(weighted_bce(d_out, y, w)), np.log(2), atol=1e-6)
+        np.testing.assert_allclose(
+            float(weighted_bce(d_out, y, w)), np.log(2), atol=1e-6
+        )
 
     def test_zero_weight_events_are_ignored(self):
         rng = np.random.default_rng(5)
@@ -164,7 +166,9 @@ class TestTrainSteps:
     def test_eval_step_leaves_state_untouched_and_matches_disc_loss(self):
         (disc_step, _, eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
-        np.testing.assert_allclose(float(eval_step(state, *batch)), float(d_loss), rtol=1e-12)
+        np.testing.assert_allclose(
+            float(eval_step(state, *batch)), float(d_loss), rtol=1e-12
+        )
 
 
 def test_train_runs_and_returns_usable_models(tmp_path):
@@ -228,7 +232,13 @@ class TestSeeding:
     @staticmethod
     def _run(splits, seed):
         return train(
-            splits, dim=1, n_epochs=2, patience=99, hidden_units=8, n_layers=1, seed=seed
+            splits,
+            dim=1,
+            n_epochs=2,
+            patience=99,
+            hidden_units=8,
+            n_layers=1,
+            seed=seed,
         )
 
     def test_same_seed_reproduces_run_exactly(self):
@@ -277,8 +287,12 @@ class TestSeeding:
             return next(iter(splits.train))[0]["z"].ravel().copy()
 
         before = first_batch()
-        train(splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=7)
+        train(
+            splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=7
+        )
         np.testing.assert_array_equal(first_batch(), before)
 
-        train(splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=8)
+        train(
+            splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=8
+        )
         np.testing.assert_array_equal(first_batch(), before)

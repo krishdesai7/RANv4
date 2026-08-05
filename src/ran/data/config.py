@@ -21,15 +21,14 @@ def sigma_to_covariance(
 
     Validates positive-definiteness via Cholesky decomposition.
     """
-    arr: npt.NDArray[np.double] = np.atleast_1d(np.asarray(sigma,
-                                                dtype=np.double))
+    arr: npt.NDArray[np.double] = np.atleast_1d(np.asarray(sigma, dtype=np.double))
 
     cov: npt.NDArray[np.double]
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
         val: np.double = arr.ravel()[0]
         if val < 0:
             raise ValueError(f"sigma scalar must be non-negative, got {val}")
-        cov = val ** 2 * np.identity(cast("int", dim), dtype=np.double)
+        cov = val**2 * np.identity(cast("int", dim), dtype=np.double)
     elif arr.ndim == 1:
         if arr.shape[0] != dim:
             raise ValueError(
@@ -37,12 +36,10 @@ def sigma_to_covariance(
             )
         if np.any(arr < 0):
             raise ValueError("sigma vector elements must be non-negative")
-        cov = np.diag(arr ** 2).astype(np.double)
+        cov = np.diag(arr**2).astype(np.double)
     elif arr.ndim == 2:
         if arr.shape != (dim, dim):
-            raise ValueError(
-                f"sigma matrix has shape {arr.shape}, expected {dim = }"
-            )
+            raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
         if not np.allclose(arr, arr.T):
             raise ValueError("sigma matrix must be symmetric")
         cov = arr
@@ -53,8 +50,13 @@ def sigma_to_covariance(
     return cov
 
 
-REQUIRED_KEYS: set[str] = {"mu_gen", "mu_true",
-                           "sigma_gen", "sigma_true", "sigma_detector"}
+REQUIRED_KEYS: set[str] = {
+    "mu_gen",
+    "mu_true",
+    "sigma_gen",
+    "sigma_true",
+    "sigma_detector",
+}
 
 
 def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
@@ -72,20 +74,20 @@ def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
     if missing:
         raise ValueError(f"Config missing required keys: {missing}")
 
-    mu_gen: npt.NDArray[np.double] = np.asarray(raw["mu_gen"],
-                                                dtype=np.double).ravel()
-    mu_true: npt.NDArray[np.double] = np.asarray(raw["mu_true"],
-                                                 dtype=np.double).ravel()
+    mu_gen: npt.NDArray[np.double] = np.asarray(raw["mu_gen"], dtype=np.double).ravel()
+    mu_true: npt.NDArray[np.double] = np.asarray(
+        raw["mu_true"], dtype=np.double
+    ).ravel()
 
     dim: np.ubyte = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
-        raise ValueError(
-            f"mu_true has dim {mu_true.shape[0]}, mu_gen has {dim=}"
-        )
+        raise ValueError(f"mu_true has dim {mu_true.shape[0]}, mu_gen has {dim=}")
 
     cov_gen: npt.NDArray[np.double] = sigma_to_covariance(raw["sigma_gen"], dim)
     cov_true: npt.NDArray[np.double] = sigma_to_covariance(raw["sigma_true"], dim)
-    cov_detector: npt.NDArray[np.double] = sigma_to_covariance(raw["sigma_detector"], dim)
+    cov_detector: npt.NDArray[np.double] = sigma_to_covariance(
+        raw["sigma_detector"], dim
+    )
 
     return {
         "dim": dim,

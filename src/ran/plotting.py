@@ -56,12 +56,13 @@ def _hist_ratio_panel(
     w_omnifold: npt.NDArray[np.double] | None = None,
     w_ibu: npt.NDArray[np.double] | None = None,
 ) -> None:
-    h_nature: tuple = ax.hist(x_nature,
+    h_nature: tuple = ax.hist(
+        x_nature,
         bins=bins,
         alpha=0.35,
         color="C0",
         label=nature_label,
-        )
+    )
     h_mc: tuple = ax.hist(
         x_mc,
         bins=h_nature[1],
@@ -97,14 +98,16 @@ def _hist_ratio_panel(
     ratio_mc[safe] = h_mc[0][safe] / h_nature[0][safe]
     ratio_ran[safe] = h_ran[0][safe] / h_nature[0][safe]
 
-    ax_r.plot(centres,
+    ax_r.plot(
+        centres,
         ratio_mc,
         color="C1",
         marker="d",
         linestyle="--",
         alpha=0.35,
     )
-    ax_r.plot(centres,
+    ax_r.plot(
+        centres,
         ratio_ran,
         color="black",
         marker="o",
@@ -128,7 +131,8 @@ def _hist_ratio_panel(
             h_of[0], np.nan, dtype=np.double
         )
         ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
-        ax_r.plot(centres,
+        ax_r.plot(
+            centres,
             ratio_of,
             color="red",
             marker="d",
@@ -155,7 +159,8 @@ def _hist_ratio_panel(
             h_ibu[0], np.nan, dtype=np.double
         )
         ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
-        ax_r.plot(centres,
+        ax_r.plot(
+            centres,
             ratio_ibu,
             color="green",
             marker="s",
@@ -238,7 +243,7 @@ def plot_detector_level(
             x_mc = x_sim[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
             xlabel = cfg["symbol"]
-            title = f'{cfg["xlabel"]} (detector level)'
+            title = f"{cfg['xlabel']} (detector level)"
         else:
             x_nature = x_data[:, i]
             x_mc = x_sim[:, i]
@@ -320,7 +325,7 @@ def plot_particle_level(
             z_mc = z_gen[:, i] * sigma + mu
             bins = np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21)
             xlabel = cfg["symbol"]
-            title = f'{cfg["xlabel"]} (particle level)'
+            title = f"{cfg['xlabel']} (particle level)"
         else:
             z_nature = z_true[:, i]
             z_mc = z_gen[:, i]

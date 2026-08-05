@@ -18,7 +18,8 @@ pytestmark = [
         reason="trains a real OmniFold model; set RAN_RUN_SLOW=1 to run",
     ),
     pytest.mark.skipif(
-        "keras" in sys.modules and sys.modules["keras"].backend.backend() != "tensorflow",
+        "keras" in sys.modules
+        and sys.modules["keras"].backend.backend() != "tensorflow",
         reason="needs the TensorFlow backend; run `pytest tests/test_omnifold.py` alone",
     ),
 ]

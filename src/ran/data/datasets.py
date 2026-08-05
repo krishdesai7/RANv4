@@ -111,6 +111,7 @@ class DatasetSplits(NamedTuple):
         val (ArrayDataset)
         test (ArrayDataset)
     """
+
     train: ArrayDataset
     val: ArrayDataset
     test: ArrayDataset
@@ -132,7 +133,9 @@ class RAN_Dataset:
     Methods:
         generate_gaussian_dataset
     """
-    def __init__(self,
+
+    def __init__(
+        self,
         batch_size: int = 128,
         seed: int = 42,
         cache_dir: str | Path = ".cache",
@@ -152,9 +155,10 @@ class RAN_Dataset:
 
         self.val_fraction = val_fraction
         self.test_fraction = test_fraction
-        self.dataset: tuple[
-            npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]
-        ] | None = None
+        self.dataset: (
+            tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]
+            | None
+        ) = None
         self.splits: DatasetSplits | None = None
 
     @staticmethod
@@ -227,7 +231,9 @@ class RAN_Dataset:
 
         def _slice(lo: int, hi: int, shuffle: bool) -> ArrayDataset:
             return ArrayDataset(
-                z[lo:hi], x[lo:hi], y[lo:hi],
+                z[lo:hi],
+                x[lo:hi],
+                y[lo:hi],
                 batch_size=self.batch_size,
                 shuffle=shuffle,
                 seed=self.seed,
@@ -239,10 +245,11 @@ class RAN_Dataset:
             test=_slice(n_non_test, n, shuffle=False),
         )
 
-    def generate_gaussian_dataset(self,
+    def generate_gaussian_dataset(
+        self,
         config_path: str | Path | None = None,
         params: dict | None = None,
-        n_samples: int = 10 ** 6,
+        n_samples: int = 10**6,
     ) -> DatasetSplits:
         """
         Generate a multivariate Gaussian dataset.
@@ -255,20 +262,20 @@ class RAN_Dataset:
         Exactly one of config_path or params must be provided.
         """
         if (config_path is None) == (params is None):
-            raise ValueError(
-                "Exactly one of config_path or params must be provided"
-            )
+            raise ValueError("Exactly one of config_path or params must be provided")
         parsed: dict[str, Any]
         if config_path is not None:
             parsed = parse_gaussian_config(config_path)
         else:
-            mu_gen: npt.NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel()  # type: ignore
-            mu_true: npt.NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel()  # type: ignore
+            mu_gen: npt.NDArray[np.double] = np.asarray(
+                params["mu_gen"], dtype=np.double
+            ).ravel()  # type: ignore
+            mu_true: npt.NDArray[np.double] = np.asarray(
+                params["mu_true"], dtype=np.double
+            ).ravel()  # type: ignore
             dim: np.ubyte = mu_gen.shape[0]
             if mu_true.shape[0] != dim:
-                raise ValueError(
-                    f"mu_true has dim {mu_true.shape[0]}, expected {dim}"
-                )
+                raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
             parsed = {
                 "dim": dim,
                 "mu_gen": mu_gen,
@@ -298,15 +305,23 @@ class RAN_Dataset:
             rng: np.random.Generator = np.random.default_rng(self.seed)
 
             z_true: npt.NDArray[np.double] = rng.multivariate_normal(
-                mu_true, cov_true, size=n_samples,
-                check_valid='raise', method='svd',
+                mu_true,
+                cov_true,
+                size=n_samples,
+                check_valid="raise",
+                method="svd",
             )
             z_gen: npt.NDArray[np.double] = rng.multivariate_normal(
-                mu_gen, cov_gen, size=n_samples,
-                check_valid='raise', method='svd',
+                mu_gen,
+                cov_gen,
+                size=n_samples,
+                check_valid="raise",
+                method="svd",
             )
 
-            L_det: npt.NDArray[np.double] = np.linalg.cholesky(cast("npt.NDArray", cov_detector), upper=False)
+            L_det: npt.NDArray[np.double] = np.linalg.cholesky(
+                cast("npt.NDArray", cov_detector), upper=False
+            )
 
             s_data: npt.NDArray[np.double] = rng.standard_normal(size=z_true.shape)
             x_data: npt.NDArray[np.double] = z_true + s_data @ L_det.T

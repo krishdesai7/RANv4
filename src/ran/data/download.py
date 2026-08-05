@@ -23,18 +23,31 @@ SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 # Cache-safe filenames: avoid case collisions on case-insensitive filesystems
 # (macOS APFS default), where "m.npz" and "M.npz" resolve to the same path.
 CACHE_FILENAMES: dict[str, str] = {
-    "m": "mass", "M": "mult", "w": "w", "tau21": "tau21", "zg": "zg", "sdm": "sdm",
+    "m": "mass",
+    "M": "mult",
+    "w": "w",
+    "tau21": "tau21",
+    "zg": "zg",
+    "sdm": "sdm",
 }
 
 # Only load the keys we actually need (skip particles, Zs, lhas, ang2s).
-_NEEDED_KEYS = frozenset({
-    "gen_jets", "sim_jets",
-    "gen_mults", "sim_mults",
-    "gen_widths", "sim_widths",
-    "gen_tau2s", "sim_tau2s",
-    "gen_zgs", "sim_zgs",
-    "gen_sdms", "sim_sdms",
-})
+_NEEDED_KEYS = frozenset(
+    {
+        "gen_jets",
+        "sim_jets",
+        "gen_mults",
+        "sim_mults",
+        "gen_widths",
+        "sim_widths",
+        "gen_tau2s",
+        "sim_tau2s",
+        "gen_zgs",
+        "sim_zgs",
+        "gen_sdms",
+        "sim_sdms",
+    }
+)
 
 
 def _download_url(generator: str, file_idx: int) -> str:

@@ -21,12 +21,20 @@ SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
 CACHE_DIR = Path(".cache")
 
 JET_OBS: dict[str, dict] = {
-    "m":     {"xlim": (0, 75), "xlabel": "Jet Mass", "symbol": r"$m$ [GeV]"},
-    "M":     {"xlim": (0, 80), "xlabel": "Jet Constituent Multiplicity", "symbol": r"$M$"},
-    "w":     {"xlim": (0, 0.6), "xlabel": "Jet Width", "symbol": r"$w$"},
-    "tau21": {"xlim": (0, 1.2), "xlabel": r"$N$-subjettiness Ratio", "symbol": r"$\tau_{21}^{(\beta=1)}$"},
-    "zg":    {"xlim": (0, 0.5), "xlabel": "Groomed Jet Momentum Fraction", "symbol": r"$z_g$"},
-    "sdm":   {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass", "symbol": r"$\ln\rho$"},
+    "m": {"xlim": (0, 75), "xlabel": "Jet Mass", "symbol": r"$m$ [GeV]"},
+    "M": {"xlim": (0, 80), "xlabel": "Jet Constituent Multiplicity", "symbol": r"$M$"},
+    "w": {"xlim": (0, 0.6), "xlabel": "Jet Width", "symbol": r"$w$"},
+    "tau21": {
+        "xlim": (0, 1.2),
+        "xlabel": r"$N$-subjettiness Ratio",
+        "symbol": r"$\tau_{21}^{(\beta=1)}$",
+    },
+    "zg": {
+        "xlim": (0, 0.5),
+        "xlabel": "Groomed Jet Momentum Fraction",
+        "symbol": r"$z_g$",
+    },
+    "sdm": {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass", "symbol": r"$\ln\rho$"},
 }
 
 
@@ -58,10 +66,12 @@ def load_jet_dataset(
             and standardization parameters {var_name: (mu, sigma)}.
     """
     # Check cache, download if needed
-    missing: list[str] = [v for v in variables
-               if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()]
+    missing: list[str] = [
+        v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
+    ]
     if missing:
         from ran.data.download import download_jet_data
+
         logger.info("Cached jet data not found. Downloading from Zenodo...")
         download_jet_data(cache_dir)
 
@@ -71,9 +81,7 @@ def load_jet_dataset(
     with np.load(cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
-        raise ValueError(
-            f"Requested {n_samples} samples but only {n_avail} available"
-        )
+        raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
     # Initialize arrays
     z_true: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
@@ -103,10 +111,12 @@ def load_jet_dataset(
     # Combine into dataset format: nature (y=1) + MC (y=0)
     z: npt.NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
     x: npt.NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: npt.NDArray[np.ubyte] = np.concatenate([
-        np.ones(n_samples, dtype=np.ubyte),
-        np.zeros(n_samples, dtype=np.ubyte),
-    ])
+    y: npt.NDArray[np.ubyte] = np.concatenate(
+        [
+            np.ones(n_samples, dtype=np.ubyte),
+            np.zeros(n_samples, dtype=np.ubyte),
+        ]
+    )
 
     splits = RAN_Dataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
     return splits, n_features, std_params

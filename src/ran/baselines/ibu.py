@@ -1,22 +1,11 @@
-"""IBU (Iterative Bayesian Unfolding) baseline for RAN comparison.
-
-1D per-variable unfolding with purity-based automatic binning.
-Builds the response matrix from MC, unfolds data, and converts
-the result to per-event weights for evaluation with the same
-metrics as RAN and OmniFold.
-
-Usage:
-    uv run -m ran baseline ibu --run-dir runs/2026-...
-    uv run -m ran baseline ibu --run-dir runs  # all runs
-"""
+from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 
 from ran.evaluate import (
     _collect_test_data,
@@ -31,94 +20,166 @@ from ran.evaluate import (
 from ran.train import EPS
 
 if TYPE_CHECKING:
+    from typing import Any, Final
+
+    from numpy.typing import NDArray
+
     from ran.data import DatasetSplits
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
-DEFAULT_PURITY_THRESHOLD = np.sqrt(0.5, dtype=np.double)
+DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5, dtype=np.double)
 
 
 def _next_pure_edge(
-    gen: npt.NDArray[np.double],
-    reco: npt.NDArray[np.double],
+    gen_sorted: NDArray[np.double],
+    upper_sorted: NDArray[np.double],
+    lower_by_upper: NDArray[np.double],
     lo: np.double,
+    gen_max: np.double,
     purity_threshold: np.double,
+    n_candidates: int = 100,
 ) -> np.double | None:
-    """Lowest edge above `lo` whose bin clears the purity threshold, else None.
+    """Return the first candidate edge whose bin exceeds the purity threshold.
 
-    Scans 100 candidate edges between `lo` and the top of the gen range,
-    returning the first that qualifies. None means no bin starting at `lo` is
-    ever pure enough, which is what stops the caller's loop.
+    `gen_sorted` is sorted `gen`.
+
+    `upper_sorted` is sorted `maximum(gen, sim)`, and
+    `lower_by_upper` is `minimum(gen, sim)` in the corresponding order.
     """
-    for binhigh in np.linspace(lo + 0.01, gen.max(), 100, dtype=np.double):
-        in_truth = (gen >= lo) & (gen < binhigh)
-        n_truth = np.sum(in_truth)
-        if n_truth == 0:
-            continue
-        purity = np.sum(in_truth & (reco >= lo) & (reco < binhigh)) / n_truth
-        if purity > purity_threshold:
-            return binhigh
-    return None
+    if n_candidates <= 0:
+        raise ValueError("n_candidates must be positive")
+
+    candidates: NDArray[np.double] = np.linspace(
+        lo + 1 / n_candidates,
+        gen_max,
+        n_candidates,
+        dtype=gen_sorted.dtype,
+    )
+
+    # Denominator = count(lo <= gen < candidate) for every candidate.
+    truth_start: np.intp = np.searchsorted(gen_sorted, lo, side="left")
+    truth_stop: NDArray[np.intp] = np.searchsorted(gen_sorted, candidates, side="left")
+    n_truth: NDArray[np.intp] = truth_stop - truth_start
+
+    # Because upper_sorted is ordered, the first k elements are precisely
+    # those for which max(gen, reco) < candidates[j].
+    upper_stop: NDArray[np.intp] = np.searchsorted(
+        upper_sorted, candidates, side="left"
+    )
+
+    # Among those elements, count the ones satisfying
+    # min(gen, reco) >= lo.
+    prefix: NDArray[np.ulong] = np.empty(lower_by_upper.size + 1, dtype=np.ulong)
+    prefix[0] = 0
+    np.cumsum(
+        lower_by_upper >= lo,
+        dtype=np.ulong,
+        out=prefix[1:],
+    )
+    n_both: NDArray[np.ulong] = prefix[upper_stop]
+
+    purity: NDArray[np.double] = np.zeros(n_candidates, dtype=np.double)
+    np.divide(
+        n_both,
+        n_truth,
+        out=purity,
+        where=n_truth != 0,
+    )
+
+    qualifying: NDArray[np.intp] = np.flatnonzero(
+        (n_truth != 0) & (purity > purity_threshold)
+    )
+    if qualifying.size == 0:
+        return None
+
+    return candidates[qualifying[0]]
 
 
 def _purity_bins(
-    gen: npt.NDArray[np.double],
-    reco: npt.NDArray[np.double],
+    gen: NDArray[np.double],
+    sim: NDArray[np.double],
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
     max_bins: int = 50,
-) -> npt.NDArray:
-    """Determine bin edges where purity exceeds threshold.
+) -> NDArray[np.double]:
+    """Determine bin edges where purity exceeds the threshold."""
+    if gen.ndim != 1 or sim.ndim != 1:
+        raise ValueError("gen and sim must be one-dimensional")
+    if gen.shape != sim.shape:
+        raise ValueError("gen and sim must have the same shape")
+    if gen.size == 0:
+        raise ValueError("gen and sim must not be empty")
+    if max_bins <= 0:
+        raise ValueError("max_bins must be positive")
 
-    Purity of a bin [lo, hi) = (events with truth AND reco in bin)
-                              / (events with truth in bin).
-    Bins are grown from the left edge until purity is met, then a new
-    bin starts.
-    """
-    binvals: list[np.double] = [gen.min()]
-    i = 0
-    while binvals[-1] < gen.max() and i < len(binvals) and len(binvals) <= max_bins:
-        edge = _next_pure_edge(gen, reco, binvals[i], purity_threshold)
+    # One-time preprocessing.
+    gen_sorted: NDArray[np.double] = np.sort(gen)
+
+    lower: NDArray[np.double] = np.minimum(gen, sim)
+    upper: NDArray[np.double] = np.maximum(gen, sim)
+
+    upper_order: NDArray[np.intp] = np.argsort(upper)
+    upper_sorted: NDArray[np.double] = upper[upper_order]
+    lower_by_upper: NDArray[np.double] = lower[upper_order]
+
+    # max_bins bins require at most max_bins + 1 edges.
+    edges: NDArray[np.double] = np.empty(max_bins + 1, dtype=gen.dtype)
+    edges[0] = gen.min()
+    n_edges = 1
+
+    gen_max: Final[np.double] = gen.max()
+    while n_edges <= max_bins and edges[n_edges - 1] < gen_max:
+        edge: np.double | None = _next_pure_edge(
+            gen_sorted=gen_sorted,
+            upper_sorted=upper_sorted,
+            lower_by_upper=lower_by_upper,
+            lo=edges[n_edges - 1],
+            gen_max=gen_max,
+            purity_threshold=purity_threshold,
+        )
         if edge is None:
             break
-        binvals.append(edge)
-        i += 1
-    return np.array(binvals)
+
+        edges[n_edges] = edge
+        n_edges += 1
+
+    return edges[:n_edges]
 
 
 def _build_response(
-    gen_bins: npt.NDArray[np.long],
-    reco_bins: npt.NDArray[np.long],
+    gen_bins: NDArray[np.long],
+    reco_bins: NDArray[np.long],
     n_bins: int,
-) -> npt.NDArray[np.double]:
+) -> NDArray[np.double]:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
-    response: npt.NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
+    response: NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
     np.add.at(response, (gen_bins, reco_bins), 1)
-    row_sums: npt.NDArray[np.double] = response.sum(axis=1, keepdims=True)
+    row_sums: NDArray[np.double] = response.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1
     response /= row_sums
     return response
 
 
 def _ibu(
-    prior: npt.NDArray[np.double],
-    data_hist: npt.NDArray[np.double],
-    response: npt.NDArray[np.double],
+    prior: NDArray[np.double],
+    data_hist: NDArray[np.double],
+    response: NDArray[np.double],
     n_iterations: int,
-) -> npt.NDArray:
+) -> NDArray[np.double]:
     """Iterative Bayesian Unfolding.
 
     Args:
         prior: Initial truth estimate (MC gen histogram), shape (n_bins,).
-        data_hist: Observed reco-level histogram, shape (n_bins,).
-        response: R[t,r] = P(reco=r | truth=t), shape (n_bins, n_bins).
+        data_hist: Observed reco-level measured histogram, shape (n_bins,).
+        response: R[t,r] = P(sim=r | gen=t), shape (n_bins, n_bins).
         n_iterations: Number of unfolding iterations.
 
     Returns:
         Unfolded truth histogram, shape (n_bins,).
     """
-    posterior: npt.NDArray[np.double] = prior.copy()
-    m: npt.NDArray[np.double]
+    posterior: NDArray[np.double] = prior.copy()
+    m: NDArray[np.double]
     for _ in range(n_iterations):
         # Bayes: P(t|r) = R[t,r]*P(t) / sum_t' R[t',r]*P(t')
         m = response.T * posterior  # m[r,t] = R[t,r] * P(t)
@@ -131,50 +192,50 @@ def _run_and_evaluate(
     config: dict[str, Any],
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
-) -> tuple[dict[str, Any], list[str], list[npt.NDArray[np.double]]]:
+) -> tuple[dict[str, Any], list[str], list[NDArray[np.double]]]:
     """Run 1D IBU per variable and evaluate on test set."""
     splits: DatasetSplits = _load_splits(config)
 
     # Collect all splits for building response matrix (same as OmniFold)
-    zs: list[npt.NDArray[np.double]] = []
-    xs: list[npt.NDArray[np.double]] = []
-    ys: list[npt.NDArray[np.ubyte]] = []
+    zs: list[NDArray[np.double]] = []
+    xs: list[NDArray[np.double]] = []
+    ys: list[NDArray[np.ubyte]] = []
     for split in [splits.train, splits.val, splits.test]:
         z_split, x_split, y_split = split.as_arrays()
         zs.append(z_split)
         xs.append(x_split)
         ys.append(y_split)
-    z_all: npt.NDArray[np.double] = np.concatenate(zs, axis=0)
-    x_all: npt.NDArray[np.double] = np.concatenate(xs, axis=0)
-    y_all: npt.NDArray[np.ubyte] = np.concatenate(ys, axis=0)
+    z_all: NDArray[np.double] = np.concatenate(zs, axis=0)
+    x_all: NDArray[np.double] = np.concatenate(xs, axis=0)
+    y_all: NDArray[np.ubyte] = np.concatenate(ys, axis=0)
 
-    z_gen_all: npt.NDArray[np.double] = z_all[y_all == 0]
-    x_sim_all: npt.NDArray[np.double] = x_all[y_all == 0]
-    x_data_all: npt.NDArray[np.double] = x_all[y_all == 1]
+    z_gen_all: NDArray[np.double] = z_all[y_all == 0]
+    x_sim_all: NDArray[np.double] = x_all[y_all == 0]
+    x_data_all: NDArray[np.double] = x_all[y_all == 1]
 
     # Test split for evaluation
-    z_test: npt.NDArray[np.double]
-    x_test: npt.NDArray[np.double]
-    y_test: npt.NDArray[np.double]
+    z_test: NDArray[np.double]
+    x_test: NDArray[np.double]
+    y_test: NDArray[np.double]
     z_test, x_test, y_test = _collect_test_data(splits.test)
-    z_data_t: npt.NDArray[np.double] = z_test[y_test == 1]
-    x_data_t: npt.NDArray[np.double] = x_test[y_test == 1]
-    z_mc_t: npt.NDArray[np.double] = z_test[y_test == 0]
-    x_mc_t: npt.NDArray[np.double] = x_test[y_test == 0]
+    z_data_t: NDArray[np.double] = z_test[y_test == 1]
+    x_data_t: NDArray[np.double] = x_test[y_test == 1]
+    z_mc_t: NDArray[np.double] = z_test[y_test == 0]
+    x_mc_t: NDArray[np.double] = x_test[y_test == 0]
 
     dim: int = z_all.shape[1]
     dataset: str = config.get("dataset", "gaussian")
     if dataset == "jets":
         var_names: list[str] = config["variables"]
     else:
-        var_names: list[str] = [f"dim_{i}" for i in range(dim)]
+        var_names = [f"dim_{i}" for i in range(dim)]
 
     metrics: dict = {}
-    per_var_weights: list[npt.NDArray[np.double]] = []
+    per_var_weights: list[NDArray[np.double]] = []
 
     for d in range(dim):
         # Purity-based binning from all MC
-        bins: npt.NDArray[np.double] = _purity_bins(
+        bins: NDArray[np.double] = _purity_bins(
             z_gen_all[:, d],
             x_sim_all[:, d],
             purity_threshold,
@@ -187,37 +248,33 @@ def _run_and_evaluate(
             continue
 
         # Response matrix from all MC
-        gen_binned: npt.NDArray[np.long] = (
+        gen_binned: NDArray[np.long] = (
             np.clip(np.digitize(z_gen_all[:, d], bins), 1, n_bins) - 1
         )
-        sim_binned: npt.NDArray[np.long] = (
+        sim_binned: NDArray[np.long] = (
             np.clip(np.digitize(x_sim_all[:, d], bins), 1, n_bins) - 1
         )
-        response: npt.NDArray[np.double] = _build_response(
-            gen_binned, sim_binned, n_bins
-        )
+        response: NDArray[np.double] = _build_response(gen_binned, sim_binned, n_bins)
 
         # Prior (MC gen) and data reco histogram
         # np.histogram returns integer counts; _ibu divides and accumulates into
         # these, so promote once here rather than relying on operand coercion.
-        prior: npt.NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[
-            0
-        ].astype(np.double)
-        data_hist: npt.NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[
+        prior: NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[0].astype(
+            np.double
+        )
+        data_hist: NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[
             0
         ].astype(np.double)
 
         # IBU
-        unfolded: npt.NDArray[np.double] = _ibu(
-            prior, data_hist, response, n_iterations
-        )
+        unfolded: NDArray[np.double] = _ibu(prior, data_hist, response, n_iterations)
         logger.info("%s: %d bins, %d iterations", var_names[d], n_bins, n_iterations)
 
         # Convert unfolded histogram to per-event weights for test MC.
         # Weight per bin = unfolded / prior; test MC events in that
         # gen-level bin receive the corresponding weight.
-        bin_weights: npt.NDArray[np.double] = unfolded / (prior + EPS)
-        mc_test_binned: npt.NDArray[np.long] = (
+        bin_weights: NDArray[np.double] = unfolded / (prior + EPS)
+        mc_test_binned: NDArray[np.long] = (
             np.clip(
                 np.digitize(z_mc_t[:, d], bins),
                 1,
@@ -225,8 +282,8 @@ def _run_and_evaluate(
             )
             - 1
         )
-        w: npt.NDArray[np.double] = bin_weights[mc_test_binned]
-        w: npt.NDArray[np.double] = w / w.mean()
+        w: NDArray[np.double] = bin_weights[mc_test_binned]
+        w: NDArray[np.double] = w / w.mean()
         per_var_weights.append(w)
 
         # Metrics per variable (IBU is 1D, so weights differ per variable)
@@ -237,8 +294,8 @@ def _run_and_evaluate(
         td_before: list[float]
         td_after: list[float]
         level: str
-        ref: npt.NDArray[np.double]
-        comp: npt.NDArray[np.double]
+        ref: NDArray[np.double]
+        comp: NDArray[np.double]
         key: str
 
         for level, ref, comp in [

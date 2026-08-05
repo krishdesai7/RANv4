@@ -15,7 +15,7 @@ gradient transform and jit are native JAX.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, NamedTuple, cast
+from typing import TYPE_CHECKING, cast
 
 import jax
 import keras
@@ -23,13 +23,14 @@ import numpy as np
 import numpy.typing as npt
 from keras import ops
 
-from ran.models import build_discriminator, build_generator
+from .models import build_discriminator, build_generator
+from .schema import TrainResult, TrainState
 
 if TYPE_CHECKING:
-    from jax._src.basearray import Array
     from jax._src.pjit import JitWrapped
 
-    from ran.data import ArrayDataset, DatasetSplits
+    from .data import ArrayDataset, DatasetSplits
+    from .types import Variables
 
 logger = logging.getLogger(__name__)
 
@@ -43,32 +44,6 @@ if keras.backend.backend() != "jax":
     )
 
 EPS: float = keras.config.epsilon()
-
-type Variables = list[jax.Array]
-
-
-class TrainResult(NamedTuple):
-    """What `train` returns. Unpacks as ``(g, d, history, seed)``."""
-
-    g: keras.Model
-    d: keras.Model
-    history: dict[str, list[float]]
-    seed: int
-
-
-class TrainState(NamedTuple):
-    """All mutable training state, as a JAX pytree.
-
-    Held outside the `keras.Model`s so jitted steps stay pure and no
-    host/device sync happens between steps.
-    """
-
-    g_trainable: Variables
-    g_non_trainable: Variables
-    d_trainable: Variables
-    d_non_trainable: Variables
-    opt_g: Variables
-    opt_d: Variables
 
 
 def normalize_weights(raw_w, y):
@@ -114,7 +89,7 @@ def _make_steps(
     """
 
     def _weights(
-        g_trainable: list[Array], g_non_trainable: list[Array], z, y, training: bool
+        g_trainable: Variables, g_non_trainable: Variables, z, y, training: bool
     ):
         raw_w, g_non_trainable = g.stateless_call(
             g_trainable, g_non_trainable, z, training=training

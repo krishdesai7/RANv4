@@ -6,43 +6,30 @@ standardizes (using MC gen-level statistics only), and builds the
 train/val/test splits via RANDataset.
 """
 
+from __future__ import annotations
+
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 
-from ran.data.datasets import DatasetSplits, RANDataset
-from ran.data.download import CACHE_FILENAMES
+from ..rantypes import CACHE_DIR, CACHE_FILENAMES, SUBSTRUCTURE_VARIABLES
+from .datasets import DatasetSplits, RANDataset
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from logging import Logger
+    from pathlib import Path
 
-SUBSTRUCTURE_VARIABLES = ("m", "M", "w", "tau21", "zg", "sdm")
-CACHE_DIR = Path(".cache")
+    from numpy.typing import NDArray
 
-JET_OBS: dict[str, dict] = {
-    "m": {"xlim": (0, 75), "xlabel": "Jet Mass", "symbol": r"$m$ [GeV]"},
-    "M": {"xlim": (0, 80), "xlabel": "Jet Constituent Multiplicity", "symbol": r"$M$"},
-    "w": {"xlim": (0, 0.6), "xlabel": "Jet Width", "symbol": r"$w$"},
-    "tau21": {
-        "xlim": (0, 1.2),
-        "xlabel": r"$N$-subjettiness Ratio",
-        "symbol": r"$\tau_{21}^{(\beta=1)}$",
-    },
-    "zg": {
-        "xlim": (0, 0.5),
-        "xlabel": "Groomed Jet Momentum Fraction",
-        "symbol": r"$z_g$",
-    },
-    "sdm": {"xlim": (-14, -2), "xlabel": "Soft Drop Jet Mass", "symbol": r"$\ln\rho$"},
-}
+logger: Logger = logging.getLogger(__name__)
 
 
 def load_jet_dataset(
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
-    variables: tuple[str, ...] = SUBSTRUCTURE_VARIABLES,
+    variables: set[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
 ) -> tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]:
     """Load jet substructure data and return DatasetSplits.
@@ -78,16 +65,16 @@ def load_jet_dataset(
     n_features: int = len(variables)
 
     # Check available samples
-    with np.load(cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
+    with np.load(cache_dir / f"{CACHE_FILENAMES[next(iter(variables))]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
     # Initialize arrays
-    z_true: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    x_data: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    z_gen: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    x_sim: npt.NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    z_true: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    x_data: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    z_gen: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    x_sim: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
 
     # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[np.double, np.double]] = {}
@@ -109,9 +96,9 @@ def load_jet_dataset(
         x_sim[:, i] = (x_sim[:, i] - mu) / sigma
 
     # Combine into dataset format: nature (y=1) + MC (y=0)
-    z: npt.NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
-    x: npt.NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: npt.NDArray[np.ubyte] = np.concatenate(
+    z: NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
+    x: NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
+    y: NDArray[np.ubyte] = np.concatenate(
         [
             np.ones(n_samples, dtype=np.ubyte),
             np.zeros(n_samples, dtype=np.ubyte),

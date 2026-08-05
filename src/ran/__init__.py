@@ -21,3 +21,13 @@ os.environ.setdefault("JAX_ENABLE_X64", "1")
 # Only relevant to ran.baselines.omnifold, the one module that still runs on
 # TensorFlow; harmless everywhere else.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+from .cli import configure as configure
+from .cli import evaluate_command as evaluate_command
+from .cli import ibu_command as ibu_command
+from .cli import leakage_check_command as leakage_check_command
+from .cli import omnifold_command as omnifold_command
+from .cli import sweep_collect_command as sweep_collect_command
+from .cli import sweep_omnifold_command as sweep_omnifold_command
+from .cli import sweep_ran_command as sweep_ran_command
+from .cli import train_command as train_command

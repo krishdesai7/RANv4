@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
     import keras
 
-    from ran.data import ArrayDataset
+    from .data import ArrayDataset
+    from .rantypes import VarInfo
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,28 @@ mpl.rcParams["grid.linewidth"] = 0.5
 mpl.rcParams["grid.alpha"] = 0.6
 mpl.rcParams["grid.linestyle"] = "--"
 mpl.rcParams["lines.markerfacecolor"] = "none"
+
+
+class _PanelSpec(NamedTuple):
+    """Everything that varies between the panels of one figure."""
+
+    nature: NDArray[np.double]
+    mc: NDArray[np.double]
+    bins: NDArray[np.double]
+    xlabel: str
+    title: str
+
+
+class _LevelStyle(NamedTuple):
+    """Everything that differs between the detector-level and particle-level figures."""
+
+    level: str  # "detector" / "particle", used in axis labels
+    symbol: str  # "x" / "z"
+    title_prefix: str  # "Detector Level" / "Particle Level"
+    nature_label: str  # legend entry for the reference sample
+    mc_label: str  # legend entry for the simulated sample
+    height_per_dim: float  # figure inches per dimension
+    bins_span_both: bool  # default binning covers both samples, not just nature
 
 
 def _collect_data(
@@ -184,36 +207,6 @@ def _save_fig(fig: figure.Figure, save_path: Path) -> None:
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
     logger.info("Saved %s", save_path)
-
-
-class VarInfo(TypedDict):
-    xlim: tuple[float, float]
-    xlabel: str
-    symbol: str
-    mu: float
-    sigma: float
-
-
-class _PanelSpec(NamedTuple):
-    """Everything that varies between the panels of one figure."""
-
-    nature: npt.NDArray[np.double]
-    mc: npt.NDArray[np.double]
-    bins: npt.NDArray[np.double]
-    xlabel: str
-    title: str
-
-
-class _LevelStyle(NamedTuple):
-    """Everything that differs between the detector-level and particle-level figures."""
-
-    level: str  # "detector" / "particle", used in axis labels
-    symbol: str  # "x" / "z"
-    title_prefix: str  # "Detector Level" / "Particle Level"
-    nature_label: str  # legend entry for the reference sample
-    mc_label: str  # legend entry for the simulated sample
-    height_per_dim: float  # figure inches per dimension
-    bins_span_both: bool  # default binning covers both samples, not just nature
 
 
 _DETECTOR = _LevelStyle("detector", "x", "Detector Level", "Data", "Sim", 6, False)

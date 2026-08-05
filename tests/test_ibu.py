@@ -4,8 +4,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
+from ran.baselines import _shared as shared
 from ran.baselines import ibu
-from ran.data import ArrayDataset, DatasetSplits
+from ran.data import ArrayDataset
+from ran.schema import DatasetSplits
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -49,7 +51,7 @@ def _config(**overrides: Any) -> dict[str, Any]:
 
 
 def test_parse_config_builds_gaussian_variable_names() -> None:
-    parsed = ibu._parse_config(_config())
+    parsed = shared.parse_run_config(_config())
 
     assert parsed.dataset == "gaussian"
     assert parsed.variable_names == ("dim_0", "dim_1")
@@ -59,18 +61,18 @@ def test_parse_config_builds_gaussian_variable_names() -> None:
 
 def test_parse_config_requires_a_json_object() -> None:
     with pytest.raises(ValueError, match="JSON object"):
-        ibu._parse_config(["not", "a", "mapping"])
+        shared.parse_run_config(["not", "a", "mapping"])
 
 
 def test_parse_config_validates_jet_variable_count() -> None:
     with pytest.raises(ValueError, match=r"variables.*dim"):
-        ibu._parse_config(_config(dataset="jets", variables=["mass"], dim=2))
+        shared.parse_run_config(_config(dataset="jets", variables=["mass"], dim=2))
 
 
 @pytest.mark.parametrize("key", ["dim", "n_samples", "batch_size"])
 def test_parse_config_requires_positive_integer_fields(key: str) -> None:
     with pytest.raises(ValueError, match=key):
-        ibu._parse_config(_config(**{key: 0}))
+        shared.parse_run_config(_config(**{key: 0}))
 
 
 def test_parse_config_reports_missing_required_field() -> None:
@@ -78,22 +80,22 @@ def test_parse_config_reports_missing_required_field() -> None:
     del config["n_samples"]
 
     with pytest.raises(ValueError, match="n_samples"):
-        ibu._parse_config(config)
+        shared.parse_run_config(config)
 
 
 def test_parse_config_rejects_non_integer_data_seed() -> None:
     with pytest.raises(ValueError, match="data_seed"):
-        ibu._parse_config(_config(data_seed="seven"))
+        shared.parse_run_config(_config(data_seed="seven"))
 
 
 def test_parse_config_rejects_unknown_dataset() -> None:
     with pytest.raises(ValueError, match="Unknown dataset"):
-        ibu._parse_config(_config(dataset="other"))
+        shared.parse_run_config(_config(dataset="other"))
 
 
 def test_parse_config_rejects_non_string_jet_variable() -> None:
     with pytest.raises(ValueError, match=r"variables.*strings"):
-        ibu._parse_config(_config(dataset="jets", variables=["mass", 4], dim=2))
+        shared.parse_run_config(_config(dataset="jets", variables=["mass", 4], dim=2))
 
 
 def test_assign_bins_saturates_underflow_and_overflow() -> None:
@@ -117,7 +119,7 @@ def test_saturating_counts_conserve_observed_population() -> None:
 
 
 def test_prepare_data_names_response_and_test_populations() -> None:
-    data = ibu._prepare_data(_splits(), expected_dim=1)
+    data = shared.prepare_populations(_splits(), expected_dim=1)
 
     assert data.response_gen.shape == (5, 1)
     assert data.response_sim.shape == (5, 1)
@@ -128,7 +130,7 @@ def test_prepare_data_names_response_and_test_populations() -> None:
 
 def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
     with pytest.raises(ValueError, match="expected dim=2"):
-        ibu._prepare_data(_splits(), expected_dim=2)
+        shared.prepare_populations(_splits(), expected_dim=2)
 
 
 def test_prepare_data_rejects_nonfinite_values() -> None:
@@ -136,7 +138,7 @@ def test_prepare_data_rejects_nonfinite_values() -> None:
     splits.train.x[0, 0] = np.nan
 
     with pytest.raises(ValueError, match="finite"):
-        ibu._prepare_data(splits, expected_dim=1)
+        shared.prepare_populations(splits, expected_dim=1)
 
 
 def test_prepare_data_rejects_empty_test_data_population() -> None:
@@ -148,7 +150,7 @@ def test_prepare_data_rejects_empty_test_data_population() -> None:
     )
 
     with pytest.raises(ValueError, match="test data"):
-        ibu._prepare_data(without_test_data, expected_dim=1)
+        shared.prepare_populations(without_test_data, expected_dim=1)
 
 
 def test_unfolded_to_bin_weights_uses_explicit_zero_prior_semantics() -> None:
@@ -277,7 +279,7 @@ def test_unfold_variable_reports_population_count_mismatch(
 
 
 def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
-    record = ibu._evaluate_dimension(
+    record = shared.evaluate_dimension(
         reference=np.array([0.0, 1.0, 2.0], dtype=np.double),
         comparison=np.array([0.0, 1.5, 3.0], dtype=np.double),
         weights=np.ones(3, dtype=np.double),
@@ -298,13 +300,13 @@ def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
 
 
 def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
-    monkeypatch.setattr(ibu, "_load_splits", lambda _config: _splits())
+    monkeypatch.setattr(shared, "_load_splits", lambda _config: _splits())
     monkeypatch.setattr(
         ibu,
         "_purity_bins",
         lambda *_args, **_kwargs: np.array([0.0, 1.0], dtype=np.double),
     )
-    config = ibu._parse_config(_config(dim=1, gaussian_params={"dim": 1}))
+    config = shared.parse_run_config(_config(dim=1, gaussian_params={"dim": 1}))
 
     result = ibu._run_and_evaluate(config, n_iterations=2)
 
@@ -337,11 +339,11 @@ def test_run_and_evaluate_validates_controls_before_loading_data(
     message: str,
 ) -> None:
     monkeypatch.setattr(
-        ibu,
+        shared,
         "_load_splits",
         lambda _config: pytest.fail("loaded data before validating controls"),
     )
-    config = ibu._parse_config(_config())
+    config = shared.parse_run_config(_config())
 
     with pytest.raises(ValueError, match=message):
         ibu._run_and_evaluate(

@@ -2,15 +2,11 @@ from __future__ import annotations
 
 import os
 
-from ran.evaluate import (
-    _collect_test_data,
-    _improvement,
-    _js_per_dim,
-    _load_splits,
-    _triangular_per_dim,
-    _wd_per_dim,
-    apply_to_runs,
-    render_metrics,
+from ..evaluate import apply_to_runs, render_metrics
+from ._shared import (
+    evaluate_dimension,
+    load_populations,
+    parse_run_config,
 )
 
 # Must precede every keras import, including the transitive one via `ran`
@@ -30,11 +26,10 @@ from omnifold.net import weighted_binary_crossentropy
 
 if TYPE_CHECKING:
     from logging import Logger
-    from typing import Any
 
     from numpy.typing import ArrayLike, NDArray
 
-    from ran.data import DatasetSplits
+    from ..rantypes import MetricRecord, RunConfig
 
 # OmniFold's custom loss isn't registered with Keras serialization,
 # which breaks clone_model(). Register it here.
@@ -52,10 +47,10 @@ def _as2d(a: ArrayLike) -> NDArray[np.single]:
 
 
 def omnifold_unfold(
-    x_data: NDArray[np.single],
-    x_sim: NDArray[np.single],
-    z_gen: NDArray[np.single],
-    z_target: NDArray[np.single] | None = None,
+    x_data: ArrayLike,
+    x_sim: ArrayLike,
+    z_gen: ArrayLike,
+    z_target: ArrayLike | None = None,
     niter: int = 3,
     epochs: int = 50,
     batch_size: int = 512,
@@ -90,82 +85,38 @@ def omnifold_unfold(
 
 
 def _run_and_evaluate(
-    config: dict[str, Any], niter: int = 3, epochs: int = 50
-) -> tuple[dict, list[str], NDArray[np.single]]:
+    config: RunConfig, niter: int = 3, epochs: int = 50
+) -> tuple[dict[str, MetricRecord], list[str], NDArray[np.single]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
-    splits: DatasetSplits = _load_splits(config)
+    data = load_populations(config)
 
-    # Collect all splits into flat arrays for OmniFold training
-    zs: list[NDArray[np.single]] = []
-    xs: list[NDArray[np.single]] = []
-    ys: list[NDArray[np.ubyte]] = []
-    for split in [splits.train, splits.val, splits.test]:
-        z_split, x_split, y_split = split.as_arrays()
-        zs.append(_as2d(z_split))
-        xs.append(_as2d(x_split))
-        ys.append(y_split)
-    z_all: NDArray[np.single] = np.concatenate(zs, axis=0)
-    x_all: NDArray[np.single] = np.concatenate(xs, axis=0)
-    y_all: NDArray[np.ubyte] = np.concatenate(ys, axis=0)
-
-    mask_data: NDArray[np.bool] = y_all == 1
-
-    x_data: NDArray[np.single] = x_all[mask_data]
-    x_mc: NDArray[np.single] = x_all[~mask_data]
-    z_mc: NDArray[np.single] = z_all[~mask_data]
-
-    # Evaluate on test split only
-    z_test, x_test, y_test = _collect_test_data(splits.test)
-    mask_data_t: NDArray[np.bool] = y_test == 1
-    z_data_t: NDArray[np.single] = z_test[mask_data_t]
-    x_data_t: NDArray[np.single] = x_test[mask_data_t]
-    z_mc_t: NDArray[np.single] = z_test[~mask_data_t]
-    x_mc_t: NDArray[np.single] = x_test[~mask_data_t]
-
+    # OmniFold trains under TensorFlow, so cast the shared float64 populations
+    # to float32 here rather than making every baseline pay for it.
     w: NDArray[np.single] = omnifold_unfold(
-        x_data,
-        x_mc,
-        z_mc,
-        z_target=z_mc_t,
+        _as2d(data.observed_reco),
+        _as2d(data.response_sim),
+        _as2d(data.response_gen),
+        z_target=_as2d(data.test_mc_gen),
         niter=niter,
         epochs=epochs,
     )
 
-    dataset: str = config.get("dataset", "gaussian")
-    if dataset == "jets":
-        var_names: list[str] = config["variables"]
-    else:
-        var_names = [f"dim_{i}" for i in range(config["dim"])]
+    # One joint weight vector covers every dimension, unlike IBU's per-variable
+    # weights -- OmniFold unfolds all observables together.
+    metrics: dict[str, MetricRecord] = {}
+    for dimension, variable_name in enumerate(config.variable_names):
+        metrics[f"detector_{variable_name}"] = evaluate_dimension(
+            data.test_data_reco[:, dimension],
+            data.test_mc_reco[:, dimension],
+            w,
+        )
+        metrics[f"particle_{variable_name}"] = evaluate_dimension(
+            data.test_data_gen[:, dimension],
+            data.test_mc_gen[:, dimension],
+            w,
+        )
 
-    metrics: dict = {}
-    for level, ref, comp in [
-        ("detector", x_data_t, x_mc_t),
-        ("particle", z_data_t, z_mc_t),
-    ]:
-        wd_before: list[float] = _wd_per_dim(ref, comp)
-        wd_after: list[float] = _wd_per_dim(ref, comp, weights=w)
-        js_before: list[float] = _js_per_dim(ref, comp)
-        js_after: list[float] = _js_per_dim(ref, comp, weights=w)
-        td_before: list[float] = _triangular_per_dim(ref, comp)
-        td_after: list[float] = _triangular_per_dim(ref, comp, weights=w)
-
-        for i, var in enumerate(var_names):
-            key: str = f"{level}_{var}"
-            metrics[key] = {
-                "wasserstein_before": wd_before[i],
-                "wasserstein_after": wd_after[i],
-                "wasserstein_improvement_pct": _improvement(wd_before[i], wd_after[i]),
-                "jensenshannon_before": js_before[i],
-                "jensenshannon_after": js_after[i],
-                "jensenshannon_improvement_pct": _improvement(
-                    js_before[i], js_after[i]
-                ),
-                "triangular_before": td_before[i],
-                "triangular_after": td_after[i],
-                "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
-            }
-
-    return metrics, var_names, w
+    return metrics, list(config.variable_names), w
 
 
 def evaluate_single(
@@ -180,7 +131,7 @@ def evaluate_single(
         )
         return json.loads(out_path.read_text())
 
-    config: dict = json.loads((run_dir / "config.json").read_text())
+    config = parse_run_config(json.loads((run_dir / "config.json").read_text()))
     logger.info(
         "%s: running OmniFold (niter=%d, epochs=%d)...", run_dir.name, niter, epochs
     )

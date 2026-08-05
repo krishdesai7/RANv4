@@ -4,57 +4,35 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, SupportsFloat, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 
-from ran.data.config import parse_gaussian_config, sigma_to_covariance
+from ..rantypes import DatasetSplits, GaussianConfig
+from .config import parse_gaussian_config, sigma_to_covariance
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from logging import Logger
+    from typing import Final, SupportsFloat
 
-logger = logging.getLogger(__name__)
+    from numpy.typing import ArrayLike, NDArray
 
-type Nested[T] = T | list[Nested[T]]
+    from ..rantypes import Batch, Nested
 
-type Batch = tuple[dict[str, npt.NDArray[np.double]], npt.NDArray[np.ubyte]]
+logger: Logger = logging.getLogger(__name__)
 
-_ONE_SOURCE_ONLY = "Exactly one of config_path or params must be provided"
+_ONE_SOURCE_ONLY: Final = "Exactly one of config_path or params must be provided"
 
 
 class ArrayDataset:
-    """In-memory (z, x, y) arrays with deterministic minibatching.
-
-    Iterating yields ``({"z": ..., "x": ...}, y)`` batches of NumPy arrays. The
-    final batch is short rather than dropped whenever the split length is not a
-    multiple of ``batch_size``.
-
-    Every split holds a view onto one shared pair of base arrays; slicing is
-    done with fancy indexing at batch time, so splitting costs no extra memory.
-
-    Arguments:
-        z: Particle-level features, shape (n_events, dim).
-        x: Detector-level features, shape (n_events, dim).
-        y: Per-event class label (1 = data, 0 = MC), shape (n_events,).
-        batch_size: Events per batch.
-        shuffle: Re-permute the event order before every pass. Used for the
-            training split; validation and test iterate in fixed order.
-        seed: Seed for the reshuffling generator.
-
-    Each pass draws its permutation from ``(seed, pass_index)`` rather than
-    from a generator carried across passes, so the order an epoch sees depends
-    only on how many passes preceded it -- not on who else has iterated this
-    object. Call `reset` to return to the first pass; `train` does so at the
-    start of every run, which is what lets two runs over one `DatasetSplits`
-    (an ensemble loop over init seeds) see identical data.
-    """
+    """In-memory (z, x, y) arrays with deterministic minibatching."""
 
     def __init__(
         self,
-        z: npt.NDArray[np.double],
-        x: npt.NDArray[np.double],
-        y: npt.NDArray[np.ubyte],
+        z: NDArray[np.double],
+        x: NDArray[np.double],
+        y: NDArray[np.ubyte],
         batch_size: int = 128,
         shuffle: bool = False,
         seed: int = 42,
@@ -87,7 +65,7 @@ class ArrayDataset:
         return len(self.y)
 
     def __iter__(self) -> Iterator[Batch]:
-        order: npt.NDArray[np.intp]
+        order: NDArray[np.intp]
         if self.shuffle:
             order = np.random.default_rng([self.seed, self._pass]).permutation(
                 len(self.y)
@@ -101,72 +79,29 @@ class ArrayDataset:
 
     def as_arrays(
         self,
-    ) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
-        """Return the whole split as flat (z, x, y) arrays, in stored order.
-
-        Callers that just want every event (plotting, metrics, the baselines)
-        should use this instead of concatenating an iteration.
-        """
+    ) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
+        """Return the whole split as flat (z, x, y) arrays, in stored order."""
         return self.z, self.x, self.y.reshape(-1)
 
 
-class DatasetSplits(NamedTuple):
-    """
-    Named tuple representing dataset splits.
-    Fields:
-        train (ArrayDataset)
-        val (ArrayDataset)
-        test (ArrayDataset)
-    """
-
-    train: ArrayDataset
-    val: ArrayDataset
-    test: ArrayDataset
-
-
-def _parse_params(params: dict) -> dict[str, Any]:
-    """Normalize an inline params dict into the shape parse_gaussian_config returns.
-
-    Split out from generate_gaussian_dataset so the dict is non-optional here;
-    the caller's "exactly one of config_path or params" invariant is not
-    something a type checker can carry into the branch.
-    """
-    mu_gen: npt.NDArray[np.double] = np.asarray(
-        params["mu_gen"], dtype=np.double
-    ).ravel()
-    mu_true: npt.NDArray[np.double] = np.asarray(
-        params["mu_true"], dtype=np.double
-    ).ravel()
+def _parse_params(params: dict[str, ArrayLike]) -> GaussianConfig:
+    """Normalize inline params dict into the shape `parse_gaussian_config` returns."""
+    mu_gen: NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel()
+    mu_true: NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel()
     dim: int = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
         raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
-    return {
-        "dim": dim,
-        "mu_gen": mu_gen,
-        "mu_true": mu_true,
-        "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),
-        "cov_true": sigma_to_covariance(params["sigma_true"], dim),
-        "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),
-    }
+    return GaussianConfig(
+        dim,
+        mu_gen,
+        mu_true,
+        sigma_to_covariance(params["sigma_gen"], dim),
+        sigma_to_covariance(params["sigma_true"], dim),
+        sigma_to_covariance(params["sigma_detector"], dim),
+    )
 
 
 class RANDataset:
-    """
-    Dataset class for RAN.
-    Arguments:
-        batch_size (int)
-        seed (int): Random seed.
-        cache_dir (str | Path)
-        val_fraction (float)
-        test_fraction (float)
-    Attributes:
-        dataset (tuple of (z, x, y) arrays in shuffled order)
-        splits (DatasetSplits)
-
-    Methods:
-        generate_gaussian_dataset
-    """
-
     def __init__(
         self,
         batch_size: int = 128,
@@ -189,8 +124,7 @@ class RANDataset:
         self.val_fraction = val_fraction
         self.test_fraction = test_fraction
         self.dataset: (
-            tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]
-            | None
+            tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]] | None
         ) = None
         self.splits: DatasetSplits | None = None
 
@@ -201,14 +135,14 @@ class RANDataset:
             return [RANDataset._round_nested(v, ndigits) for v in obj]  # ty:ignore[invalid-argument-type]
         return round(float(obj), ndigits)
 
-    def _cache_key(self, parsed: dict[str, Any], n_samples: int) -> str:
+    def _cache_key(self, parsed: GaussianConfig, n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
         key_data: dict[str, Nested[float]] = {
-            "mu_gen": self._round_nested(parsed["mu_gen"].tolist()),
-            "mu_true": self._round_nested(parsed["mu_true"].tolist()),
-            "cov_gen": self._round_nested(parsed["cov_gen"].tolist()),
-            "cov_true": self._round_nested(parsed["cov_true"].tolist()),
-            "cov_detector": self._round_nested(parsed["cov_detector"].tolist()),
+            "mu_gen": self._round_nested(parsed.mu_gen.tolist()),
+            "mu_true": self._round_nested(parsed.mu_true.tolist()),
+            "cov_gen": self._round_nested(parsed.cov_gen.tolist()),
+            "cov_true": self._round_nested(parsed.cov_true.tolist()),
+            "cov_detector": self._round_nested(parsed.cov_detector.tolist()),
             "n_samples": n_samples,
             "seed": self.seed,
         }
@@ -216,39 +150,24 @@ class RANDataset:
             json.dumps(key_data, sort_keys=True).encode("utf-8")
         ).hexdigest()[:16]
 
-    def _cache_path(self, parsed: dict[str, Any], n_samples: int) -> Path:
+    def _cache_path(self, parsed: GaussianConfig, n_samples: int) -> Path:
         cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
 
     def _build_dataset(
         self,
-        z: npt.NDArray[np.double],
-        x: npt.NDArray[np.double],
-        y: npt.NDArray[np.ubyte],
-    ) -> tuple[npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]]:
-        """Interleave the data and MC halves with one fixed-seed permutation.
-
-        The arrays arrive as data (y=1) stacked on MC (y=0); the splits below
-        are contiguous slices, so they would otherwise be single-class. This
-        shuffle happens once and is not repeated per epoch -- it defines the
-        event ordering the splits cut into.
-        """
+        z: NDArray[np.double],
+        x: NDArray[np.double],
+        y: NDArray[np.ubyte],
+    ) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
         rng: np.random.Generator = np.random.default_rng(self.seed)
-        order: npt.NDArray[np.intp] = rng.permutation(len(y))
+        order: NDArray[np.intp] = rng.permutation(len(y))
         return z[order], x[order], y[order]
 
     def _split_dataset(
         self,
-        dataset: tuple[
-            npt.NDArray[np.double], npt.NDArray[np.double], npt.NDArray[np.ubyte]
-        ],
+        dataset: tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]],
     ) -> DatasetSplits:
-        """Cut the shuffled arrays into contiguous train/val/test splits.
-
-        Test is taken off the end, validation off the end of what remains, so
-        train occupies the front -- matching the nested `split_dataset` calls
-        this replaced. Only the training split reshuffles between epochs.
-        """
         z, x, y = dataset
         n: int = len(y)
         n_test: int = int(n * self.test_fraction)
@@ -280,38 +199,26 @@ class RANDataset:
 
     def generate_gaussian_dataset(
         self,
-        config_path: str | Path | None = None,
+        config_path: Path | None = None,
         params: dict | None = None,
         n_samples: int = 10**6,
     ) -> DatasetSplits:
-        """
-        Generate a multivariate Gaussian dataset.
-        Arguments:
-            config_path: Path to a YAML config file.
-            params: Dict with keys mu_gen, mu_true, sigma_gen, sigma_true,
-                sigma_detector.
-            n_samples: Number of samples per class (data and MC).
-        Returns:
-            DatasetSplits
-        Exactly one of config_path or params must be provided.
-        """
         # Written as a nested check rather than a single XOR so that each branch
         # narrows the argument it goes on to use.
-        parsed: dict[str, Any]
         if params is not None:
             if config_path is not None:
                 raise ValueError(_ONE_SOURCE_ONLY)
-            parsed = _parse_params(params)
+            parsed: GaussianConfig = _parse_params(params)
         elif config_path is None:
             raise ValueError(_ONE_SOURCE_ONLY)
         else:
             parsed = parse_gaussian_config(config_path)
 
-        mu_gen: npt.NDArray[np.double] = parsed["mu_gen"]
-        mu_true: npt.NDArray[np.double] = parsed["mu_true"]
-        cov_gen: npt.NDArray[np.double] = parsed["cov_gen"]
-        cov_true: npt.NDArray[np.double] = parsed["cov_true"]
-        cov_detector: npt.NDArray[np.double] = parsed["cov_detector"]
+        mu_gen: NDArray[np.double] = parsed.mu_gen
+        mu_true: NDArray[np.double] = parsed.mu_true
+        cov_gen: NDArray[np.double] = parsed.cov_gen
+        cov_true: NDArray[np.double] = parsed.cov_true
+        cov_detector: NDArray[np.double] = parsed.cov_detector
 
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -325,14 +232,14 @@ class RANDataset:
         else:
             rng: np.random.Generator = np.random.default_rng(self.seed)
 
-            z_true: npt.NDArray[np.double] = rng.multivariate_normal(
+            z_true: NDArray[np.double] = rng.multivariate_normal(
                 mu_true,
                 cov_true,
                 size=n_samples,
                 check_valid="raise",
                 method="svd",
             )
-            z_gen: npt.NDArray[np.double] = rng.multivariate_normal(
+            z_gen: NDArray[np.double] = rng.multivariate_normal(
                 mu_gen,
                 cov_gen,
                 size=n_samples,
@@ -340,22 +247,20 @@ class RANDataset:
                 method="svd",
             )
 
-            chol_det: npt.NDArray[np.double] = np.linalg.cholesky(
-                cast("npt.NDArray", cov_detector), upper=False
-            )
+            chol_det: NDArray[np.double] = np.linalg.cholesky(cov_detector, upper=False)
 
-            s_data: npt.NDArray[np.double] = rng.standard_normal(size=z_true.shape)
-            x_data: npt.NDArray[np.double] = z_true + s_data @ chol_det.T
+            s_data: NDArray[np.double] = rng.standard_normal(size=z_true.shape)
+            x_data: NDArray[np.double] = z_true + s_data @ chol_det.T
 
-            s_sim: npt.NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
-            x_sim: npt.NDArray[np.double] = z_gen + s_sim @ chol_det.T
+            s_sim: NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
+            x_sim: NDArray[np.double] = z_gen + s_sim @ chol_det.T
 
-            y_nat: npt.NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
-            y_mc: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
+            y_nat: NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
+            y_mc: NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
 
-            z: npt.NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
-            x: npt.NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
-            y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_mc), axis=0)
+            z: NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
+            x: NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
+            y: NDArray[np.ubyte] = np.concatenate((y_nat, y_mc), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
             logger.info("Generated and saved dataset to cache: %s", cache_path)
@@ -366,15 +271,10 @@ class RANDataset:
 
     def splits_from_arrays(
         self,
-        z: npt.NDArray[np.double],
-        x: npt.NDArray[np.double],
-        y: npt.NDArray[np.ubyte],
+        z: NDArray[np.double],
+        x: NDArray[np.double],
+        y: NDArray[np.ubyte],
     ) -> DatasetSplits:
-        """Build train/val/test splits directly from in-memory (z, x, y) arrays.
-
-        z (particle level) and x (detector level) must have matching first
-        dimension; y is the per-event class label (1 = data, 0 = MC).
-        """
         self.dataset = self._build_dataset(z, x, y)
         self.splits = self._split_dataset(self.dataset)
         return self.splits

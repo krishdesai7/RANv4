@@ -24,6 +24,7 @@ from ran.evaluate import (
     _load_splits,
     _triangular_per_dim,
     _wd_per_dim,
+    apply_to_runs,
     render_metrics,
 )
 
@@ -222,17 +223,9 @@ def evaluate_runs(
         niter: Number of OmniFold iterations.
         epochs: Max epochs per OmniFold iteration.
     """
-    run_dir = Path(run_dir)
-
-    if (run_dir / "config.json").exists():
-        evaluate_single(run_dir, force=force, niter=niter, epochs=epochs)
-    else:
-        run_dirs = sorted(
-            d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
-        )
-        logger.info("Found %d runs to evaluate with OmniFold", len(run_dirs))
-        for d in run_dirs:
-            try:
-                evaluate_single(d, force=force, niter=niter, epochs=epochs)
-            except Exception:
-                logger.warning("%s: failed", d.name, exc_info=True)
+    apply_to_runs(
+        run_dir,
+        lambda d: evaluate_single(d, force=force, niter=niter, epochs=epochs),
+        "evaluate with OmniFold",
+        logger,
+    )

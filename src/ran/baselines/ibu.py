@@ -291,9 +291,11 @@ def evaluate_single(
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
-        # savez is `savez(file, *args, allow_pickle=True, **kwds)`, so a **dict
-        # unpack is checked against `allow_pickle` instead of the **kwds catch-all.
-        # Stub limitation, not a real mismatch.
+        # savez is `savez(file, *args, allow_pickle=True, **kwds)`. Our keys are
+        # built by f-string, so their type is plain `str` -- one of them *could*
+        # be "allow_pickle", which is declared bool. The complaint is therefore
+        # sound rather than a stub bug (ty reports it too); it just cannot happen
+        # here. A literal-key dict checks clean, but ours cannot be one.
         **{f"weights_{i}": w for i, w in enumerate(per_var_weights)},  # pyrefly: ignore[bad-argument-type]
     )
     logger.info(

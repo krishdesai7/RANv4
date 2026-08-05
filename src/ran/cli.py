@@ -97,13 +97,15 @@ def ibu_command(
     n_iterations: Annotated[int, typer.Option(min=1)] = 10,
     purity_threshold: float = 0.7071067811865476,
 ) -> None:
+    from numpy import double
+
     from ran.baselines.ibu import evaluate_runs
 
     evaluate_runs(
         run_dir=run_dir,
         force=force,
         n_iterations=n_iterations,
-        purity_threshold=purity_threshold,
+        purity_threshold=double(purity_threshold),
     )
 
 

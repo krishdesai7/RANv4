@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.11.30,<0.12"]
+requires = ["uv_build>=0.11.30,<0.13"]
 build-backend = "uv_build"
 
 
@@ -19,11 +19,6 @@ dependencies = [
     "omnifold>=0.1.36",
     "pyyaml>=6.0",
     "scipy>=1.15.0",
-    # TensorFlow is here only for `omnifold`, which hard-depends on it and whose
-    # loss calls raw tf ops (so it must run under KERAS_BACKEND=tensorflow --
-    # see ran/baselines/omnifold.py). No first-party RAN module imports it.
-    "tensorflow>=2.21.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "tensorflow[and-cuda]>=2.21.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 
 [project.urls]
@@ -68,6 +63,15 @@ module-name = "ran"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+filterwarnings = [
+    # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a
+    # `copy` kwarg, so every `model.save()` trips this from inside Keras's own
+    # `convert_to_numpy`. Third-party and still unfixed as of keras 3.15.1;
+    # nothing on our side reaches it. Python's default filters hide it outside
+    # pytest (it is attributed to keras, not __main__), so this only silences
+    # test output. Scoped to the one message so our own deprecations still show.
+    "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
+]
 
 
 [tool.pyrefly]

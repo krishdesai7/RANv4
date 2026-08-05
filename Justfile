@@ -30,7 +30,7 @@ lint:
 
 # Run Pyrefly type checks.
 typecheck:
-    pyrefly check
+    pyrefly check --min-severity info
 
 # Run complexity checks.
 complexity:

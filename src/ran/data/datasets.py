@@ -198,7 +198,7 @@ class RANDataset:
     def _round_nested(obj: Nested[SupportsFloat], ndigits: int = 10) -> Nested[float]:
         """Recursively round floats in a nested list/scalar for stable hashing."""
         if isinstance(obj, list):
-            return [RANDataset._round_nested(v, ndigits) for v in obj]
+            return [RANDataset._round_nested(v, ndigits) for v in obj]  # ty:ignore[invalid-argument-type]
         return round(float(obj), ndigits)
 
     def _cache_key(self, parsed: dict[str, Any], n_samples: int) -> str:

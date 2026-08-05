@@ -7,9 +7,7 @@ import yaml
 from scipy.linalg import cholesky
 
 
-def _scalar_covariance(
-    arr: npt.NDArray[np.double], dim: int
-) -> npt.NDArray[np.double]:
+def _scalar_covariance(arr: npt.NDArray[np.double], dim: int) -> npt.NDArray[np.double]:
     """σ²I from a single sigma."""
     val: np.double = arr.ravel()[0]
     if val < 0:

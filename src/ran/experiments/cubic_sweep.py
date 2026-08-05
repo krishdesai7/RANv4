@@ -185,13 +185,12 @@ def run_omnifold(
     )
 
 
-def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
-    """Join the per-method point files into results.npz and a Wasserstein-vs-s PDF.
+def _complete_points(sweep_dir: Path, n_points: int) -> list[dict]:
+    """Join the per-method point files, keeping only points both methods finished.
 
-    A point contributes only if both methods wrote it; points where either side
-    failed are reported as missing rather than silently half-plotted.
+    Raises if nothing is complete; warns (but proceeds) when only some points
+    are, so a partly-failed sweep still produces a plot of what did land.
     """
-    sweep_dir = Path(sweep_dir)
     records: dict[int, dict] = {}
     for prefix in ("ran", "omnifold"):
         for f in sorted(sweep_dir.glob(f"{prefix}_*.json")):
@@ -211,12 +210,16 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
     missing = sorted(set(range(n_points)) - present)
     if missing:
         logger.warning("missing s_index values (failed/incomplete tasks): %s", missing)
+    return complete
 
-    s = np.array([r["s"] for r in complete])
-    ran = np.array([r["ran_wd"] for r in complete])
-    omnifold = np.array([r["omnifold_wd"] for r in complete])
-    np.savez(sweep_dir / "results.npz", s=s, ran=ran, omnifold=omnifold)
 
+def _plot_sweep(
+    sweep_dir: Path,
+    s: npt.NDArray,
+    ran: npt.NDArray,
+    omnifold: npt.NDArray,
+) -> None:
+    """Wasserstein-vs-distortion curve for both methods."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -232,6 +235,22 @@ def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
     fig.tight_layout()
     fig.savefig(sweep_dir / "wasserstein_vs_s.pdf")
     plt.close(fig)
+
+
+def collect(sweep_dir: str | Path, n_points: int = 25) -> None:
+    """Join the per-method point files into results.npz and a Wasserstein-vs-s PDF.
+
+    A point contributes only if both methods wrote it; points where either side
+    failed are reported as missing rather than silently half-plotted.
+    """
+    sweep_dir = Path(sweep_dir)
+    complete = _complete_points(sweep_dir, n_points)
+
+    s = np.array([r["s"] for r in complete])
+    ran = np.array([r["ran_wd"] for r in complete])
+    omnifold = np.array([r["omnifold_wd"] for r in complete])
+    np.savez(sweep_dir / "results.npz", s=s, ran=ran, omnifold=omnifold)
+    _plot_sweep(sweep_dir, s, ran, omnifold)
     logger.info(
         "Wrote %s and %s (%d points)",
         sweep_dir / "results.npz",

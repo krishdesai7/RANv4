@@ -254,9 +254,7 @@ def _panel_spec(
             if dim > 1
             else f"{style.symbol} ({style.level} level)"
         ),
-        title=(
-            f"{style.title_prefix} — Dim {i}" if dim > 1 else style.title_prefix
-        ),
+        title=(f"{style.title_prefix} — Dim {i}" if dim > 1 else style.title_prefix),
     )
 
 

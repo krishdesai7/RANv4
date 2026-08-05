@@ -2,32 +2,49 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] -- import isolat
 import sys
 from types import ModuleType
 
+import pytest
 from ran import cli
-from ran.cli import app
+from ran.cli import app, baseline_app, sweep_app
 from typer.testing import CliRunner
 
 runner = CliRunner()
 
 
-def test_root_help_lists_unified_commands():
-    result = runner.invoke(app, ["--help"])
+def _command_names(typer_app):
+    command_names = {command.name for command in typer_app.registered_commands}
+    group_names = {group.name for group in typer_app.registered_groups}
+    return command_names | group_names
+
+
+def test_registered_command_trees_are_exact():
+    assert _command_names(app) == {
+        "train",
+        "evaluate",
+        "baseline",
+        "sweep",
+        "leakage-check",
+    }
+    assert _command_names(baseline_app) == {"omnifold", "ibu"}
+    assert _command_names(sweep_app) == {"ran", "omnifold", "collect"}
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ("train",),
+        ("evaluate",),
+        ("baseline", "omnifold"),
+        ("baseline", "ibu"),
+        ("sweep", "ran"),
+        ("sweep", "omnifold"),
+        ("sweep", "collect"),
+        ("leakage-check",),
+    ],
+    ids=lambda command: "-".join(command),
+)
+def test_every_leaf_command_has_help(command):
+    result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0
-    for command in ("train", "evaluate", "baseline", "sweep", "leakage-check"):
-        assert command in result.stdout
-
-
-def test_baseline_help_lists_both_methods():
-    result = runner.invoke(app, ["baseline", "--help"])
-    assert result.exit_code == 0
-    assert "omnifold" in result.stdout
-    assert "ibu" in result.stdout
-
-
-def test_sweep_help_lists_all_actions():
-    result = runner.invoke(app, ["sweep", "--help"])
-    assert result.exit_code == 0
-    for command in ("ran", "omnifold", "collect"):
-        assert command in result.stdout
 
 
 def test_importing_cli_does_not_commit_a_keras_backend():

@@ -283,7 +283,7 @@ training options are listed above.
 - [`NumPy`](https://numpy.org/) >= 2.4
 - [`SciPy`](https://scipy.org/) >= 1.15
 - [`Matplotlib`](https://matplotlib.org/) >= 3.10
-- [`Typer`](https://typer.tiangolo.com/) >= 0.16
+- [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
 - [`Rich`](https://rich.readthedocs.io/) >= 13.0
 - [`PyYAML`](https://pyyaml.org/) >= 6.0
 - [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1

@@ -54,6 +54,7 @@ def _download_file(url: str, dest: Path, progress: Progress, task_id: TaskID) ->
             )
 
     urllib.request.urlretrieve(url, dest, reporthook=_progress)
+    logger.info("Downloaded %s", dest)
 
 
 def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:

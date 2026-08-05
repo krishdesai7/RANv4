@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -8,13 +7,14 @@ import yaml
 from scipy.linalg import cholesky
 
 if TYPE_CHECKING:
-    from typing import Any
+    from pathlib import Path
+    from typing import Any, Final
 
     from numpy.typing import NDArray
 
 
 def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
-    """σ²I from a single sigma."""
+    """(σ²)I from a single sigma."""
     val: np.double = arr.ravel()[0]
     if val < 0:
         raise ValueError(f"sigma scalar must be non-negative, got {val}")
@@ -59,7 +59,7 @@ def sigma_to_covariance(
     return cov
 
 
-REQUIRED_KEYS: set[str] = {
+REQUIRED_KEYS: Final[set[str]] = {
     "mu_gen",
     "mu_true",
     "sigma_gen",
@@ -68,15 +68,8 @@ REQUIRED_KEYS: set[str] = {
 }
 
 
-def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
-    """Parse a Gaussian YAML config file.
-
-    Returns a dict with keys:
-        dim (int), mu_gen, mu_true (1D arrays),
-        cov_gen, cov_true, cov_detector (2D covariance matrices).
-    """
-    config_path = Path(config_path)
-    with Path(config_path).open() as f:
+def parse_gaussian_config(config_path: Path) -> dict[str, int | NDArray[np.double]]:
+    with config_path.open() as f:
         raw: dict[str, Any] = yaml.safe_load(f)
 
     missing: set[str] = REQUIRED_KEYS - raw.keys()

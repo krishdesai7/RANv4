@@ -4,7 +4,7 @@ import sys
 from types import SimpleNamespace
 
 
-def _completion_records(caplog, logger_name):
+def _completion_records(caplog, logger_name: str):
     return [
         record
         for record in caplog.records
@@ -12,13 +12,13 @@ def _completion_records(caplog, logger_name):
     ]
 
 
-def test_raw_download_records_completion(monkeypatch, tmp_path, caplog):
+def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
     from ran.data import download
     from rich.progress import Progress
 
     destination = tmp_path / "sample.npz"
 
-    def fake_urlretrieve(_url, _dest, reporthook):
+    def fake_urlretrieve(_url, _dest, reporthook) -> None:
         reporthook(1, 100, 100)
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)
@@ -39,7 +39,7 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog):
     )
 
 
-def test_evaluation_records_metrics_artifact_completion(monkeypatch, tmp_path, caplog):
+def test_evaluation_records_metrics_artifact_completion(monkeypatch, tmp_path, caplog) -> None:
     import numpy as np
     from ran import evaluate
 
@@ -78,7 +78,7 @@ def test_evaluation_records_metrics_artifact_completion(monkeypatch, tmp_path, c
     )
 
 
-def test_omnifold_records_metric_and_weight_artifact_completion(tmp_path):
+def test_omnifold_records_metric_and_weight_artifact_completion(tmp_path) -> None:
     run_dir = tmp_path / "sample-run"
     run_dir.mkdir()
     script = """
@@ -116,7 +116,7 @@ omnifold.evaluate_single(run_dir)
 
 def test_ibu_records_metric_and_weight_artifact_completion(
     monkeypatch, tmp_path, caplog
-):
+) -> None:
     import numpy as np
     from ran.baselines import ibu
 

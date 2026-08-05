@@ -4,7 +4,7 @@ from rich.console import Console
 from rich.progress import Progress
 
 
-def test_render_metrics_outputs_named_columns_and_values():
+def test_render_metrics_outputs_named_columns_and_values() -> None:
     from ran.evaluate import render_metrics
 
     output = StringIO()
@@ -33,12 +33,12 @@ def test_render_metrics_outputs_named_columns_and_values():
     assert "75.0%" in rendered
 
 
-def test_download_file_updates_a_rich_progress_task(monkeypatch, tmp_path):
+def test_download_file_updates_a_rich_progress_task(monkeypatch, tmp_path) -> None:
     from ran.data import download
 
     completed = []
 
-    def fake_urlretrieve(url, dest, reporthook):
+    def fake_urlretrieve(url, dest, reporthook) -> None:
         reporthook(0, 25, 100)
         reporthook(2, 25, 100)
         reporthook(4, 25, 100)

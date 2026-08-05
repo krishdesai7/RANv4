@@ -20,7 +20,7 @@ def _forbidden_kind(node: ast.AST) -> str | None:
     return None
 
 
-def test_production_python_uses_neither_builtin_print_nor_fire():
+def test_production_python_uses_neither_builtin_print_nor_fire() -> None:
     paths = (
         path
         for source_root in (PROJECT_ROOT / "src", PROJECT_ROOT / "scripts")

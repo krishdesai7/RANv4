@@ -3,7 +3,7 @@
 Checks .cache/ for per-variable .npz files. If missing, invokes
 download_jet_data to fetch from Zenodo. Loads, subsamples, z-score
 standardizes (using MC gen-level statistics only), and builds the
-train/val/test splits via RAN_Dataset.
+train/val/test splits via RANDataset.
 """
 
 import logging
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from ran.data.datasets import DatasetSplits, RAN_Dataset
+from ran.data.datasets import DatasetSplits, RANDataset
 from ran.data.download import CACHE_FILENAMES
 
 logger = logging.getLogger(__name__)
@@ -118,5 +118,5 @@ def load_jet_dataset(
         ]
     )
 
-    splits = RAN_Dataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
     return splits, n_features, std_params

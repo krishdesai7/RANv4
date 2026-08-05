@@ -5,19 +5,19 @@ default:
 # Apply safe lint fixes, then format.
 fix:
     uv sync
-    uv run ruff check --fix
+    ruff check --fix
     uv format
 
 # Apply unsafe lint fixes, then format.
 fix-unsafe:
     uv sync
-    uv run ruff check --fix --unsafe-fixes
+    ruff check --fix --unsafe-fixes
     uv format
 
 # Infer annotations and imports, then apply safe fixes.
 infer:
     uv sync
-    uv run pyrefly infer --return-types --parameter-types --imports --containers
+    pyrefly infer --return-types --parameter-types --imports --containers
     just fix
 
 # Check formatting without modifying files.
@@ -26,15 +26,15 @@ format-check *args:
 
 # Run Ruff lint checks.
 lint:
-    uv run ruff check
+    ruff check
 
 # Run Pyrefly type checks.
 typecheck:
-    uv run pyrefly check
+    pyrefly check
 
 # Run complexity checks.
 complexity:
-    uv run complexipy
+    complexipy
 
 # Run tests, optionally forwarding arguments to pytest.
 test *args:

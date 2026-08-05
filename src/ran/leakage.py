@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import numpy.typing as npt
 
-from ran.data.datasets import RAN_Dataset
+from ran.data.datasets import RANDataset
 from ran.evaluate import (
     _collect_test_data,
     _improvement,
@@ -56,7 +56,7 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
         [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
     )
 
-    splits = RAN_Dataset(batch_size=1024, seed=seed).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=1024, seed=seed).splits_from_arrays(z, x, y)
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.

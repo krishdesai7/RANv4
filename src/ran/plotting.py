@@ -363,12 +363,12 @@ def plot_particle_level(
 
 
 def plot_losses(
-    history: dict[str, list[float | np.floating]],
+    history: dict[str, list[float]],
     save_path: str | Path = "plots/losses.pdf",
 ) -> None:
     """Generate loss curves.
     Arguments:
-        history (dict[str, list[float | np.floating]]): Training history.
+        history (dict[str, list[float]]): Training history.
         save_path (str | Path)
     """
     if isinstance(save_path, str):

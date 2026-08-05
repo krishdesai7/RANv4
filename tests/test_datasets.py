@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import yaml
 from numpy import dtype, float64, ndarray
-from ran.data.datasets import ArrayDataset, DatasetSplits, RAN_Dataset
+from ran.data.datasets import ArrayDataset, DatasetSplits, RANDataset
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,7 +31,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": 0.5,
         }
         path = _write_config(cfg, tmp_path)
-        ds = RAN_Dataset(batch_size=64, seed=42)
+        ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=1000)
         assert splits.train is not None
         assert splits.val is not None
@@ -47,7 +47,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": [0.5, 0.8],
         }
         path = _write_config(cfg, tmp_path)
-        ds = RAN_Dataset(batch_size=64, seed=42)
+        ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=2000)
         for features, _y in splits.test:
             assert features["z"].shape[1] == 2
@@ -63,7 +63,7 @@ class TestGenerateGaussianDataset:
             "sigma_true": 0.9,
             "sigma_detector": 0.5,
         }
-        ds = RAN_Dataset(batch_size=64, seed=42)
+        ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(params=params, n_samples=1000)
         assert splits.train is not None
 
@@ -77,13 +77,13 @@ class TestGenerateGaussianDataset:
             "sigma_detector": 0.5,
         }
         path = _write_config(cfg, tmp_path)
-        ds = RAN_Dataset(batch_size=64, seed=42)
+        ds = RANDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
             ds.generate_gaussian_dataset(config_path=path, params=cfg, n_samples=100)
 
     def test_neither_config_nor_params_raises(self) -> None:
         """Providing neither config_path nor params should error."""
-        ds = RAN_Dataset(batch_size=64, seed=42)
+        ds = RANDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
             ds.generate_gaussian_dataset(n_samples=100)
 
@@ -98,11 +98,11 @@ class TestGenerateGaussianDataset:
         }
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
-        ds = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         ds.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files = list(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files) == 1
-        ds2 = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         ds2.generate_gaussian_dataset(config_path=path, n_samples=500)
 
     def test_smearing_preserves_event_coupling(self, tmp_path) -> None:
@@ -115,7 +115,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": [0.1, 0.1],
         }
         path = _write_config(cfg, tmp_path)
-        ds = RAN_Dataset(batch_size=10000, seed=42)
+        ds = RANDataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
         for features, _y in splits.test:
             z = features["z"]
@@ -137,7 +137,7 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
 
-        ds1 = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds1 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         ds1.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files_after_yaml = set(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files_after_yaml) == 1
@@ -149,7 +149,7 @@ class TestGenerateGaussianDataset:
             "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
             "sigma_detector": [[0.25, 0.0], [0.0, 0.64]],
         }
-        ds2 = RAN_Dataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         ds2.generate_gaussian_dataset(params=reload_params, n_samples=500)
 
         cache_files_after_params = set(cache_dir.glob("gaussian_*.npz"))
@@ -162,7 +162,7 @@ def test_splits_from_arrays_builds_three_nonempty_splits() -> None:
     x = np.random.default_rng(1).normal(size=(2 * n, 1))
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
 
-    splits = RAN_Dataset(batch_size=32).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=32).splits_from_arrays(z, x, y)
 
     for ds in (splits.train, splits.val, splits.test):
         features, labels = next(iter(ds))
@@ -175,7 +175,7 @@ def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs) -> DatasetSplits:
     z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
     x = -z
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    return RAN_Dataset(batch_size=batch_size, **kwargs).splits_from_arrays(z, x, y)
+    return RANDataset(batch_size=batch_size, **kwargs).splits_from_arrays(z, x, y)
 
 
 class TestArrayDataset:

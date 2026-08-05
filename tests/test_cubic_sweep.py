@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -7,8 +10,10 @@ from ran.experiments.cubic_sweep import (
     response,
     unfolded_wasserstein,
 )
-from ran.train import TrainResult
 from scipy.stats import wasserstein_distance
+
+if TYPE_CHECKING:
+    from ran.train import TrainResult
 
 
 def test_response_identity_at_zero() -> None:

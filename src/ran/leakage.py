@@ -7,25 +7,32 @@ Both arms must use the same `init_seed` or the comparison is meaningless: with
 random initialization the run-to-run spread swamps the effect being tested.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 
-from ran.data.datasets import RANDataset
-from ran.evaluate import (
+from . import train
+from .data import RANDataset
+from .evaluate import (
     _collect_test_data,
     _improvement,
     _triangular_per_dim,
     _wd_per_dim,
 )
-from ran.train import train
 
 if TYPE_CHECKING:
-    import keras
+    from logging import Logger
+    from typing import Any, Literal
 
-logger = logging.getLogger(__name__)
+    import keras
+    from numpy.typing import NDArray
+
+    from .rantypes import DatasetSplits
+
+logger: Logger = logging.getLogger(__name__)
 
 
 def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) -> None:
@@ -42,21 +49,23 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
     rng: np.random.Generator = np.random.default_rng(seed)
     n: int = 100_000
 
-    z_true: npt.NDArray[np.double] = rng.normal(0.0, 1.0, size=(n, 1))
-    z_gen: npt.NDArray[np.double] = rng.normal(-0.5, 1.0, size=(n, 1))
-    x_data: npt.NDArray[np.double] = z_true + rng.normal(0, 0.25, size=(n, 1))
-    x_sim: npt.NDArray[np.double] = z_gen + rng.normal(0, 0.25, size=(n, 1))
+    z_true: NDArray[np.double] = rng.normal(0.0, 1.0, size=(n, 1))
+    z_gen: NDArray[np.double] = rng.normal(-0.5, 1.0, size=(n, 1))
+    x_data: NDArray[np.double] = z_true + rng.normal(0, 0.25, size=(n, 1))
+    x_sim: NDArray[np.double] = z_gen + rng.normal(0, 0.25, size=(n, 1))
 
     if poison:
         z_true[:] = -999.0
 
-    z: npt.NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
-    x: npt.NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: npt.NDArray[np.ubyte] = np.concatenate(
+    z: NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
+    x: NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
+    y: NDArray[np.ubyte] = np.concatenate(
         [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
     )
 
-    splits = RANDataset(batch_size=1024, seed=seed).splits_from_arrays(z, x, y)
+    splits: DatasetSplits = RANDataset(batch_size=1024, seed=seed).splits_from_arrays(
+        z, x, y
+    )
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.
@@ -64,20 +73,20 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
         splits, dim=1, hidden_units=32, n_layers=2, patience=5, seed=init_seed
     ).g
 
-    z_t: npt.NDArray[np.double]
-    x_t: npt.NDArray[np.double]
-    y_t: npt.NDArray[np.ubyte]
+    z_t: NDArray[np.double]
+    x_t: NDArray[np.double]
+    y_t: NDArray[np.ubyte]
     z_t, x_t, y_t = _collect_test_data(splits.test)
 
-    z_data_t: npt.NDArray[np.double]
-    z_mc_t: npt.NDArray[np.double]
-    x_data_t: npt.NDArray[np.double]
-    x_mc_t: npt.NDArray[np.double]
+    z_data_t: NDArray[np.double]
+    z_mc_t: NDArray[np.double]
+    x_data_t: NDArray[np.double]
+    x_mc_t: NDArray[np.double]
     z_data_t, z_mc_t = z_t[y_t == 1], z_t[y_t == 0]
     x_data_t, x_mc_t = x_t[y_t == 1], x_t[y_t == 0]
 
-    raw_w: npt.NDArray[np.double] = np.asarray(g(z_mc_t)).flatten()
-    w: npt.NDArray[np.double] = raw_w / raw_w.mean()
+    raw_w: NDArray[np.double] = np.asarray(g(z_mc_t)).flatten()
+    w: NDArray[np.double] = raw_w / raw_w.mean()
 
     for level, ref, comp in [
         ("DETECTOR", x_data_t, x_mc_t),

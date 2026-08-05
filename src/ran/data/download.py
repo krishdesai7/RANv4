@@ -5,12 +5,14 @@ extracts 6 substructure variables, saves per-variable .npz files to .cache/,
 and deletes the raw downloads.
 """
 
+from __future__ import annotations
+
 import logging
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
 from rich.progress import Progress, TaskID
 
 from ..rantypes import (
@@ -21,7 +23,12 @@ from ..rantypes import (
     ZENODO_RECORD,
 )
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from logging import Logger
+
+    from numpy.typing import NDArray
+
+logger: Logger = logging.getLogger(__name__)
 
 # Only load the keys we actually need (skip particles, Zs, lhas, ang2s).
 _NEEDED_KEYS = frozenset(
@@ -69,7 +76,7 @@ def _download_file(url: str, dest: Path, progress: Progress, task_id: TaskID) ->
     logger.info("Downloaded %s", dest)
 
 
-def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:
+def _get_var(data: dict[str, NDArray], var: str, ptype: str) -> NDArray:
     """Extract a substructure variable from raw arrays.
 
     Ported from legacy jet_data.py.
@@ -85,7 +92,7 @@ def _get_var(data: dict[str, npt.NDArray], var: str, ptype: str) -> npt.NDArray:
     if var == "zg":
         return data[f"{ptype}_zgs"]
     if var == "sdm":
-        jet_pt_sq: npt.NDArray = data[f"{ptype}_jets"][:, 0] ** 2
+        jet_pt_sq: NDArray = data[f"{ptype}_jets"][:, 0] ** 2
         eps: float = 1e-12 * np.mean(jet_pt_sq)
         return np.log(data[f"{ptype}_sdms"] ** 2 / np.maximum(jet_pt_sq, eps) + eps)
     raise ValueError(f"Unknown variable '{var}'")
@@ -103,14 +110,14 @@ def _ensure_shard(path: Path, gen: str, idx: int, progress: Progress) -> None:
 
 def _fetch_generator(
     gen: str, cache_dir: Path, progress: Progress, all_raw_paths: list[Path]
-) -> dict[str, npt.NDArray]:
+) -> dict[str, NDArray]:
     """Fetch every shard for one generator and concatenate the keys we need.
 
     Appends each shard path to `all_raw_paths` so the caller can delete the raw
     downloads once the per-variable caches have been written.
     """
     logger.info("Downloading %s (%d files)", gen, N_FILES)
-    arrays: dict[str, list[npt.NDArray]] = {}
+    arrays: dict[str, list[NDArray]] = {}
     for i in range(N_FILES):
         path = cache_dir / f"{gen}_Zjet_pTZ-200GeV_{i}.npz"
         all_raw_paths.append(path)
@@ -126,7 +133,7 @@ def download_jet_data(cache_dir: Path = Path(".cache")) -> None:
     """Download Pythia26/Herwig data from Zenodo, extract variables, save to cache."""
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_data: dict[str, dict[str, npt.NDArray]] = {}
+    raw_data: dict[str, dict[str, NDArray]] = {}
     all_raw_paths: list[Path] = []
 
     with Progress() as progress:

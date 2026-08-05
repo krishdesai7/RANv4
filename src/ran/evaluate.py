@@ -26,14 +26,19 @@ from rich.table import Table
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
-from ran.data import ArrayDataset, DatasetSplits, RANDataset
+from .data import ArrayDataset, RANDataset, load_jet_dataset
+from .rantypes import GaussianConfig
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from logging import Logger
 
     import keras
 
-logger = logging.getLogger(__name__)
+    from .rantypes import DatasetSplits
+
+
+logger: Logger = logging.getLogger(__name__)
 
 
 def apply_to_runs(
@@ -54,7 +59,7 @@ def apply_to_runs(
         evaluate_one(run_dir)
         return
 
-    run_dirs = sorted(
+    run_dirs: list[Path] = sorted(
         d for d in run_dir.iterdir() if d.is_dir() and (d / "config.json").exists()
     )
     log.info("Found %d runs to %s", len(run_dirs), description)
@@ -82,29 +87,36 @@ def _load_splits(config: dict) -> DatasetSplits:
         if "gaussian_params" in config:
             gaussian_params = config["gaussian_params"]
             raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
+            params = GaussianConfig(
+                dim,
+                np.array(raw_params["mu_gen"]),
+                np.array(raw_params["mu_true"]),
+                np.array(raw_params["sigma_gen"]),
+                np.array(raw_params["sigma_true"]),
+                np.array(raw_params["sigma_detector"]),
+            )
         else:
             # Legacy config format: hardcoded mu/sigma, only smearing varied
             smearing = config.get("smearing", 0.5)
-            raw_params = {
-                "mu_gen": [0.5] * dim,
-                "mu_true": [0.0] * dim,
-                "sigma_gen": 0.9,
-                "sigma_true": 1.0,
-                "sigma_detector": smearing,
-            }
+            params = GaussianConfig(
+                dim,
+                [0.5] * dim,
+                [0.0] * dim,
+                np.array([0.9]),
+                np.array([1.0]),
+                smearing,
+            )
         return RANDataset(
             batch_size=batch_size, seed=data_seed
         ).generate_gaussian_dataset(
-            params=raw_params,
+            params=params,
             n_samples=n_samples,
         )
     if dataset == "jets":
-        from ran.data import load_jet_dataset
-
         splits, _, _ = load_jet_dataset(
             n_samples=n_samples,
             batch_size=batch_size,
-            variables=tuple(config["variables"]),
+            variables=set(config["variables"]),
             seed=data_seed,
         )
         return splits
@@ -218,10 +230,9 @@ def _improvement(before: float, after: float) -> float:
     return (1 - after / before) * 100 if before > 0 else 0.0
 
 
-def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
+def evaluate_run(run_dir: Path, force: bool = False) -> dict:
     """Evaluate a single run directory."""
-    run_dir = Path(run_dir)
-    out_path = run_dir / "metrics.json"
+    out_path: Path = run_dir / "metrics.json"
 
     if out_path.exists() and not force:
         logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
@@ -237,7 +248,7 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
     logger.info("%s: loading model and data...", run_dir.name)
     g = keras.saving.load_model(run_dir / "generator.keras")
 
-    splits = _load_splits(config)
+    splits: DatasetSplits = _load_splits(config)
     z, x, y = _collect_test_data(splits.test)
 
     z_data, z_mc = z[y == 1], z[y == 0]
@@ -248,22 +259,22 @@ def evaluate_run(run_dir: str | Path, force: bool = False) -> dict:
     dataset = config.get("dataset", "gaussian")
     dim = config["dim"]
     if dataset == "jets":
-        var_names = config["variables"]
+        var_names: list[str] = config["variables"]
     else:
         var_names = [f"dim_{i}" for i in range(dim)]
 
     metrics: dict = {}
 
     for level, data, mc in [("detector", x_data, x_mc), ("particle", z_data, z_mc)]:
-        wd_before = _wd_per_dim(data, mc)
-        wd_after = _wd_per_dim(data, mc, weights=w)
-        js_before = _js_per_dim(data, mc)
-        js_after = _js_per_dim(data, mc, weights=w)
-        td_before = _triangular_per_dim(data, mc)
-        td_after = _triangular_per_dim(data, mc, weights=w)
+        wd_before: list[float] = _wd_per_dim(data, mc)
+        wd_after: list[float] = _wd_per_dim(data, mc, weights=w)
+        js_before: list[float] = _js_per_dim(data, mc)
+        js_after: list[float] = _js_per_dim(data, mc, weights=w)
+        td_before: list[float] = _triangular_per_dim(data, mc)
+        td_after: list[float] = _triangular_per_dim(data, mc, weights=w)
 
         for i, var in enumerate(var_names):
-            key = f"{level}_{var}"
+            key: str = f"{level}_{var}"
             metrics[key] = {
                 "wasserstein_before": wd_before[i],
                 "wasserstein_after": wd_after[i],
@@ -291,7 +302,7 @@ def render_metrics(
     console: Console | None = None,
 ) -> None:
     """Render evaluation metrics as one Rich table per available level."""
-    active_console = console or Console()
+    active_console: Console = console or Console()
     for level in ("detector", "particle"):
         level_metrics = [
             (var, metrics[f"{level}_{var}"])

@@ -6,8 +6,8 @@ from rich.logging import RichHandler
 
 def configure_logging(level: str = "INFO") -> None:
     """Configure application logging with Rich terminal rendering."""
-    normalized = level.upper()
-    numeric_level = logging.getLevelNamesMapping().get(normalized)
+    normalized: str = level.upper()
+    numeric_level: int | None = logging.getLevelNamesMapping().get(normalized)
     if numeric_level is None:
         raise ValueError(f"Unknown log level: {level!r}")
 

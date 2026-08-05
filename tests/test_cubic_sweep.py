@@ -49,8 +49,10 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch):
     import ran.experiments.cubic_sweep as cs
     import ran.train
 
-    def fake_train(splits, dim=1, n_epochs=100, seed=None):
+    def fake_train(_splits, *, seed=None, **_kwargs):
         # Generator returns uniform raw weights for any z (shape (n, 1)).
+        # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
+        # run_ran passes a seed through.
         return ran.train.TrainResult(
             g=lambda z: np.ones((len(z), 1)), d=None, history=None, seed=seed or 0
         )
@@ -63,7 +65,7 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch):
     )
 
     assert out["s_index"] == 3
-    assert out["s"] == float(np.linspace(0.0, 20.0, 25)[3])
+    assert out["s"] == pytest.approx(float(np.linspace(0.0, 20.0, 25)[3]))
     assert np.isfinite(out["ran_wd"])
     # Both seeds recorded, so the point can be reproduced from its own JSON.
     assert out["seed"] == 0

@@ -14,6 +14,7 @@ OmniFold baseline in its own process with `uv run -m ran baseline omnifold`;
 never import it from a module that has already touched JAX. The cubic sweep
 keeps the two sides in separate subcommands for exactly this reason.
 """
+
 import os
 
 from ran.evaluate import (

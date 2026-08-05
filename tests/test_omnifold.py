@@ -20,7 +20,7 @@ pytestmark = [
     pytest.mark.skipif(
         "keras" in sys.modules
         and sys.modules["keras"].backend.backend() != "tensorflow",
-        reason="needs the TensorFlow backend; run `pytest tests/test_omnifold.py` alone",
+        reason="needs the TensorFlow backend; run tests/test_omnifold.py alone",
     ),
 ]
 

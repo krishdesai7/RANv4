@@ -20,6 +20,8 @@ type Nested[T] = T | list[Nested[T]]
 
 type Batch = tuple[dict[str, npt.NDArray[np.double]], npt.NDArray[np.ubyte]]
 
+_ONE_SOURCE_ONLY = "Exactly one of config_path or params must be provided"
+
 
 class ArrayDataset:
     """In-memory (z, x, y) arrays with deterministic minibatching.
@@ -59,7 +61,8 @@ class ArrayDataset:
     ) -> None:
         if not (len(z) == len(x) == len(y)):
             raise ValueError(
-                f"z, x, y must share a first dimension; got {len(z)}, {len(x)}, {len(y)}"
+                "z, x, y must share a first dimension; "
+                f"got {len(z)}, {len(x)}, {len(y)}"
             )
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
@@ -121,6 +124,35 @@ class DatasetSplits(NamedTuple):
     test: ArrayDataset
 
 
+def _parse_params(params: dict) -> dict[str, Any]:
+    """Normalize an inline params dict into the shape parse_gaussian_config returns.
+
+    Split out from generate_gaussian_dataset so the dict is non-optional here;
+    the caller's "exactly one of config_path or params" invariant is not
+    something a type checker can carry into the branch.
+    """
+    mu_gen: npt.NDArray[np.double] = np.asarray(
+        params["mu_gen"], dtype=np.double
+    ).ravel()
+    mu_true: npt.NDArray[np.double] = np.asarray(
+        params["mu_true"], dtype=np.double
+    ).ravel()
+    dim: np.ubyte = mu_gen.shape[0]
+    if mu_true.shape[0] != dim:
+        raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
+    return {
+        "dim": dim,
+        "mu_gen": mu_gen,
+        "mu_true": mu_true,
+        "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),
+        "cov_true": sigma_to_covariance(params["sigma_true"], dim),
+        "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),
+    }
+
+
+# ruff: ignore[invalid-class-name] -- `RANDataset` is the CapWords spelling, but this is
+# the documented public API (CLAUDE.md, tests, ran.workflow); renaming is a
+# breaking change, not a lint fix.
 class RAN_Dataset:
     """
     Dataset class for RAN.
@@ -259,37 +291,25 @@ class RAN_Dataset:
         Generate a multivariate Gaussian dataset.
         Arguments:
             config_path: Path to a YAML config file.
-            params: Dict with keys mu_gen, mu_true, sigma_gen, sigma_true, sigma_detector.
+            params: Dict with keys mu_gen, mu_true, sigma_gen, sigma_true,
+                sigma_detector.
             n_samples: Number of samples per class (data and MC).
         Returns:
             DatasetSplits
         Exactly one of config_path or params must be provided.
         """
-        if (config_path is None) == (params is None):
-            raise ValueError("Exactly one of config_path or params must be provided")
+        # Written as a nested check rather than a single XOR so that each branch
+        # narrows the argument it goes on to use.
         parsed: dict[str, Any]
-        if config_path is not None:
-            parsed = parse_gaussian_config(config_path)
+        if params is not None:
+            if config_path is not None:
+                raise ValueError(_ONE_SOURCE_ONLY)
+            parsed = _parse_params(params)
+        elif config_path is None:
+            raise ValueError(_ONE_SOURCE_ONLY)
         else:
-            mu_gen: npt.NDArray[np.double] = np.asarray(
-                params["mu_gen"], dtype=np.double
-            ).ravel()  # type: ignore
-            mu_true: npt.NDArray[np.double] = np.asarray(
-                params["mu_true"], dtype=np.double
-            ).ravel()  # type: ignore
-            dim: np.ubyte = mu_gen.shape[0]
-            if mu_true.shape[0] != dim:
-                raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
-            parsed = {
-                "dim": dim,
-                "mu_gen": mu_gen,
-                "mu_true": mu_true,
-                "cov_gen": sigma_to_covariance(params["sigma_gen"], dim),  # type: ignore
-                "cov_true": sigma_to_covariance(params["sigma_true"], dim),  # type: ignore
-                "cov_detector": sigma_to_covariance(params["sigma_detector"], dim),  # type: ignore
-            }
+            parsed = parse_gaussian_config(config_path)
 
-        dim: np.ubyte = parsed["dim"]  # type: ignore
         mu_gen: npt.NDArray[np.double] = parsed["mu_gen"]
         mu_true: npt.NDArray[np.double] = parsed["mu_true"]
         cov_gen: npt.NDArray[np.double] = parsed["cov_gen"]
@@ -323,22 +343,22 @@ class RAN_Dataset:
                 method="svd",
             )
 
-            L_det: npt.NDArray[np.double] = np.linalg.cholesky(
+            chol_det: npt.NDArray[np.double] = np.linalg.cholesky(
                 cast("npt.NDArray", cov_detector), upper=False
             )
 
             s_data: npt.NDArray[np.double] = rng.standard_normal(size=z_true.shape)
-            x_data: npt.NDArray[np.double] = z_true + s_data @ L_det.T
+            x_data: npt.NDArray[np.double] = z_true + s_data @ chol_det.T
 
             s_sim: npt.NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
-            x_sim: npt.NDArray[np.double] = z_gen + s_sim @ L_det.T
+            x_sim: npt.NDArray[np.double] = z_gen + s_sim @ chol_det.T
 
             y_nat: npt.NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
-            y_MC: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
+            y_mc: npt.NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
 
             z: npt.NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
             x: npt.NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
-            y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_MC), axis=0)
+            y: npt.NDArray[np.ubyte] = np.concatenate((y_nat, y_mc), axis=0)
 
             np.savez_compressed(cache_path, z=z, x=x, y=y)
             logger.info("Generated and saved dataset to cache: %s", cache_path)

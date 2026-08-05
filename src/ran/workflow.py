@@ -22,6 +22,146 @@ from ran.train import train
 logger = logging.getLogger(__name__)
 
 
+def _prepare_gaussian(
+    config: str | None,
+    saved_config: dict[str, Any],
+    batch_size: int,
+    n_samples: int,
+    data_seed: int,
+) -> tuple[DatasetSplits, int, dict[str, Any]]:
+    """Build Gaussian splits from a reloaded run's config, or from a YAML file.
+
+    Returns the splits, the dimensionality, and the parsed Gaussian params --
+    the last so a fresh run can record them in its own config.json.
+    """
+    builder = RAN_Dataset(batch_size=batch_size, seed=data_seed)
+    gaussian_params: dict[str, Any]
+    if saved_config:
+        # Reload: use stored params from config.json
+        gaussian_params = saved_config["gaussian_params"]
+        raw_params: dict[str, Any] = {
+            k: v for k, v in gaussian_params.items() if k != "dim"
+        }
+        splits = builder.generate_gaussian_dataset(
+            params=raw_params, n_samples=n_samples
+        )
+    else:
+        # Fresh run: parse YAML config
+        if config is None:
+            raise ValueError("Gaussian mode requires --config path/to/config.yaml")
+        gaussian_params = parse_gaussian_config(config)
+        splits = builder.generate_gaussian_dataset(
+            config_path=config, n_samples=n_samples
+        )
+    return splits, gaussian_params["dim"], gaussian_params
+
+
+def _prepare_jets(
+    n_samples: int,
+    batch_size: int,
+    variables: tuple[str, ...],
+    data_seed: int,
+) -> tuple[DatasetSplits, int, list[VarInfo]]:
+    """Build jet splits plus the per-variable metadata the plots need."""
+    std_params: dict[str, tuple[np.double, np.double]]
+    splits, dim, std_params = load_jet_dataset(
+        n_samples=n_samples,
+        batch_size=batch_size,
+        variables=variables,
+        seed=data_seed,
+    )
+    var_info = [
+        VarInfo(
+            xlim=JET_OBS[v]["xlim"],
+            xlabel=JET_OBS[v]["xlabel"],
+            symbol=JET_OBS[v]["symbol"],
+            mu=std_params[v][0],
+            sigma=std_params[v][1],
+        )
+        for v in variables
+    ]
+    return splits, dim, var_info
+
+
+def _to_list(v: Any) -> Any:
+    return v.tolist() if hasattr(v, "tolist") else v
+
+
+def _save_run(
+    g: keras.Model,
+    d: keras.Model,
+    history: dict[str, list],
+    *,
+    batch_size: int,
+    n_samples: int,
+    dim: int,
+    dataset: str,
+    init_seed: int,
+    data_seed: int,
+    gaussian_params: dict[str, Any] | None,
+    variables: tuple[str, ...],
+) -> Path:
+    """Write models, history and config to a fresh timestamped run directory.
+
+    Gaussian params are stored as covariance matrices so runs are
+    self-contained and reloadable without the original YAML. `init_seed` is the
+    resolved weight-init seed, never None, so a run drawn from entropy is still
+    reproducible via --seed after the fact.
+    """
+    run_dir: Path = Path("runs") / datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    g.save(run_dir / "generator.keras")
+    d.save(run_dir / "discriminator.keras")
+    np.savez(
+        run_dir / "history.npz",
+        # See ran.baselines.ibu: **dict into savez trips the stub's
+        # `allow_pickle` parameter rather than its **kwds catch-all.
+        **{k: np.array(v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]
+    )
+
+    config_out: dict[str, Any] = {
+        "batch_size": batch_size,
+        "n_samples": n_samples,
+        "dim": dim,
+        "dataset": dataset,
+        "seed": init_seed,
+        "data_seed": data_seed,
+    }
+    if dataset == "gaussian" and gaussian_params is not None:
+        config_out["gaussian_params"] = {
+            "dim": dim,
+            "mu_gen": _to_list(gaussian_params["mu_gen"]),
+            "mu_true": _to_list(gaussian_params["mu_true"]),
+            "sigma_gen": _to_list(gaussian_params["cov_gen"]),
+            "sigma_true": _to_list(gaussian_params["cov_true"]),
+            "sigma_detector": _to_list(gaussian_params["cov_detector"]),
+        }
+    else:
+        config_out["variables"] = list(variables)
+    json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
+    logger.info("Saved run to %s", run_dir)
+    return run_dir
+
+
+def _load_baseline_weights(
+    run_dir: Path, dim: int
+) -> tuple[npt.NDArray[np.double] | None, list[npt.NDArray[np.double]] | None]:
+    """Pick up OmniFold/IBU weights from the run dir, if those baselines have run."""
+    omnifold_weights = None
+    ibu_weights: list[npt.NDArray[np.double]] | None = None
+    of_path: Path = run_dir / "omnifold_weights.npz"
+    ibu_path: Path = run_dir / "ibu_weights.npz"
+    if of_path.exists():
+        omnifold_weights = np.load(of_path)["weights"]
+        logger.info("Loaded OmniFold weights from %s", of_path)
+    if ibu_path.exists():
+        ibu_data: dict[str, Any] = np.load(ibu_path)
+        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
+        logger.info("Loaded IBU weights from %s", ibu_path)
+    return omnifold_weights, ibu_weights
+
+
 def run(
     batch_size: int = 1024,
     n_samples: int = 500_000,
@@ -53,10 +193,12 @@ def run(
     gaussian_params: dict | None = None
     dim: int = 1
 
-    # When loading a saved run, read config from that run
+    # When loading a saved run, read config from that run. Defaults to {} so
+    # every branch below can read it unconditionally.
+    saved_config: dict[str, Any] = {}
     if load_run is not None:
         run_dir = Path(load_run)
-        saved_config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
+        saved_config = json.loads((run_dir / "config.json").read_text())
         dataset = saved_config.get("dataset", "gaussian")
         n_samples = saved_config["n_samples"]
         batch_size = saved_config["batch_size"]
@@ -67,50 +209,13 @@ def run(
             variables = tuple(saved_config["variables"])
 
     if dataset == "gaussian":
-        if load_run is not None:
-            # Reload: use stored params from config.json
-            gaussian_params = saved_config["gaussian_params"]  # type: ignore
-            dim = gaussian_params["dim"]
-            raw_params: dict[str, Any] = {
-                k: v for k, v in gaussian_params.items() if k != "dim"
-            }
-            splits = RAN_Dataset(
-                batch_size=batch_size, seed=data_seed
-            ).generate_gaussian_dataset(
-                params=raw_params,
-                n_samples=n_samples,
-            )
-        else:
-            # Fresh run: parse YAML config
-            if config is None:
-                raise ValueError("Gaussian mode requires --config path/to/config.yaml")
-
-            gaussian_params = parse_gaussian_config(config)
-            dim = gaussian_params["dim"]
-            splits = RAN_Dataset(
-                batch_size=batch_size, seed=data_seed
-            ).generate_gaussian_dataset(
-                config_path=config,
-                n_samples=n_samples,
-            )
-    elif dataset == "jets":
-        std_params: dict[str, tuple[np.double, np.double]]
-        splits, dim, std_params = load_jet_dataset(
-            n_samples=n_samples,
-            batch_size=batch_size,
-            variables=variables,
-            seed=data_seed,
+        splits, dim, gaussian_params = _prepare_gaussian(
+            config, saved_config, batch_size, n_samples, data_seed
         )
-        var_info = [
-            VarInfo(
-                xlim=JET_OBS[v]["xlim"],
-                xlabel=JET_OBS[v]["xlabel"],
-                symbol=JET_OBS[v]["symbol"],
-                mu=std_params[v][0],
-                sigma=std_params[v][1],
-            )
-            for v in variables
-        ]
+    elif dataset == "jets":
+        splits, dim, var_info = _prepare_jets(
+            n_samples, batch_size, variables, data_seed
+        )
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
@@ -132,59 +237,21 @@ def run(
             patience=patience,
             seed=seed,
         )
-
-        run_dir: Path = Path("runs") / datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
-        run_dir.mkdir(parents=True, exist_ok=True)
-
-        g.save(run_dir / "generator.keras")
-        d.save(run_dir / "discriminator.keras")
-        np.savez(
-            run_dir / "history.npz",
-            **{k: np.array(v) for k, v in history.items()},  # type: ignore
+        run_dir = _save_run(
+            g,
+            d,
+            history,
+            batch_size=batch_size,
+            n_samples=n_samples,
+            dim=dim,
+            dataset=dataset,
+            init_seed=init_seed,
+            data_seed=data_seed,
+            gaussian_params=gaussian_params,
+            variables=variables,
         )
 
-        # Save config — Gaussian params stored as covariance matrices
-        # so runs are self-contained and reloadable without original YAML
-        # `seed` is the resolved weight-init seed, never None, so a run drawn
-        # from entropy is still reproducible via --seed after the fact.
-        config_out: dict[str, Any] = {
-            "batch_size": batch_size,
-            "n_samples": n_samples,
-            "dim": dim,
-            "dataset": dataset,
-            "seed": init_seed,
-            "data_seed": data_seed,
-        }
-        if dataset == "gaussian" and gaussian_params is not None:
-
-            def _to_list(v):
-                return v.tolist() if hasattr(v, "tolist") else v
-
-            config_out["gaussian_params"] = {
-                "dim": dim,
-                "mu_gen": _to_list(gaussian_params["mu_gen"]),
-                "mu_true": _to_list(gaussian_params["mu_true"]),
-                "sigma_gen": _to_list(gaussian_params["cov_gen"]),
-                "sigma_true": _to_list(gaussian_params["cov_true"]),
-                "sigma_detector": _to_list(gaussian_params["cov_detector"]),
-            }
-        else:
-            config_out["variables"] = list(variables)
-        json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
-        logger.info("Saved run to %s", run_dir)
-
-    # Load baseline weights if available
-    omnifold_weights = None
-    ibu_weights: list[npt.NDArray[np.double]] | None = None
-    of_path: Path = run_dir / "omnifold_weights.npz"
-    ibu_path: Path = run_dir / "ibu_weights.npz"
-    if of_path.exists():
-        omnifold_weights = np.load(of_path)["weights"]
-        logger.info("Loaded OmniFold weights from %s", of_path)
-    if ibu_path.exists():
-        ibu_data: dict[str, Any] = np.load(ibu_path)
-        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
-        logger.info("Loaded IBU weights from %s", ibu_path)
+    omnifold_weights, ibu_weights = _load_baseline_weights(run_dir, dim)
 
     # Plots
     plot_detector_level(

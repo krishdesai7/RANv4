@@ -27,7 +27,7 @@ import numpy.typing as npt
 from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
-from ran.data.datasets import RAN_Dataset
+from ran.data.datasets import RANDataset
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ def run_ran(
     y = np.concatenate(
         [np.ones(n_samples, dtype=np.ubyte), np.zeros(n_samples, dtype=np.ubyte)]
     )
-    splits = RAN_Dataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
     result = train(splits, dim=1, n_epochs=ran_epochs, seed=init_seed)
 
     raw = np.asarray(result.g(z_gen.reshape(-1, 1).astype(np.double))).ravel()
@@ -131,7 +131,7 @@ def run_ran(
         Path(sweep_dir),
         "ran",
         {
-            "s_index": int(s_index),
+            "s_index": s_index,
             "s": s,
             "ran_wd": ran_wd,
             "seed": seed,
@@ -181,7 +181,7 @@ def run_omnifold(
     return _write_point(
         Path(sweep_dir),
         "omnifold",
-        {"s_index": int(s_index), "s": s, "omnifold_wd": of_wd},
+        {"s_index": s_index, "s": s, "omnifold_wd": of_wd},
     )
 
 

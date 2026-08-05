@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -9,7 +9,7 @@ from scipy.linalg import cholesky
 
 def sigma_to_covariance(
     sigma: float | list | npt.NDArray,
-    dim: np.ubyte,
+    dim: int,
 ) -> npt.NDArray[np.double]:
     """Promote sigma (scalar, vector, or matrix)
     to a (dim, dim) covariance matrix,
@@ -28,7 +28,7 @@ def sigma_to_covariance(
         val: np.double = arr.ravel()[0]
         if val < 0:
             raise ValueError(f"sigma scalar must be non-negative, got {val}")
-        cov = val**2 * np.identity(cast("int", dim), dtype=np.double)
+        cov = val**2 * np.identity(dim, dtype=np.double)
     elif arr.ndim == 1:
         if arr.shape[0] != dim:
             raise ValueError(
@@ -79,7 +79,7 @@ def parse_gaussian_config(config_path: str | Path) -> dict[str, Any]:
         raw["mu_true"], dtype=np.double
     ).ravel()
 
-    dim: np.ubyte = mu_gen.shape[0]
+    dim: int = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
         raise ValueError(f"mu_true has dim {mu_true.shape[0]}, mu_gen has {dim=}")
 

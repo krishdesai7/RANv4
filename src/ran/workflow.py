@@ -8,7 +8,7 @@ import keras
 import numpy as np
 import numpy.typing as npt
 
-from ran.data import JET_OBS, DatasetSplits, RAN_Dataset, load_jet_dataset
+from ran.data import JET_OBS, DatasetSplits, RANDataset, load_jet_dataset
 from ran.data.config import parse_gaussian_config
 from ran.evaluate import evaluate_run
 from ran.plotting import (
@@ -34,7 +34,7 @@ def _prepare_gaussian(
     Returns the splits, the dimensionality, and the parsed Gaussian params --
     the last so a fresh run can record them in its own config.json.
     """
-    builder = RAN_Dataset(batch_size=batch_size, seed=data_seed)
+    builder = RANDataset(batch_size=batch_size, seed=data_seed)
     gaussian_params: dict[str, Any]
     if saved_config:
         # Reload: use stored params from config.json
@@ -90,7 +90,7 @@ def _to_list(v: Any) -> Any:
 def _save_run(
     g: keras.Model,
     d: keras.Model,
-    history: dict[str, list],
+    history: dict[str, list[float]],
     *,
     batch_size: int,
     n_samples: int,
@@ -222,7 +222,7 @@ def run(
     if load_run is not None:
         run_dir = Path(load_run)
         g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
-        history: dict[str, list] = {
+        history: dict[str, list[float]] = {
             k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
         }
         logger.info("Loaded run from %s", run_dir)

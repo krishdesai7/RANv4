@@ -199,7 +199,7 @@ RANv4/
 │   ├── leakage.py                Data-poisoning leakage check
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion
-│   │   ├── datasets.py           DatasetSplits, RAN_Dataset, caching
+│   │   ├── datasets.py           DatasetSplits, RANDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
 │   │   └── download.py           One-time Zenodo data download
 │   ├── baselines/

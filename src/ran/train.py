@@ -15,7 +15,7 @@ gradient transform and jit are native JAX.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
 import keras
@@ -52,7 +52,7 @@ class TrainResult(NamedTuple):
 
     g: keras.Model
     d: keras.Model
-    history: dict[str, list[float | np.floating]]
+    history: dict[str, list[float]]
     seed: int
 
 
@@ -148,8 +148,13 @@ def _make_steps(
         (loss, d_non_trainable), grads = disc_grad_fn(
             state.d_trainable, state.d_non_trainable, x, y, w
         )
-        d_trainable, opt_d_vars = opt_d.stateless_apply(
-            state.opt_d, grads, state.d_trainable
+        # `Optimizer.stateless_apply` carries no annotations, so its return is
+        # inferred from the body as `list[Unknown | None]`. It documents itself
+        # as returning (trainable_variables, optimizer_variables) -- both lists
+        # of backend tensors, which under the JAX backend are jax.Arrays.
+        d_trainable, opt_d_vars = cast(
+            "tuple[Variables, Variables]",
+            opt_d.stateless_apply(state.opt_d, grads, state.d_trainable),
         )
         return (
             state._replace(
@@ -172,8 +177,9 @@ def _make_steps(
             x,
             y,
         )
-        g_trainable, opt_g_vars = opt_g.stateless_apply(
-            state.opt_g, grads, state.g_trainable
+        g_trainable, opt_g_vars = cast(  # see disc_step
+            "tuple[Variables, Variables]",
+            opt_g.stateless_apply(state.opt_g, grads, state.g_trainable),
         )
         return (
             state._replace(
@@ -253,7 +259,7 @@ def train(
             reproducing.
 
     This seeds weight initialization *only*. The train/val/test split and the
-    per-epoch batch order come from the dataset's own seed (`RAN_Dataset`),
+    per-epoch batch order come from the dataset's own seed (`RANDataset`),
     which draws from an independent generator. Varying `seed` across runs
     therefore estimates training/initialization variance at fixed data -- the
     usual HEP model-uncertainty ensemble -- while varying the dataset seed
@@ -264,7 +270,10 @@ def train(
     non-deterministic GPU reductions).
     """
     if seed is None:
-        seed = int(np.random.SeedSequence().entropy % 2**31)
+        # A no-argument SeedSequence always fills `entropy` with an int drawn
+        # from the OS; the annotation is widened to int | Sequence[int] | None
+        # only to cover the case where the caller supplied one.
+        seed = cast("int", np.random.SeedSequence().entropy) % 2**31
     keras.utils.set_random_seed(seed)
     # Rewind the batch-order sequence so repeated runs over one DatasetSplits
     # -- an ensemble loop over init seeds -- all see identical data.
@@ -291,7 +300,7 @@ def train(
     )
     disc_step, gen_step, eval_step = _make_steps(g, d, opt_g, opt_d)
 
-    history: dict[str, list[float | np.floating]] = {
+    history: dict[str, list[float]] = {
         "train_d": [],
         "train_g": [],
         "val_d": [],
@@ -314,8 +323,10 @@ def train(
                 state, g_loss = gen_step(state, z, x, y_f)
                 g_losses.append(-float(g_loss))
 
-        mean_td: np.floating = np.mean(d_losses)
-        mean_tg: np.floating = np.mean(g_losses)
+        # Narrowed to plain float so every history series has one element type;
+        # the val losses below are already floats.
+        mean_td: float = float(np.mean(d_losses))
+        mean_tg: float = float(np.mean(g_losses))
         mean_val: tuple[float, float] = _eval_dataset(eval_step, state, splits.val)
 
         history["train_d"].append(mean_td)

@@ -137,7 +137,7 @@ def _parse_params(params: dict) -> dict[str, Any]:
     mu_true: npt.NDArray[np.double] = np.asarray(
         params["mu_true"], dtype=np.double
     ).ravel()
-    dim: np.ubyte = mu_gen.shape[0]
+    dim: int = mu_gen.shape[0]
     if mu_true.shape[0] != dim:
         raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
     return {
@@ -150,10 +150,7 @@ def _parse_params(params: dict) -> dict[str, Any]:
     }
 
 
-# ruff: ignore[invalid-class-name] -- `RANDataset` is the CapWords spelling, but this is
-# the documented public API (CLAUDE.md, tests, ran.workflow); renaming is a
-# breaking change, not a lint fix.
-class RAN_Dataset:
+class RANDataset:
     """
     Dataset class for RAN.
     Arguments:
@@ -201,7 +198,7 @@ class RAN_Dataset:
     def _round_nested(obj: Nested[SupportsFloat], ndigits: int = 10) -> Nested[float]:
         """Recursively round floats in a nested list/scalar for stable hashing."""
         if isinstance(obj, list):
-            return [RAN_Dataset._round_nested(v, ndigits) for v in obj]
+            return [RANDataset._round_nested(v, ndigits) for v in obj]
         return round(float(obj), ndigits)
 
     def _cache_key(self, parsed: dict[str, Any], n_samples: int) -> str:

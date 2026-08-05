@@ -75,7 +75,7 @@ def _purity_bins(
 def _build_response(
     gen_bins: npt.NDArray[np.long],
     reco_bins: npt.NDArray[np.long],
-    n_bins: np.ubyte,
+    n_bins: int,
 ) -> npt.NDArray[np.double]:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
     response: npt.NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
@@ -124,7 +124,7 @@ def _run_and_evaluate(
     # Collect all splits for building response matrix (same as OmniFold)
     zs: list[npt.NDArray[np.double]] = []
     xs: list[npt.NDArray[np.double]] = []
-    ys: list[npt.NDArray[np.double]] = []
+    ys: list[npt.NDArray[np.ubyte]] = []
     for split in [splits.train, splits.val, splits.test]:
         z_split, x_split, y_split = split.as_arrays()
         zs.append(z_split)
@@ -132,7 +132,7 @@ def _run_and_evaluate(
         ys.append(y_split)
     z_all: npt.NDArray[np.double] = np.concatenate(zs, axis=0)
     x_all: npt.NDArray[np.double] = np.concatenate(xs, axis=0)
-    y_all: npt.NDArray[np.double] = np.concatenate(ys, axis=0)
+    y_all: npt.NDArray[np.ubyte] = np.concatenate(ys, axis=0)
 
     z_gen_all: npt.NDArray[np.double] = z_all[y_all == 0]
     x_sim_all: npt.NDArray[np.double] = x_all[y_all == 0]
@@ -148,7 +148,7 @@ def _run_and_evaluate(
     z_mc_t: npt.NDArray[np.double] = z_test[y_test == 0]
     x_mc_t: npt.NDArray[np.double] = x_test[y_test == 0]
 
-    dim: np.ubyte = z_all.shape[1]
+    dim: int = z_all.shape[1]
     dataset: str = config.get("dataset", "gaussian")
     if dataset == "jets":
         var_names: list[str] = config["variables"]
@@ -165,7 +165,7 @@ def _run_and_evaluate(
             x_sim_all[:, d],
             purity_threshold,
         )
-        n_bins: np.ubyte = bins.shape[0] - 1
+        n_bins: int = bins.shape[0] - 1
 
         if n_bins < 2:
             logger.warning("%s: only %d bin(s), skipping", var_names[d], n_bins)
@@ -184,8 +184,14 @@ def _run_and_evaluate(
         )
 
         # Prior (MC gen) and data reco histogram
-        prior: npt.NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[0]
-        data_hist: npt.NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[0]
+        # np.histogram returns integer counts; _ibu divides and accumulates into
+        # these, so promote once here rather than relying on operand coercion.
+        prior: npt.NDArray[np.double] = np.histogram(z_gen_all[:, d], bins=bins)[
+            0
+        ].astype(np.double)
+        data_hist: npt.NDArray[np.double] = np.histogram(x_data_all[:, d], bins=bins)[
+            0
+        ].astype(np.double)
 
         # IBU
         unfolded: npt.NDArray[np.double] = _ibu(

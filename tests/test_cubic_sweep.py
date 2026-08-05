@@ -60,7 +60,7 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
         # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
         # run_ran passes a seed through.
         return ran.train.TrainResult(
-            g=lambda z: np.ones((len(z), 1)), d=None, history=None, seed=seed or 0
+            g=lambda z: np.ones((len(z), 1)), d=None, history={}, seed=seed or 0
         )
 
     # run_ran imports train() lazily from ran.train, so patch it at the source.

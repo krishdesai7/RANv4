@@ -24,7 +24,7 @@ from rich.table import Table
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
-from ran.data import ArrayDataset, DatasetSplits, RAN_Dataset
+from ran.data import ArrayDataset, DatasetSplits, RANDataset
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def _load_splits(config: dict) -> DatasetSplits:
                 "sigma_true": 1.0,
                 "sigma_detector": smearing,
             }
-        return RAN_Dataset(
+        return RANDataset(
             batch_size=batch_size, seed=data_seed
         ).generate_gaussian_dataset(
             params=raw_params,

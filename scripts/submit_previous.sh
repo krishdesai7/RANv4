@@ -100,9 +100,14 @@ BENCH="${BENCH_DIR}/bench.jsonl"
   echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "${BENCH_DIR}/provenance.txt"
 
+# KERAS_BACKEND is exported above, so keras picks it up here too. Recorded so
+# the arm's backend is evidence in the bench dir rather than an assumption.
 uv run python -c "
-import keras, sys
+import sys
+import keras, tensorflow as tf
 print('keras', keras.__version__, 'backend', keras.backend.backend())
+print('tensorflow', tf.__version__)
+print('tf GPUs', tf.config.list_physical_devices('GPU'))
 print('python', sys.version.split()[0])
 " > "${BENCH_DIR}/env.txt" 2>&1 || true
 nvidia-smi >> "${BENCH_DIR}/env.txt" 2>&1 || true
@@ -125,7 +130,9 @@ HAVE_GNU_TIME=0
 
 bench_stage() {
   local name="$1"; shift
-  local log="${BENCH_DIR}/${name}.log"
+  # .txt, not .log: .gitignore excludes *.log, and these per-stage logs are
+  # the first thing anyone wants when a stage misbehaves.
+  local log="${BENCH_DIR}/${name}.txt"
   local tv="${BENCH_DIR}/${name}.time"
   local start end wall rss rc
 
@@ -182,7 +189,7 @@ RUN_DIR=$(comm -13 "${before}" "${after}" | tail -1)
 rm -f "${before}" "${after}"
 
 if [[ ${TRAIN_RC} -ne 0 || -z "${RUN_DIR}" ]]; then
-  echo "FATAL: training failed (rc=${TRAIN_RC}) or produced no run dir; see ${BENCH_DIR}/train.log"
+  echo "FATAL: training failed (rc=${TRAIN_RC}) or produced no run dir; see ${BENCH_DIR}/train.txt"
   exit 1
 fi
 RUN_DIR=${RUN_DIR%/}
@@ -229,7 +236,7 @@ if [[ ${LOCAL:-0} == 1 ]]; then
   fi
   echo "Running in allocation ${SLURM_JOB_ID:-<none>} (no sbatch)"
   echo
-  bash "${BENCH_DIR}/job.sh" 2>&1 | tee "${BENCH_DIR}/run.log"
+  bash "${BENCH_DIR}/job.sh" 2>&1 | tee "${BENCH_DIR}/run.txt"
   rc=${PIPESTATUS[0]}
   echo
   echo "Finished rc=${rc}"

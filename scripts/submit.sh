@@ -26,6 +26,9 @@
 #                 SMOKE=1 LOCAL=1 scripts/submit.sh
 #               Refuses to run outside an allocation (that would mean a login
 #               node, with no GPU).
+#   SHARED=1    request a shared node instead of an exclusive one -- faster
+#               allocation when you only need 1 GPU. Uses --qos=shared and
+#               --gpus=N rather than --nodes=1 --gpus-per-node=N.
 #   CONFIG=...  Gaussian config (default params/2d_correlated.yaml)
 #   GPUS, TIME, QOS, N_SAMPLES, SEED, DATA_SEED
 # Anything passed on the command line is forwarded to `ran train`.
@@ -45,16 +48,29 @@ SEED=${SEED:-0}
 # identical events, splits and batch order.
 DATA_SEED=${DATA_SEED:-42}
 
+# Run size (SMOKE=1 for a quick end-to-end check before a real run).
 if [[ ${SMOKE:-0} == 1 ]]; then
-  QOS=${QOS:-debug}
   TIME=${TIME:-00:20:00}
   N_SAMPLES=${N_SAMPLES:-20000}
   TAG=smoke_${ARM}
 else
-  QOS=${QOS:-regular}
   TIME=${TIME:-04:00:00}
   N_SAMPLES=${N_SAMPLES:-500000}
   TAG=${ARM}
+fi
+
+# Allocation mode (SHARED=1 to share a node instead of reserving one exclusively).
+# debug QOS is exclusive-only, so SHARED overrides it to the shared QOS.
+# Shared nodes: --gpus=N requests GPUs without owning the whole node.
+if [[ ${SHARED:-0} == 1 ]]; then
+  QOS=${QOS:-shared}
+  NODE_FLAGS=(--gpus="${GPUS}")
+elif [[ ${SMOKE:-0} == 1 ]]; then
+  QOS=${QOS:-debug}
+  NODE_FLAGS=(--nodes=1 --gpus-per-node="${GPUS}")
+else
+  QOS=${QOS:-regular}
+  NODE_FLAGS=(--nodes=1 --gpus-per-node="${GPUS}")
 fi
 
 BENCH_DIR="${PROJECT_DIR}/bench/${TAG}_$(date -u +%Y-%m-%dT%H%M%SZ)"
@@ -67,7 +83,8 @@ printf '%s\n' "$@" > "${BENCH_DIR}/train_args"
 echo "Arm:        ${ARM} (JAX)"
 echo "Bench dir:  ${BENCH_DIR}"
 echo "Config:     ${CONFIG}   n_samples=${N_SAMPLES}"
-echo "Resources:  ${GPUS} GPU, qos=${QOS}, time=${TIME}"
+SHARED_LABEL=$([[ ${SHARED:-0} == 1 ]] && echo " shared" || echo "")
+echo "Resources:  ${GPUS} GPU, qos=${QOS}, time=${TIME}${SHARED_LABEL}"
 
 cat > "${BENCH_DIR}/job.sh" <<'EOF'
 #!/bin/bash
@@ -248,7 +265,7 @@ fi
 
 JOB=$(sbatch --parsable \
   --qos="${QOS}" --constraint=gpu --account=m3246_g --time="${TIME}" \
-  --nodes=1 --gpus-per-node="${GPUS}" \
+  "${NODE_FLAGS[@]}" \
   --job-name="ran_${TAG}" \
   --output="${BENCH_DIR}/slurm-%j.log" \
   --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEED=${SEED},DATA_SEED=${DATA_SEED},ARM=${ARM}" \

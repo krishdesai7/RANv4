@@ -1,4 +1,0 @@
-{"stage":"train","wall_s":18,"max_rss_kb":3353792,"exit":0}
-{"stage":"omnifold","wall_s":58,"max_rss_kb":3975620,"exit":0}
-{"stage":"ibu","wall_s":5,"max_rss_kb":236716,"exit":0}
-{"stage":"replot","wall_s":12,"max_rss_kb":2485200,"exit":0}

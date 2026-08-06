@@ -27,7 +27,7 @@ weights/
 omnifold_checkpoints/
 
 # Logs
-*.log
+#*.log
 *.out
 .DS_Store
 

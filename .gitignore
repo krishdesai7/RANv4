@@ -16,6 +16,11 @@ wheels/
 plots/
 weights/
 #runs/
+# OmniFold's per-iteration checkpoints, written next to the run that produced
+# them. Nothing reads them back (MultiFold only reloads when resuming from
+# start > 0, which we never do), and runs/ is tracked -- so this keeps ~1.4MB
+# of dead .weights.h5 per run out of git. The log_*.txt beside them is kept.
+omnifold_checkpoints/
 
 # Logs
 *.log

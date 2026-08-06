@@ -1,0 +1,12 @@
+arm=tf
+branch=master
+commit=56b4a6e70a5aaa61d8312d4e122a9d964cd12f85
+dirty=1
+host=nid001237
+slurm_job=56389913
+config=params/2d_correlated.yaml
+n_samples=20000
+seed=unseeded
+data_seed=42
+date_utc=2026-08-06T06:45:58Z
+run_dir=runs/2026-08-06T064736Z

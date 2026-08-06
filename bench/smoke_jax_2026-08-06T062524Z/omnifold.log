@@ -1,0 +1,62 @@
+[08/05/26 23:25:58] INFO     2026-08-06T062546Z: running OmniFold (niter=3, epochs=50)...                                                                                                   
+                    INFO     Loading dataset: gaussian                                                                                                                                      
+                    INFO     Loading dataset from cache: .cache/gaussian_60c6b26decc9176e.npz                                                                                               
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1785997560.326925  558525 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 38478 MB memory:  -> device: 0, name: NVIDIA A100-SXM4-40GB, pci bus id: 0000:03:00.0, compute capability: 8.0
+I0000 00:00:1785997560.329515  558525 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:1 with 38478 MB memory:  -> device: 1, name: NVIDIA A100-SXM4-40GB, pci bus id: 0000:41:00.0, compute capability: 8.0
+I0000 00:00:1785997560.331546  558525 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:2 with 38478 MB memory:  -> device: 2, name: NVIDIA A100-SXM4-40GB, pci bus id: 0000:82:00.0, compute capability: 8.0
+I0000 00:00:1785997560.333403  558525 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:3 with 38478 MB memory:  -> device: 3, name: NVIDIA A100-SXM4-40GB, pci bus id: 0000:c1:00.0, compute capability: 8.0
+/pscratch/sd/k/kdesai/.cache/uv/environments-v2/ran-cp3.13.5-6bc0d94c023de398/lib/python3.13/site-packages/keras/src/trainers/epoch_iterator.py:74: UserWarning: `shuffle=True` was passed, but will be ignored since the data `x` was provided as a tf.data.Dataset. The Dataset is expected to already be shuffled (via `.shuffle(buffer_size)`).
+  self.data_adapter = data_adapters.get_data_adapter(
+I0000 00:00:1785997565.410093  558936 device_compiler.h:196] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+[08/05/26 23:26:47] INFO     2026-08-06T062546Z: saved OmniFold metrics to runs/2026-08-06T062546Z/metrics_omnifold.json and weights to runs/2026-08-06T062546Z/omnifold_weights.npz        
+Horovod not found, will continue with single only GPUs.
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating pass gen flag ...
+78 training steps at reco and 78 steps at gen
+ITERATION: 1
+RUNNING STEP 1
+Last val loss 0.6881754398345947
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.687860369682312
+INFO: Dumping training history ...
+ITERATION: 2
+RUNNING STEP 1
+Last val loss 0.6993572115898132
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.681135356426239
+INFO: Dumping training history ...
+ITERATION: 3
+RUNNING STEP 1
+Last val loss 0.6939284801483154
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.6817575693130493
+INFO: Dumping training history ...
+        2026-08-06T062546Z [OmniFold] — Detector level         
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1718 │   0.0290 │      +83.1% │
+│          │ JS div       │ 0.011354 │ 0.006325 │      +44.3% │
+│          │ Delta (x1e3) │  42.5404 │  24.2748 │      +42.9% │
+│ dim_1    │ Wasserstein  │   0.1692 │   0.0761 │      +55.0% │
+│          │ JS div       │ 0.008890 │ 0.005142 │      +42.2% │
+│          │ Delta (x1e3) │  32.5522 │  19.2472 │      +40.9% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+        2026-08-06T062546Z [OmniFold] — Particle level         
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1777 │   0.0283 │      +84.1% │
+│          │ JS div       │ 0.011796 │ 0.005454 │      +53.8% │
+│          │ Delta (x1e3) │  44.2606 │  20.7077 │      +53.2% │
+│ dim_1    │ Wasserstein  │   0.1941 │   0.0410 │      +78.9% │
+│          │ JS div       │ 0.011284 │ 0.005058 │      +55.2% │
+│          │ Delta (x1e3) │  41.2694 │  18.9574 │      +54.1% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘

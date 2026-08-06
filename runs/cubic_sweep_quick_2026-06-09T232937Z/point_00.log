@@ -1,0 +1,34 @@
+Horovod not found, will continue with single only GPUs.
+Epoch   1/20  D: 0.6734  G: 0.6731  | Val D: 0.6533  G: 0.6533  (patience 0/5)
+Epoch   2/20  D: 0.6397  G: 0.6397  | Val D: 0.6300  G: 0.6300  (patience 1/5)
+Epoch   3/20  D: 0.6223  G: 0.6227  | Val D: 0.6188  G: 0.6188  (patience 2/5)
+Epoch   4/20  D: 0.6157  G: 0.6181  | Val D: 0.6160  G: 0.6160  (patience 3/5)
+Epoch   5/20  D: 0.6158  G: 0.6126  | Val D: 0.6192  G: 0.6192  (patience 4/5)
+Epoch   6/20  D: 0.6204  G: 0.6201  | Val D: 0.6252  G: 0.6252  (patience 5/5)
+Early stopping at epoch 6
+Test  D: 0.6532  G: 0.6532
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating pass gen flag ...
+195 training steps at reco and 195 steps at gen
+ITERATION: 1
+RUNNING STEP 1
+Last val loss 0.5944936871528625
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.588311493396759
+INFO: Dumping training history ...
+ITERATION: 2
+RUNNING STEP 1
+Last val loss 0.6971781253814697
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.5832316279411316
+INFO: Dumping training history ...
+s=0.0000  RAN=0.990450  OmniFold=0.019716
+s_index:     0
+s:           0.0
+ran_wd:      0.99044972555435
+omnifold_wd: 0.01971577676776643

@@ -1,0 +1,47 @@
+Horovod not found, will continue with single only GPUs.
+Epoch   1/20  D: 0.6302  G: 0.6269  | Val D: 0.6311  G: 0.6311  (patience 0/5)
+Epoch   2/20  D: 0.6251  G: 0.6270  | Val D: 0.6347  G: 0.6347  (patience 0/5)
+Epoch   3/20  D: 0.6293  G: 0.6261  | Val D: 0.6381  G: 0.6381  (patience 0/5)
+Epoch   4/20  D: 0.6337  G: 0.6345  | Val D: 0.6409  G: 0.6409  (patience 0/5)
+Epoch   5/20  D: 0.6371  G: 0.6342  | Val D: 0.6452  G: 0.6452  (patience 0/5)
+Epoch   6/20  D: 0.6414  G: 0.6405  | Val D: 0.6509  G: 0.6509  (patience 0/5)
+Epoch   7/20  D: 0.6457  G: 0.6447  | Val D: 0.6547  G: 0.6547  (patience 0/5)
+Epoch   8/20  D: 0.6496  G: 0.6473  | Val D: 0.6581  G: 0.6581  (patience 0/5)
+Epoch   9/20  D: 0.6540  G: 0.6535  | Val D: 0.6604  G: 0.6604  (patience 0/5)
+Epoch  10/20  D: 0.6582  G: 0.6603  | Val D: 0.6634  G: 0.6634  (patience 0/5)
+Epoch  11/20  D: 0.6624  G: 0.6615  | Val D: 0.6677  G: 0.6677  (patience 0/5)
+Epoch  12/20  D: 0.6662  G: 0.6611  | Val D: 0.6734  G: 0.6734  (patience 0/5)
+Epoch  13/20  D: 0.6705  G: 0.6673  | Val D: 0.6774  G: 0.6774  (patience 0/5)
+Epoch  14/20  D: 0.6736  G: 0.6697  | Val D: 0.6802  G: 0.6802  (patience 0/5)
+Epoch  15/20  D: 0.6758  G: 0.6785  | Val D: 0.6805  G: 0.6805  (patience 0/5)
+Epoch  16/20  D: 0.6784  G: 0.6759  | Val D: 0.6826  G: 0.6826  (patience 0/5)
+Epoch  17/20  D: 0.6810  G: 0.6815  | Val D: 0.6872  G: 0.6872  (patience 0/5)
+Epoch  18/20  D: 0.6840  G: 0.6832  | Val D: 0.6853  G: 0.6853  (patience 1/5)
+Epoch  19/20  D: 0.6846  G: 0.6853  | Val D: 0.6863  G: 0.6863  (patience 2/5)
+Epoch  20/20  D: 0.6866  G: 0.6851  | Val D: 0.6895  G: 0.6895  (patience 0/5)
+Test  D: 0.6881  G: 0.6881
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating pass gen flag ...
+195 training steps at reco and 195 steps at gen
+ITERATION: 1
+RUNNING STEP 1
+Last val loss 0.5982235670089722
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.6382513642311096
+INFO: Dumping training history ...
+ITERATION: 2
+RUNNING STEP 1
+Last val loss 0.7192965745925903
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.5714402198791504
+INFO: Dumping training history ...
+s=20.0000  RAN=0.188386  OmniFold=0.040482
+s_index:     3
+s:           20.0
+ran_wd:      0.18838590761810553
+omnifold_wd: 0.04048214409130271

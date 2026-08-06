@@ -98,7 +98,7 @@ from ran.baselines import omnifold
 
 run_dir = Path(sys.argv[1])
 (run_dir / "config.json").write_text('{"dim": 1, "n_samples": 1, "batch_size": 1}')
-omnifold._run_and_evaluate = lambda config, niter, epochs: ({}, [], np.ones(2))
+omnifold._run_and_evaluate = lambda config, niter, epochs, out_dir: ({}, [], np.ones(2))
 omnifold.render_metrics = lambda *args, **kwargs: None
 logging.basicConfig(level=logging.INFO)
 omnifold.evaluate_single(run_dir)

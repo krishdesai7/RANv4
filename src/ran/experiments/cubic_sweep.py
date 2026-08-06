@@ -174,6 +174,10 @@ def run_omnifold(
             niter=omnifold_niter,
             epochs=omnifold_epochs,
             batch_size=of_batch,
+            # Per-point subdirectory, not sweep_dir itself: submit_sweep.sh runs
+            # every point from the same cwd, concurrently, so a shared out_dir
+            # would have them truncating each other's OmniFold log.
+            out_dir=Path(sweep_dir) / f"omnifold_{s_index:02d}",
         )
     )
 

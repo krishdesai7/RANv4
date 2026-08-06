@@ -13,7 +13,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _write_config(params: GaussianConfig, tmp_path: Path) -> Path:
+def _write_config(params: dict, tmp_path: Path) -> Path:
+    """Write a config in the YAML *input* format: mu_* plus sigma_* keys.
+
+    `parse_gaussian_config` promotes the sigmas to the covariance matrices of a
+    `GaussianConfig`, so that type is its output, never its input. The `params=`
+    argument below is the one that takes a `GaussianConfig` -- that is the
+    already-promoted path a reloaded run uses.
+    """
     p = tmp_path / "config.yaml"
     p.write_text(yaml.dump(params))
     return p
@@ -24,14 +31,13 @@ class TestGenerateGaussianDataset:
 
     def test_1d_uncorrelated(self, tmp_path) -> None:
         """1D scalar sigma should produce valid splits."""
-        cfg = GaussianConfig(
-            dim=1,
-            mu_gen=np.array([0.5]),
-            mu_true=np.array([0.0]),
-            cov_gen=np.array([[0.81]]),
-            cov_true=np.array([[1.0]]),
-            cov_detector=np.array([[0.25]]),
-        )
+        cfg = {
+            "mu_gen": [0.5],
+            "mu_true": [0.0],
+            "sigma_gen": 0.9,
+            "sigma_true": 1.0,
+            "sigma_detector": 0.5,
+        }
         path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=1000)
@@ -41,14 +47,13 @@ class TestGenerateGaussianDataset:
 
     def test_2d_correlated_shapes(self, tmp_path) -> None:
         """2D with full covariance should produce correct shapes."""
-        cfg = GaussianConfig(
-            dim=2,
-            mu_gen=np.array([0.0, 1.0]),
-            mu_true=np.array([0.2, 0.8]),
-            cov_gen=np.array([[1.0, -0.54], [-0.54, 2.25]]),
-            cov_true=np.array([[0.81, -0.5], [-0.5, 1.69]]),
-            cov_detector=np.array([[0.5, 0.8]]),
-        )
+        cfg = {
+            "mu_gen": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "sigma_gen": [[1.0, -0.54], [-0.54, 2.25]],
+            "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "sigma_detector": [0.5, 0.8],
+        }
         path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=2000)
@@ -58,7 +63,7 @@ class TestGenerateGaussianDataset:
             break
 
     def test_params_dict_interface(self) -> None:
-        """Passing params dict directly should work (for --load_run)."""
+        """Passing promoted params directly should work (for --load_run)."""
         params = GaussianConfig(
             dim=1,
             mu_gen=np.array([0.0]),
@@ -73,18 +78,25 @@ class TestGenerateGaussianDataset:
 
     def test_both_config_and_params_raises(self, tmp_path) -> None:
         """Providing both config_path and params should error."""
-        cfg = GaussianConfig(
+        cfg = {
+            "mu_gen": [0.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+            "sigma_true": 0.9,
+            "sigma_detector": 0.5,
+        }
+        path = _write_config(cfg, tmp_path)
+        params = GaussianConfig(
             dim=1,
             mu_gen=np.array([0.0]),
             mu_true=np.array([0.5]),
             cov_gen=np.array([[1.0]]),
-            cov_true=np.array([[0.9]]),
-            cov_detector=np.array([[0.5]]),
+            cov_true=np.array([[0.81]]),
+            cov_detector=np.array([[0.25]]),
         )
-        path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
-            ds.generate_gaussian_dataset(config_path=path, params=cfg, n_samples=100)
+            ds.generate_gaussian_dataset(config_path=path, params=params, n_samples=100)
 
     def test_neither_config_nor_params_raises(self) -> None:
         """Providing neither config_path nor params should error."""
@@ -94,14 +106,13 @@ class TestGenerateGaussianDataset:
 
     def test_caching(self, tmp_path) -> None:
         """Second call with same config should hit cache."""
-        cfg = GaussianConfig(
-            dim=1,
-            mu_gen=np.array([0.0]),
-            mu_true=np.array([0.5]),
-            cov_gen=np.array([[1.0]]),
-            cov_true=np.array([[0.81]]),
-            cov_detector=np.array([[0.25]]),
-        )
+        cfg = {
+            "mu_gen": [0.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+            "sigma_true": 0.9,
+            "sigma_detector": 0.5,
+        }
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
         ds = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
@@ -113,14 +124,13 @@ class TestGenerateGaussianDataset:
 
     def test_smearing_preserves_event_coupling(self, tmp_path) -> None:
         """Detector-level values should be correlated with particle-level."""
-        cfg = GaussianConfig(
-            dim=2,
-            mu_gen=np.array([0.0, 0.0]),
-            mu_true=np.array([0.0, 0.0]),
-            cov_gen=np.array([[1.0, 1.0], [1.0, 1.0]]),
-            cov_true=np.array([[1.0, 1.0], [1.0, 1.0]]),
-            cov_detector=np.array([[0.1, 0.1], [0.1, 0.1]]),
-        )
+        cfg = {
+            "mu_gen": [0.0, 0.0],
+            "mu_true": [0.0, 0.0],
+            "sigma_gen": [1.0, 1.0],
+            "sigma_true": [1.0, 1.0],
+            "sigma_detector": [0.1, 0.1],
+        }
         path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
@@ -133,15 +143,21 @@ class TestGenerateGaussianDataset:
             break
 
     def test_yaml_and_params_share_cache(self, tmp_path) -> None:
-        """YAML path and equivalent params dict must produce the same cache key."""
-        cfg = GaussianConfig(
-            dim=2,
-            mu_gen=np.array([0.0, 1.0]),
-            mu_true=np.array([0.2, 0.8]),
-            cov_gen=np.array([[1.0, 1.5], [1.5, 2.25]]),
-            cov_true=np.array([[0.81, -0.5], [-0.5, 1.69]]),
-            cov_detector=np.array([[0.25, 0.0], [0.0, 0.64]]),
-        )
+        """A YAML config and the params it promotes to must share a cache key.
+
+        `sigma_gen: [1.0, 1.5]` promotes to diag(1.0, 2.25) and
+        `sigma_detector: [0.5, 0.8]` to diag(0.25, 0.64) -- exactly the
+        covariances the reloaded `GaussianConfig` below carries. Hashing the
+        promoted matrices, not the raw sigma form, is what makes a reloaded run
+        hit the cache its original YAML filled.
+        """
+        cfg = {
+            "mu_gen": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "sigma_gen": [1.0, 1.5],
+            "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "sigma_detector": [0.5, 0.8],
+        }
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
 

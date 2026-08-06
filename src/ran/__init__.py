@@ -12,6 +12,15 @@ in :mod:`ran.models` to ``"float32"``.
 
 ``setdefault`` throughout, so an explicit environment override still wins --
 that is how :mod:`ran.baselines.omnifold` pins itself back to TensorFlow.
+
+Nothing heavy is re-exported here. Importing this package must not import
+``keras``: :mod:`ran.baselines.omnifold` hard-sets the backend to TensorFlow at
+import, and :mod:`ran.train` refuses to load on anything but JAX, so a package
+``__init__`` that pulled in both would make the two mutually unimportable --
+and would leak ``KERAS_BACKEND=tensorflow`` into every subprocess besides.
+Import the submodule you need (``from ran.workflow import run``); the CLI
+re-exports below are the one exception, and they defer their own imports into
+the command bodies.
 """
 
 import os
@@ -22,10 +31,6 @@ os.environ.setdefault("JAX_ENABLE_X64", "1")
 # TensorFlow; harmless everywhere else.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
-from . import baselines as baselines
-from . import data as data
-from . import experiments as experiments
-from . import rantypes as rantypes
 from .cli import app as app
 from .cli import configure as configure
 from .cli import evaluate_command as evaluate_command
@@ -36,18 +41,3 @@ from .cli import sweep_collect_command as sweep_collect_command
 from .cli import sweep_omnifold_command as sweep_omnifold_command
 from .cli import sweep_ran_command as sweep_ran_command
 from .cli import train_command as train_command
-from .evaluate import apply_to_runs as apply_to_runs
-from .evaluate import evaluate_run as evaluate_run
-from .evaluate import evaluate_runs as evaluate_runs
-from .evaluate import render_metrics as render_metrics
-from .leakage import run_leakage_check as run_leakage_check
-from .logging_config import configure_logging as configure_logging
-from .models import build_discriminator as build_discriminator
-from .models import build_generator as build_generator
-from .plotting import plot_detector_level as plot_detector_level
-from .plotting import plot_losses as plot_losses
-from .plotting import plot_particle_level as plot_particle_level
-from .train import normalize_weights as normalize_weights
-from .train import train as train
-from .train import weighted_bce as weighted_bce
-from .workflow import run as run

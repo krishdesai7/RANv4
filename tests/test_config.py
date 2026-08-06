@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 import yaml
 from ran.data import parse_gaussian_config, sigma_to_covariance
-from ran.rantypes import GaussianConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from ran.rantypes import GaussianConfig
 
 
 class TestSigmaToCovariance:
@@ -67,24 +68,30 @@ class TestSigmaToCovariance:
 
 
 class TestParseGaussianConfig:
-    """Test full YAML config parsing."""
+    """Test full YAML config parsing.
 
-    def _write_yaml(self, data: GaussianConfig, tmp_path: Path) -> Path:
+    These configs are written in the *input* format -- `mu_*` plus the
+    `sigma_*` keys in any of the three accepted forms -- which is what a
+    params/*.yaml file holds. `parse_gaussian_config` promotes them to the
+    covariance matrices of a `GaussianConfig`; that is its output, not its
+    input, so it never round-trips through `GaussianConfig.model_dump()`.
+    """
+
+    def _write_yaml(self, data: dict, tmp_path: Path) -> Path:
         p = tmp_path / "config.yaml"
-        p.write_text(yaml.dump(data.model_dump()))
+        p.write_text(yaml.dump(data))
         return p
 
     def test_valid_2d_config(self, tmp_path) -> None:
-        cfg = GaussianConfig(
-            dim=2,
-            mu_gen=np.array([0.0, 1.0]),
-            mu_true=np.array([0.2, 0.8]),
-            cov_gen=np.array([[1.0, 1.5], [1.5, 2.25]]),
-            cov_true=np.array([[0.81, -0.5], [-0.5, 1.69]]),
-            cov_detector=np.array([[0.5, 0.8], [0.8, 1.21]]),
-        )
+        cfg = {
+            "mu_gen": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "sigma_gen": [1.0, 1.5],
+            "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "sigma_detector": [0.5, 0.8],
+        }
         path = self._write_yaml(cfg, tmp_path)
-        params = parse_gaussian_config(path)
+        params: GaussianConfig = parse_gaussian_config(path)
         assert params.dim == 2
         assert params.mu_gen.shape == (2,)
         assert params.cov_gen.shape == (2, 2)
@@ -92,42 +99,37 @@ class TestParseGaussianConfig:
         assert params.cov_detector.shape == (2, 2)
 
     def test_scalar_sigma(self, tmp_path) -> None:
-        cfg = GaussianConfig(
-            dim=1,
-            mu_gen=np.array([0.0]),
-            mu_true=np.array([0.5]),
-            cov_gen=np.array([[1.0]]),
-            cov_true=np.array([[0.81]]),
-            cov_detector=np.array([[0.25]]),
-        )
+        cfg = {
+            "mu_gen": [0.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+            "sigma_true": 0.9,
+            "sigma_detector": 0.5,
+        }
         path = self._write_yaml(cfg, tmp_path)
-        params = parse_gaussian_config(path)
+        params: GaussianConfig = parse_gaussian_config(path)
         assert params.dim == 1
         np.testing.assert_array_almost_equal(params.cov_gen, [[1.0]])
         np.testing.assert_array_almost_equal(params.cov_detector, [[0.25]])
 
     def test_missing_key(self, tmp_path) -> None:
-        cfg = GaussianConfig(
-            dim=1,
-            mu_gen=np.array([0.0]),
-            mu_true=np.array([0.5]),
-            cov_gen=np.array([[1.0]]),
-            cov_true=np.array([[0.81]]),
-            cov_detector=np.array([[0.25]]),
-        )
+        cfg = {
+            "mu_gen": [0.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+        }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="missing"):
             parse_gaussian_config(path)
 
     def test_dim_mismatch(self, tmp_path) -> None:
-        cfg = GaussianConfig(
-            dim=2,
-            mu_gen=np.array([0.0, 1.0]),
-            mu_true=np.array([0.5]),
-            cov_gen=np.array([[1.0]]),
-            cov_true=np.array([[0.81]]),
-            cov_detector=np.array([[0.25]]),
-        )
+        cfg = {
+            "mu_gen": [0.0, 1.0],
+            "mu_true": [0.5],
+            "sigma_gen": 1.0,
+            "sigma_true": 0.9,
+            "sigma_detector": 0.5,
+        }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="dim"):
             parse_gaussian_config(path)

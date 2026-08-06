@@ -27,8 +27,6 @@ import numpy.typing as npt
 from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
-from .. import train
-from ..baselines import omnifold_unfold
 from ..data import RANDataset
 
 logger = logging.getLogger(__name__)
@@ -110,6 +108,8 @@ def run_ran(
             Re-run a point with different values to get an ensemble at fixed s;
             the resolved value is recorded in the output JSON.
     """
+    # Deferred: importing ran.train pins Keras to JAX (see module docstring).
+    from ..train import train
 
     s, z_truth, z_gen, x_data, x_sim = _sweep_point(s_index, n_points, n_samples, seed)
 
@@ -157,6 +157,7 @@ def run_omnifold(
     compare like for like. Must run in its own process: the import below pins
     Keras to the TensorFlow backend.
     """
+    from ..baselines.omnifold import omnifold_unfold
 
     s, z_truth, z_gen, x_data, x_sim = _sweep_point(s_index, n_points, n_samples, seed)
 

@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from . import train
 from .data import RANDataset
 from .evaluate import (
     _collect_test_data,
@@ -22,6 +21,7 @@ from .evaluate import (
     _triangular_per_dim,
     _wd_per_dim,
 )
+from .train import train
 
 if TYPE_CHECKING:
     from logging import Logger

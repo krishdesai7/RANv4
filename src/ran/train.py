@@ -23,7 +23,7 @@ import numpy as np
 from keras import ops
 
 from .models import build_discriminator, build_generator
-from .rantypes import EPS, TrainResult, TrainState
+from .rantypes import TrainResult, TrainState
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -44,6 +44,10 @@ if keras.backend.backend() != "jax":
         "Import `ran` (or any ran.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )
+
+# Floor for logs and divisions. Lives here rather than in `ran.rantypes`, which
+# has to stay importable without committing a Keras backend.
+EPS: float = keras.config.epsilon()
 
 
 def normalize_weights(raw_w, y):

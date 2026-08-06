@@ -25,7 +25,7 @@ pytestmark = [
 ]
 
 
-def test_omnifold_unfold_returns_mean_normalized_weights() -> None:
+def test_omnifold_unfold_returns_mean_normalized_weights(tmp_path) -> None:
     from ran.baselines.omnifold import omnifold_unfold
 
     rng = np.random.default_rng(0)
@@ -34,8 +34,13 @@ def test_omnifold_unfold_returns_mean_normalized_weights() -> None:
     x_sim = z_gen + 0.1 * rng.normal(size=(n, 1)).astype(np.float32)
     x_data = rng.normal(0.0, 1.0, size=(n, 1)).astype(np.float32)
 
-    w = omnifold_unfold(x_data, x_sim, z_gen, niter=1, epochs=2, batch_size=128)
+    w = omnifold_unfold(
+        x_data, x_sim, z_gen, niter=1, epochs=2, batch_size=128, out_dir=tmp_path
+    )
 
     assert w.shape == (n,)
     assert np.all(np.isfinite(w))
     np.testing.assert_allclose(w.mean(), 1.0, rtol=1e-5)
+    # The library's own bookkeeping lands under out_dir, not the cwd.
+    assert (tmp_path / "log_omnifold_baseline.txt").exists()
+    assert (tmp_path / "omnifold_checkpoints").is_dir()

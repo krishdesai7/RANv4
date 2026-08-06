@@ -26,8 +26,12 @@ from rich.table import Table
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
-from .data import ArrayDataset, RANDataset, load_jet_dataset
-from .rantypes import GaussianConfig
+from .data import (
+    ArrayDataset,
+    RANDataset,
+    gaussian_config_from_run_config,
+    load_jet_dataset,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -85,26 +89,19 @@ def _load_splits(config: dict) -> DatasetSplits:
     logger.info("Loading dataset: %s", dataset)
     if dataset == "gaussian":
         if "gaussian_params" in config:
-            gaussian_params = config["gaussian_params"]
-            raw_params = {k: v for k, v in gaussian_params.items() if k != "dim"}
-            params = GaussianConfig(
-                dim,
-                np.array(raw_params["mu_gen"]),
-                np.array(raw_params["mu_true"]),
-                np.array(raw_params["sigma_gen"]),
-                np.array(raw_params["sigma_true"]),
-                np.array(raw_params["sigma_detector"]),
-            )
+            params = gaussian_config_from_run_config(config["gaussian_params"], dim)
         else:
-            # Legacy config format: hardcoded mu/sigma, only smearing varied
-            smearing = config.get("smearing", 0.5)
-            params = GaussianConfig(
+            # Legacy config format: hardcoded mu/sigma, only smearing varied.
+            # Raw sigmas, so they go through the same promotion.
+            params = gaussian_config_from_run_config(
+                {
+                    "mu_gen": [0.5] * dim,
+                    "mu_true": [0.0] * dim,
+                    "sigma_gen": 0.9,
+                    "sigma_true": 1.0,
+                    "sigma_detector": config.get("smearing", 0.5),
+                },
                 dim,
-                [0.5] * dim,
-                [0.0] * dim,
-                np.array([0.9]),
-                np.array([1.0]),
-                smearing,
             )
         return RANDataset(
             batch_size=batch_size, seed=data_seed

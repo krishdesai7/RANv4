@@ -101,25 +101,43 @@ def _artifact_dir(bench_dir: Path) -> Path:
     return Path(recorded) if recorded else copied
 
 
+def _gpu_sample(line: str) -> tuple[str, float, float] | None:
+    """One nvidia-smi CSV row as (gpu index, utilization %, memory MiB)."""
+    parts = [p.strip() for p in line.split(",")]
+    if len(parts) < 6 or not parts[1].isdigit():
+        return None
+    try:
+        return parts[1], float(parts[2].rstrip(" %")), float(parts[4].rstrip(" MiB"))
+    except ValueError:
+        return None
+
+
 def _gpu_peak(bench_dir: Path) -> tuple[float | None, float | None]:
-    """Peak GPU memory (MiB) and mean utilization (%) from the nvidia-smi samples."""
+    """Peak memory (MiB) and mean utilization (%) of the GPU the run actually used.
+
+    Per GPU index, then report the busiest one. A Perlmutter node exposes four
+    A100s and neither implementation distributes across them, so averaging over
+    every sampled row buries the one working GPU under three idle ones -- which
+    reads as 0% utilization for a run that was genuinely busy.
+    """
     path = bench_dir / "gpu.csv"
     if not path.exists():
         return None, None
-    used: list[float] = []
-    util: list[float] = []
+
+    per_gpu: dict[str, list[tuple[float, float]]] = {}
     for line in path.read_text().splitlines()[1:]:
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) < 6:
-            continue
-        try:
-            util.append(float(parts[2].rstrip(" %")))
-            used.append(float(parts[4].rstrip(" MiB")))
-        except ValueError:
-            continue
-    if not used:
+        sample = _gpu_sample(line)
+        if sample is not None:
+            index, util, used = sample
+            per_gpu.setdefault(index, []).append((util, used))
+
+    if not per_gpu:
         return None, None
-    return max(used), sum(util) / len(util)
+    busiest = max(per_gpu.values(), key=lambda rows: max(u for _, u in rows))
+    return (
+        max(u for _, u in busiest),
+        sum(v for v, _ in busiest) / len(busiest),
+    )
 
 
 def _stage_order(b: dict[str, Any], c: dict[str, Any]) -> list[str]:
@@ -190,6 +208,32 @@ def _metric_row(key: str, bv: float | None, cv: float | None) -> str:
     return f"    {key:<22} {bs:>14} {cs:>14} {delta:>9}"
 
 
+def _split_mismatch(b: dict[str, Any], c: dict[str, Any]) -> float | None:
+    """Largest relative disagreement in `wasserstein_before` between two arms.
+
+    `_before` is the distance between the unweighted data and MC test samples:
+    no model touches it, so if the two arms scored the same events it is the
+    same number. A large gap means they did not, and then no `_after` column
+    here is a like-for-like comparison.
+
+    This is not hypothetical. The tf arm partitions with
+    `tf.data.Dataset.shuffle(seed=...)` and the jax arm with
+    `np.random.default_rng(seed).permutation`; the same seed drives different
+    algorithms, so the test splits overlap only as much as two independent
+    draws would. Per-arm `_improvement_pct` stays meaningful -- each is
+    measured against its own split -- but raw `_after` values are not.
+    """
+    worst: float | None = None
+    for key in set(b) & set(c):
+        bv = b[key].get("wasserstein_before")
+        cv = c[key].get("wasserstein_before")
+        if not bv or cv is None:
+            continue
+        rel = abs(cv - bv) / abs(bv)
+        worst = rel if worst is None else max(worst, rel)
+    return worst
+
+
 def _metric_table(base: Path, cand: Path, fname: str, label: str) -> None:
     b = _read_json(_artifact_dir(base) / fname)
     c = _read_json(_artifact_dir(cand) / fname)
@@ -197,14 +241,34 @@ def _metric_table(base: Path, cand: Path, fname: str, label: str) -> None:
         return
 
     _out(f"\n=== {label} ({fname}) ===")
+
+    mismatch = _split_mismatch(b, c)
+    if mismatch is not None and mismatch > 0.02:
+        _out(
+            f"  !! test splits differ: wasserstein_before disagrees by up to "
+            f"{mismatch:.1%}."
+        )
+        _out("     The arms scored different events -- read _improvement_pct,")
+        _out("     which is per-arm, not the raw _after columns below.")
+
     keys = sorted(set(b) | set(c))
+    # `_improvement_pct` before `_after`: it is each arm's own before -> after,
+    # so it survives the arms having scored different events. `_after` follows
+    # for the absolute scale, carrying the caveat above when one applies.
     for family in FAMILIES:
-        rows = _metric_rows(keys, b, c, f"{family}_after")
-        if not rows:
-            continue
-        _out(f"\n  {family}_after")
-        for key, bv, cv in rows:
-            _out(_metric_row(key, bv, cv))
+        for suffix in ("_improvement_pct", "_after"):
+            _emit_metric_block(keys, b, c, f"{family}{suffix}")
+
+
+def _emit_metric_block(
+    keys: list[str], b: dict[str, Any], c: dict[str, Any], field: str
+) -> None:
+    rows = _metric_rows(keys, b, c, field)
+    if not rows:
+        return
+    _out(f"\n  {field}")
+    for key, bv, cv in rows:
+        _out(_metric_row(key, bv, cv))
 
 
 def main() -> int:
@@ -228,7 +292,9 @@ def main() -> int:
     fields = ("arm", "branch", "commit", "config", "n_samples", "seed", "data_seed")
     for field in fields:
         bv, cv = bp.get(field, "--"), cp.get(field, "--")
-        _out(f"{field:<12}{bv[:32]:>32}{cv[:34]:>34}")
+        # Truncate to 30 in a 32-wide field so two long values (full commit
+        # shas, most obviously) always keep whitespace between them.
+        _out(f"{field:<12}{bv[:30]:>32}{cv[:30]:>34}")
     _out("=" * 78)
 
     # A comparison across different data is not a comparison. Say so loudly

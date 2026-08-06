@@ -1,43 +1,45 @@
 #!/bin/bash
-# Full RAN run on Perlmutter for the JAX arm (branch: refactor/jax).
+# Full RAN run on Perlmutter for the pre-migration arm (branch: master, TensorFlow).
 #
-#   Run on the login node:  scripts/submit.sh
+#   Run on the login node:  scripts/submit_previous.sh
 #   (Do NOT sbatch this file itself; it computes the bench dir and submits.)
 #
-# Runs the works, in the order the artifacts require:
-#   1. train      RAN on JAX -> runs/<timestamp>/
-#   2. omnifold   TensorFlow baseline, own process (one Keras backend per interpreter)
-#   3. ibu        numpy baseline
-#   4. replot     re-enter via --load-run so the plots pick up the baseline
-#                 overlays written in 2-3, and metrics.json is recomputed
+# The mirror image of scripts/submit.sh on refactor/jax: same four stages, same
+# instrumentation, same bench.jsonl schema, so the two are directly comparable.
+# Only the CLI differs -- master predates the typer rewrite and drives everything
+# through python-fire, one entry point per module:
 #
-# Every stage is wall-clocked and RSS-measured into ${BENCH_DIR}/bench.jsonl, and
-# the GPU is sampled throughout, so this arm can be diffed against the master
-# (TensorFlow) arm from scripts/submit_previous.sh. Compare with:
+#   jax arm                                 master arm
+#   ------------------------------------    ------------------------------------
+#   uv run -m ran train --n-samples=N       uv run -m ran --n_samples=N
+#   uv run -m ran baseline omnifold ...     uv run -m ran.baselines.omnifold ...
+#   uv run -m ran baseline ibu ...          uv run -m ran.baselines.ibu ...
+#   uv run -m ran train --load-run=D        uv run -m ran --load_run=D
 #
-#   uv run scripts/compare_runs.py bench/jax_<ts> bench/tf_<ts>
+# Two further differences worth knowing when reading the numbers:
+#   - master's main() takes no --seed, so its weight init is unseeded and its
+#     run is not replayable. Data seed is hardcoded to 42, which is what the jax
+#     arm passes explicitly, so both arms do see identical events and batches.
+#   - master's ran/__init__.py is empty: nothing pins KERAS_BACKEND, so the
+#     backend falls out of ~/.keras/keras.json. Its train.py is written against
+#     raw tf ops and @tf.function, so we pin TensorFlow here rather than trust
+#     whatever that file happens to say.
 #
 # Knobs (environment):
 #   SMOKE=1     tiny run on the debug queue -- validates the whole pipeline in
 #               minutes before committing to the real thing. Do this first.
 #   CONFIG=...  Gaussian config (default params/2d_correlated.yaml)
-#   GPUS, TIME, QOS, N_SAMPLES, SEED, DATA_SEED
-# Anything passed on the command line is forwarded to `ran train`.
+#   GPUS, TIME, QOS, N_SAMPLES
+# Anything passed on the command line is forwarded to the training entry point.
 set -euo pipefail
 
 PROJECT_DIR=${PROJECT_DIR:-/global/u1/k/kdesai/RANv4}
 CONFIG=${CONFIG:-params/2d_correlated.yaml}
-ARM=jax
+ARM=tf
 
-# Neither implementation distributes across devices -- no tf.distribute strategy,
-# no jax.pmap -- so one GPU is what a run can actually use. More would idle.
+# Neither implementation distributes across devices, so one GPU is what a run
+# can actually use. More would idle.
 GPUS=${GPUS:-1}
-# Weight init. Master has no --seed (its init is unseeded), so this only makes
-# *this* arm replayable; it does not pair the two arms' initializations.
-SEED=${SEED:-0}
-# Matches the hardcoded default master's RAN_Dataset uses, so both arms see
-# identical events, splits and batch order.
-DATA_SEED=${DATA_SEED:-42}
 
 if [[ ${SMOKE:-0} == 1 ]]; then
   QOS=${QOS:-debug}
@@ -46,7 +48,10 @@ if [[ ${SMOKE:-0} == 1 ]]; then
   TAG=smoke_${ARM}
 else
   QOS=${QOS:-regular}
-  TIME=${TIME:-04:00:00}
+  # Longer than the jax arm's default: this is the slower implementation and the
+  # one whose wall time we do not yet know. Better to over-request than to lose
+  # a run to the wall clock and have nothing to compare.
+  TIME=${TIME:-06:00:00}
   N_SAMPLES=${N_SAMPLES:-500000}
   TAG=${ARM}
 fi
@@ -54,11 +59,9 @@ fi
 BENCH_DIR="${PROJECT_DIR}/bench/${TAG}_$(date -u +%Y-%m-%dT%H%M%SZ)"
 mkdir -p "${BENCH_DIR}"
 
-# Forward extra args through a file rather than --export, which has no way to
-# quote a list safely.
 printf '%s\n' "$@" > "${BENCH_DIR}/train_args"
 
-echo "Arm:        ${ARM} (JAX)"
+echo "Arm:        ${ARM} (TensorFlow, pre-migration)"
 echo "Bench dir:  ${BENCH_DIR}"
 echo "Config:     ${CONFIG}   n_samples=${N_SAMPLES}"
 echo "Resources:  ${GPUS} GPU, qos=${QOS}, time=${TIME}"
@@ -68,11 +71,16 @@ JOB=$(sbatch --parsable \
   --nodes=1 --gpus-per-node="${GPUS}" \
   --job-name="ran_${TAG}" \
   --output="${BENCH_DIR}/slurm-%j.log" \
-  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEED=${SEED},DATA_SEED=${DATA_SEED},ARM=${ARM}" \
+  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},ARM=${ARM}" \
   <<'EOF'
 #!/bin/bash
 set -uo pipefail
 cd "${PROJECT_DIR}"
+
+# master's package __init__ is empty, so the backend would otherwise come from
+# ~/.keras/keras.json -- which the jax arm may well have rewritten.
+export KERAS_BACKEND=tensorflow
+export TF_CPP_MIN_LOG_LEVEL=2
 
 BENCH="${BENCH_DIR}/bench.jsonl"
 : > "${BENCH}"
@@ -87,8 +95,8 @@ BENCH="${BENCH_DIR}/bench.jsonl"
   echo "slurm_job=${SLURM_JOB_ID:-none}"
   echo "config=${CONFIG}"
   echo "n_samples=${N_SAMPLES}"
-  echo "seed=${SEED}"
-  echo "data_seed=${DATA_SEED}"
+  echo "seed=unseeded"
+  echo "data_seed=42"
   echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "${BENCH_DIR}/provenance.txt"
 
@@ -110,8 +118,6 @@ cleanup() { [[ -n "${GPU_PID}" ]] && kill "${GPU_PID}" 2> /dev/null; }
 trap cleanup EXIT
 
 # ------------------------------------------------------------------- staging
-# Wall clock and peak RSS per stage, appended as one JSON object per line.
-# GNU time carries the RSS; without it we still get wall clock from the shell.
 HAVE_GNU_TIME=0
 [[ -x /usr/bin/time ]] && HAVE_GNU_TIME=1
 
@@ -152,15 +158,14 @@ mkdir -p runs
 ls -1d runs/*/ 2> /dev/null | sort > "${before}"
 
 mapfile -t EXTRA < "${BENCH_DIR}/train_args"
-# printf leaves one empty line when no args were passed; drop it.
 [[ ${#EXTRA[@]} -eq 1 && -z "${EXTRA[0]}" ]] && EXTRA=()
 
+# fire takes underscored flags, and there is no `train` subcommand: the module
+# entry point *is* main().
 bench_stage train \
-  uv run -m ran train \
+  uv run -m ran \
   --config="${CONFIG}" \
-  --n-samples="${N_SAMPLES}" \
-  --seed="${SEED}" \
-  --data-seed="${DATA_SEED}" \
+  --n_samples="${N_SAMPLES}" \
   "${EXTRA[@]}"
 TRAIN_RC=$?
 
@@ -176,14 +181,11 @@ RUN_DIR=${RUN_DIR%/}
 echo "run_dir=${RUN_DIR}" >> "${BENCH_DIR}/provenance.txt"
 echo "Run dir: ${RUN_DIR}"
 
-# Baselines are independent of each other; a failure in one must not cost us the
-# other, nor the replot. Hence the trailing `|| true`.
-bench_stage omnifold uv run -m ran baseline omnifold --run-dir="${RUN_DIR}" || true
-bench_stage ibu      uv run -m ran baseline ibu      --run-dir="${RUN_DIR}" || true
+bench_stage omnifold uv run -m ran.baselines.omnifold --run_dir="${RUN_DIR}" || true
+bench_stage ibu      uv run -m ran.baselines.ibu      --run_dir="${RUN_DIR}" || true
 
-# Re-enter with --load-run: reloads the trained generator, picks up the baseline
-# weight files written above, and regenerates the plots with all three overlays.
-bench_stage replot uv run -m ran train --load-run="${RUN_DIR}" || true
+# Re-enter with --load_run so the plots pick up the baseline overlays.
+bench_stage replot uv run -m ran --load_run="${RUN_DIR}" || true
 
 # --------------------------------------------------------------- accounting
 cleanup; GPU_PID=""

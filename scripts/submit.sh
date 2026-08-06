@@ -112,8 +112,10 @@ trap cleanup EXIT
 # ------------------------------------------------------------------- staging
 # Wall clock and peak RSS per stage, appended as one JSON object per line.
 # GNU time carries the RSS; without it we still get wall clock from the shell.
+# Probe for GNU time rather than just testing for the file: BSD time is also at
+# /usr/bin/time and supports neither -v nor -o, so mere existence proves nothing.
 HAVE_GNU_TIME=0
-[[ -x /usr/bin/time ]] && HAVE_GNU_TIME=1
+/usr/bin/time -v -o /dev/null true > /dev/null 2>&1 && HAVE_GNU_TIME=1
 
 bench_stage() {
   local name="$1"; shift
@@ -151,9 +153,14 @@ before=$(mktemp); after=$(mktemp)
 mkdir -p runs
 ls -1d runs/*/ 2> /dev/null | sort > "${before}"
 
-mapfile -t EXTRA < "${BENCH_DIR}/train_args"
-# printf leaves one empty line when no args were passed; drop it.
-[[ ${#EXTRA[@]} -eq 1 && -z "${EXTRA[0]}" ]] && EXTRA=()
+# Read one arg per line. A `while read` loop rather than `mapfile` so this
+# stays runnable under bash 3.2 for local testing; printf wrote a single empty
+# line when there were no args, and the -n test drops it. The ${EXTRA[@]+...}
+# guard below keeps an empty array from tripping `set -u` on bash before 4.4.
+EXTRA=()
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && EXTRA+=("${line}")
+done < "${BENCH_DIR}/train_args"
 
 bench_stage train \
   uv run -m ran train \
@@ -161,7 +168,7 @@ bench_stage train \
   --n-samples="${N_SAMPLES}" \
   --seed="${SEED}" \
   --data-seed="${DATA_SEED}" \
-  "${EXTRA[@]}"
+  ${EXTRA[@]+"${EXTRA[@]}"}
 TRAIN_RC=$?
 
 ls -1d runs/*/ 2> /dev/null | sort > "${after}"

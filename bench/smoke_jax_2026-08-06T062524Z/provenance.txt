@@ -1,0 +1,12 @@
+arm=jax
+branch=refactor/jax
+commit=adaaf96ea1f2c542913d29a97d82d9932589d188
+dirty=2
+host=nid001237
+slurm_job=56389913
+config=params/2d_correlated.yaml
+n_samples=20000
+seed=0
+data_seed=42
+date_utc=2026-08-06T06:25:25Z
+run_dir=runs/2026-08-06T062546Z

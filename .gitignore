@@ -19,7 +19,7 @@ weights/
 # Benchmark harness output (scripts/submit*.sh): per-stage logs, GPU samples and
 # a full copy of the run directory. Derived data, and the copies are large --
 # runs/ already tracks the canonical artifacts.
-bench/
+#bench/
 # OmniFold's per-iteration checkpoints, written next to the run that produced
 # them. Nothing reads them back (MultiFold only reloads when resuming from
 # start > 0, which we never do), and runs/ is tracked -- so this keeps ~1.4MB

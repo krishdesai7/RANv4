@@ -18,8 +18,14 @@
 #   uv run scripts/compare_runs.py bench/jax_<ts> bench/tf_<ts>
 #
 # Knobs (environment):
-#   SMOKE=1     tiny run on the debug queue -- validates the whole pipeline in
-#               minutes before committing to the real thing. Do this first.
+#   SMOKE=1     tiny run -- validates the whole pipeline in minutes before
+#               committing to the real thing. Do this first.
+#   LOCAL=1     run here instead of submitting, for use inside an existing
+#               salloc. The way to smoke-test when a queue is refusing jobs:
+#                 salloc -A m3246_g -C gpu -q interactive -t 00:30:00 -N 1 --gpus 1
+#                 SMOKE=1 LOCAL=1 scripts/submit.sh
+#               Refuses to run outside an allocation (that would mean a login
+#               node, with no GPU).
 #   CONFIG=...  Gaussian config (default params/2d_correlated.yaml)
 #   GPUS, TIME, QOS, N_SAMPLES, SEED, DATA_SEED
 # Anything passed on the command line is forwarded to `ran train`.
@@ -63,13 +69,7 @@ echo "Bench dir:  ${BENCH_DIR}"
 echo "Config:     ${CONFIG}   n_samples=${N_SAMPLES}"
 echo "Resources:  ${GPUS} GPU, qos=${QOS}, time=${TIME}"
 
-JOB=$(sbatch --parsable \
-  --qos="${QOS}" --constraint=gpu --account=m3246_g --time="${TIME}" \
-  --nodes=1 --gpus-per-node="${GPUS}" \
-  --job-name="ran_${TAG}" \
-  --output="${BENCH_DIR}/slurm-%j.log" \
-  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEED=${SEED},DATA_SEED=${DATA_SEED},ARM=${ARM}" \
-  <<'EOF'
+cat > "${BENCH_DIR}/job.sh" <<'EOF'
 #!/bin/bash
 set -uo pipefail
 cd "${PROJECT_DIR}"
@@ -207,7 +207,41 @@ cat "${BENCH}"
 echo "Run dir:   ${RUN_DIR}"
 echo "Bench dir: ${BENCH_DIR}"
 EOF
-)
+chmod +x "${BENCH_DIR}/job.sh"
+
+# The job body reads these from the environment either way: sbatch forwards them
+# with --export, an in-allocation run inherits them from here.
+export PROJECT_DIR BENCH_DIR CONFIG N_SAMPLES ARM
+export SEED DATA_SEED
+
+if [[ ${LOCAL:-0} == 1 ]]; then
+  # Run right here instead of submitting -- for use inside an salloc, which is
+  # the way to smoke-test when a queue is refusing jobs. Also the only way to
+  # watch the harness itself work.
+  if [[ -z ${SLURM_JOB_ID:-} ]]; then
+    echo "LOCAL=1 outside a Slurm allocation: this would run on a login node," >&2
+    echo "with no GPU. Get one first, e.g." >&2
+    echo "  salloc -A m3246_g -C gpu -q interactive -t 00:30:00 -N 1 --gpus 1" >&2
+    echo "Set FORCE_LOGIN_NODE=1 to override (you almost certainly do not want to)." >&2
+    [[ ${FORCE_LOGIN_NODE:-0} == 1 ]] || exit 2
+  fi
+  echo "Running in allocation ${SLURM_JOB_ID:-<none>} (no sbatch)"
+  echo
+  bash "${BENCH_DIR}/job.sh" 2>&1 | tee "${BENCH_DIR}/run.log"
+  rc=${PIPESTATUS[0]}
+  echo
+  echo "Finished rc=${rc}"
+  echo "Timings:   ${BENCH_DIR}/bench.jsonl"
+  exit "${rc}"
+fi
+
+JOB=$(sbatch --parsable \
+  --qos="${QOS}" --constraint=gpu --account=m3246_g --time="${TIME}" \
+  --nodes=1 --gpus-per-node="${GPUS}" \
+  --job-name="ran_${TAG}" \
+  --output="${BENCH_DIR}/slurm-%j.log" \
+  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEED=${SEED},DATA_SEED=${DATA_SEED},ARM=${ARM}" \
+  "${BENCH_DIR}/job.sh")
 
 echo
 echo "Submitted: ${JOB}"

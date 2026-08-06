@@ -1,0 +1,23 @@
+	Command being timed: "uv run -m ran --config=params/2d_correlated.yaml --n_samples=20000"
+	User time (seconds): 44.57
+	System time (seconds): 8.13
+	Percent of CPU this job got: 133%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:39.37
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 3069628
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 81
+	Minor (reclaiming a frame) page faults: 739864
+	Voluntary context switches: 377544
+	Involuntary context switches: 24851
+	Swaps: 0
+	File system inputs: 8256
+	File system outputs: 25448
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

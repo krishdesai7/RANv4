@@ -118,8 +118,10 @@ cleanup() { [[ -n "${GPU_PID}" ]] && kill "${GPU_PID}" 2> /dev/null; }
 trap cleanup EXIT
 
 # ------------------------------------------------------------------- staging
+# Probe for GNU time rather than just testing for the file: BSD time is also at
+# /usr/bin/time and supports neither -v nor -o, so mere existence proves nothing.
 HAVE_GNU_TIME=0
-[[ -x /usr/bin/time ]] && HAVE_GNU_TIME=1
+/usr/bin/time -v -o /dev/null true > /dev/null 2>&1 && HAVE_GNU_TIME=1
 
 bench_stage() {
   local name="$1"; shift
@@ -157,8 +159,14 @@ before=$(mktemp); after=$(mktemp)
 mkdir -p runs
 ls -1d runs/*/ 2> /dev/null | sort > "${before}"
 
-mapfile -t EXTRA < "${BENCH_DIR}/train_args"
-[[ ${#EXTRA[@]} -eq 1 && -z "${EXTRA[0]}" ]] && EXTRA=()
+# Read one arg per line. A `while read` loop rather than `mapfile` so this
+# stays runnable under bash 3.2 for local testing; printf wrote a single empty
+# line when there were no args, and the -n test drops it. The ${EXTRA[@]+...}
+# guard below keeps an empty array from tripping `set -u` on bash before 4.4.
+EXTRA=()
+while IFS= read -r line; do
+  [[ -n "${line}" ]] && EXTRA+=("${line}")
+done < "${BENCH_DIR}/train_args"
 
 # fire takes underscored flags, and there is no `train` subcommand: the module
 # entry point *is* main().
@@ -166,7 +174,7 @@ bench_stage train \
   uv run -m ran \
   --config="${CONFIG}" \
   --n_samples="${N_SAMPLES}" \
-  "${EXTRA[@]}"
+  ${EXTRA[@]+"${EXTRA[@]}"}
 TRAIN_RC=$?
 
 ls -1d runs/*/ 2> /dev/null | sort > "${after}"

@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING
 import keras
 import numpy as np
 
-from . import plot_detector_level, plot_losses, plot_particle_level, train
 from .baselines import parse_run_config
 from .data import RANDataset, load_jet_dataset, parse_gaussian_config
 from .evaluate import evaluate_run
+from .plotting import plot_detector_level, plot_losses, plot_particle_level
 from .rantypes import JET_OBS, GaussianConfig, VarInfo
+from .train import train
 
 if TYPE_CHECKING:
     from logging import Logger

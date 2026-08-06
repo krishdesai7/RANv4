@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..evaluate import apply_to_runs, render_metrics
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, EPS, IBUResult, VariableOutcome
+from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, VariableOutcome
+from ..train import EPS
 from ._shared import (
     evaluate_dimension,
     load_populations,

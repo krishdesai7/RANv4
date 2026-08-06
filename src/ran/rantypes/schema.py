@@ -5,12 +5,12 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
-import keras
 import numpy as np
 
 if TYPE_CHECKING:
     from typing import Any, Final, Literal
 
+    import keras
     from numpy.typing import NDArray
 
     from ..data import ArrayDataset
@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 # --------------------------------
 # Training
 # ---------------------------------
-
-EPS: Final[float] = keras.config.epsilon()
+# `EPS` lives in `ran.train`, not here: reading it needs `keras.config`, and
+# `ran.cli` imports this module for its enums while it is still backend-free.
 
 
 class TrainResult(NamedTuple):

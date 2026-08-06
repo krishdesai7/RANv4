@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import yaml
-from ran.data import parse_gaussian_config, sigma_to_covariance
+from ran.data import (
+    gaussian_config_from_run_config,
+    parse_gaussian_config,
+    sigma_to_covariance,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -133,3 +137,95 @@ class TestParseGaussianConfig:
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="dim"):
             parse_gaussian_config(path)
+
+
+class TestGaussianConfigFromRunConfig:
+    """Reading the `gaussian_params` block back out of a run's config.json.
+
+    Three formats exist in runs/ and two share their key names, so this is the
+    one place that has to get the disambiguation right. A `--load-run` replot
+    and `ran evaluate` both go through here; when they read it independently
+    they drifted, and metrics on every Gaussian run died with KeyError.
+    """
+
+    def test_current_format_uses_covariances_as_written(self) -> None:
+        params = gaussian_config_from_run_config(
+            {
+                "dim": 2,
+                "mu_gen": [0.0, 1.0],
+                "mu_true": [0.2, 0.8],
+                "cov_gen": [[1.0, 0.5], [0.5, 2.25]],
+                "cov_true": [[0.81, -0.5], [-0.5, 1.69]],
+                "cov_detector": [[0.25, 0.0], [0.0, 0.64]],
+            },
+            dim=2,
+        )
+        assert params.dim == 2
+        np.testing.assert_array_almost_equal(params.cov_gen, [[1.0, 0.5], [0.5, 2.25]])
+        np.testing.assert_array_almost_equal(
+            params.cov_detector, [[0.25, 0.0], [0.0, 0.64]]
+        )
+
+    def test_master_era_sigma_keys_holding_a_covariance_pass_through(self) -> None:
+        """master's __main__ stored cov_* under the name sigma_*.
+
+        A full matrix must survive unchanged -- squaring it again would quietly
+        change the dataset every reloaded run regenerates.
+        """
+        params = gaussian_config_from_run_config(
+            {
+                "mu_gen": [0.0, 1.0],
+                "mu_true": [0.2, 0.8],
+                "sigma_gen": [[1.0, 0.5], [0.5, 2.25]],
+                "sigma_true": [[0.81, -0.5], [-0.5, 1.69]],
+                "sigma_detector": [[0.25, 0.0], [0.0, 0.64]],
+            },
+            dim=2,
+        )
+        np.testing.assert_array_almost_equal(params.cov_gen, [[1.0, 0.5], [0.5, 2.25]])
+
+    def test_ancient_scalar_sigma_is_promoted(self) -> None:
+        """The oldest runs stored a raw sigma, which still needs squaring."""
+        params = gaussian_config_from_run_config(
+            {
+                "mu_gen": [0.5] * 4,
+                "mu_true": [0.0] * 4,
+                "sigma_gen": 0.9,
+                "sigma_true": 1.0,
+                "sigma_detector": 0.5,
+            },
+            dim=4,
+        )
+        np.testing.assert_array_almost_equal(params.cov_gen, 0.81 * np.eye(4))
+        np.testing.assert_array_almost_equal(params.cov_detector, 0.25 * np.eye(4))
+
+    def test_round_trips_through_model_dump(self) -> None:
+        """What `_save_run` writes must be what this reads back."""
+        source = {
+            "dim": 2,
+            "mu_gen": [0.0, 1.0],
+            "mu_true": [0.2, 0.8],
+            "cov_gen": [[1.0, 0.5], [0.5, 2.25]],
+            "cov_true": [[0.81, -0.5], [-0.5, 1.69]],
+            "cov_detector": [[0.25, 0.0], [0.0, 0.64]],
+        }
+        first = gaussian_config_from_run_config(source, dim=2)
+        second = gaussian_config_from_run_config(first.model_dump(), dim=2)
+        for a, b in zip(first, second, strict=True):
+            np.testing.assert_array_almost_equal(np.asarray(a), np.asarray(b))
+
+    def test_missing_covariance_key_is_named(self) -> None:
+        with pytest.raises(ValueError, match="cov_detector"):
+            gaussian_config_from_run_config(
+                {
+                    "mu_gen": [0.0],
+                    "mu_true": [0.5],
+                    "sigma_gen": 1.0,
+                    "sigma_true": 0.9,
+                },
+                dim=1,
+            )
+
+    def test_missing_mu_is_reported_as_missing(self) -> None:
+        with pytest.raises(ValueError, match="missing"):
+            gaussian_config_from_run_config({"sigma_gen": 1.0}, dim=1)

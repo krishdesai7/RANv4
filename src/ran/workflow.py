@@ -10,7 +10,12 @@ import keras
 import numpy as np
 
 from .baselines import parse_run_config
-from .data import RANDataset, load_jet_dataset, parse_gaussian_config
+from .data import (
+    RANDataset,
+    gaussian_config_from_run_config,
+    load_jet_dataset,
+    parse_gaussian_config,
+)
 from .evaluate import evaluate_run
 from .plotting import plot_detector_level, plot_losses, plot_particle_level
 from .rantypes import JET_OBS, GaussianConfig, VarInfo
@@ -28,16 +33,14 @@ logger: Logger = logging.getLogger(__name__)
 
 
 def _gaussian_config_from_source(source: dict[str, Any], dim: int) -> GaussianConfig:
-    """Rebuild a GaussianConfig from a reloaded run's config.json."""
-    gp: dict[str, Any] = source["gaussian_params"]
-    return GaussianConfig(
-        dim,
-        np.array(gp["mu_gen"], dtype=np.double),
-        np.array(gp["mu_true"], dtype=np.double),
-        np.array(gp["cov_gen"], dtype=np.double),
-        np.array(gp["cov_true"], dtype=np.double),
-        np.array(gp["cov_detector"], dtype=np.double),
-    )
+    """Rebuild a GaussianConfig from a reloaded run's config.json.
+
+    Shares `gaussian_config_from_run_config` with `ran.evaluate`, so --load-run
+    and the metrics agree on how to read a run of any vintage. Reading the two
+    independently is what let this drift: this side had been updated to the
+    `cov_*` keys while evaluate still expected `sigma_*`.
+    """
+    return gaussian_config_from_run_config(source["gaussian_params"], dim)
 
 
 def _prepare_gaussian(
@@ -216,7 +219,11 @@ def run(
     saved_gaussian_config: GaussianConfig | None = None
     if load_run is not None:
         run_dir = Path(load_run)
-        saved_config = parse_run_config((run_dir / "config.json").read_text())
+        # parse_run_config validates an already-decoded JSON object, not text --
+        # the two baselines that call it both json.loads first.
+        saved_config = parse_run_config(
+            json.loads((run_dir / "config.json").read_text())
+        )
         dataset = saved_config.dataset
         n_samples = saved_config.n_samples
         batch_size = saved_config.batch_size

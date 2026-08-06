@@ -122,46 +122,72 @@ def _gpu_peak(bench_dir: Path) -> tuple[float | None, float | None]:
     return max(used), sum(util) / len(util)
 
 
+def _stage_order(b: dict[str, Any], c: dict[str, Any]) -> list[str]:
+    """Known stages in pipeline order, then anything unexpected, alphabetically."""
+    return [s for s in STAGES if s in b or s in c] + sorted(
+        (set(b) | set(c)) - set(STAGES)
+    )
+
+
+def _stage_row(stage: str, b: dict[str, Any], c: dict[str, Any]) -> str:
+    bw, cw = b.get("wall_s"), c.get("wall_s")
+    lhs = f"{_fmt_hms(bw)} / {_fmt_gb(b.get('max_rss_kb'))}"
+    rhs = f"{_fmt_hms(cw)} / {_fmt_gb(c.get('max_rss_kb'))}"
+    return f"{stage:<10} {lhs:>22} {rhs:>22} {_ratio(bw, cw):>9}"
+
+
+def _gpu_rows(base: Path, cand: Path) -> None:
+    bg, bu = _gpu_peak(base)
+    cg, cu = _gpu_peak(cand)
+    if not (bg or cg):
+        return
+    peak = (f"{bg:.0f} MiB" if bg else "--", f"{cg:.0f} MiB" if cg else "--")
+    mean = (
+        f"{bu:.0f}%" if bu is not None else "--",
+        f"{cu:.0f}%" if cu is not None else "--",
+    )
+    _out(f"\n{'GPU peak':<10} {peak[0]:>22} {peak[1]:>22}")
+    _out(f"{'GPU mean':<10} {mean[0]:>22} {mean[1]:>22}")
+
+
 def _stage_table(base: Path, cand: Path, base_name: str, cand_name: str) -> None:
     b = {r["stage"]: r for r in _read_jsonl(base / "bench.jsonl")}
     c = {r["stage"]: r for r in _read_jsonl(cand / "bench.jsonl")}
 
     _out(f"\n{'STAGE':<10} {base_name:>22} {cand_name:>22} {'SPEEDUP':>9}")
     _out("-" * 66)
-
-    # Known stages first, in pipeline order, then anything unexpected.
-    seen = [s for s in STAGES if s in b or s in c]
-    seen += sorted((set(b) | set(c)) - set(STAGES))
-    for stage in seen:
-        bw = b.get(stage, {}).get("wall_s")
-        cw = c.get(stage, {}).get("wall_s")
-        br = b.get(stage, {}).get("max_rss_kb")
-        cr = c.get(stage, {}).get("max_rss_kb")
-        _out(
-            f"{stage:<10} "
-            f"{_fmt_hms(bw) + ' / ' + _fmt_gb(br):>22} "
-            f"{_fmt_hms(cw) + ' / ' + _fmt_gb(cr):>22} "
-            f"{_ratio(bw, cw):>9}"
-        )
+    for stage in _stage_order(b, c):
+        _out(_stage_row(stage, b.get(stage, {}), c.get(stage, {})))
 
     bt = sum(r.get("wall_s", 0) for r in b.values())
     ct = sum(r.get("wall_s", 0) for r in c.values())
     _out("-" * 66)
     _out(f"{'TOTAL':<10} {_fmt_hms(bt):>22} {_fmt_hms(ct):>22} {_ratio(bt, ct):>9}")
 
-    failed = [s for s, r in {**b, **c}.items() if r.get("exit", 0) != 0]
+    failed = {s for s, r in {**b, **c}.items() if r.get("exit", 0) != 0}
     if failed:
-        _out(f"\n  !! non-zero exit in: {', '.join(sorted(set(failed)))}")
+        _out(f"\n  !! non-zero exit in: {', '.join(sorted(failed))}")
 
-    bg, bu = _gpu_peak(base)
-    cg, cu = _gpu_peak(cand)
-    if bg or cg:
-        gb = f"{bg:.0f} MiB" if bg else "--"
-        gc = f"{cg:.0f} MiB" if cg else "--"
-        ub = f"{bu:.0f}%" if bu is not None else "--"
-        uc = f"{cu:.0f}%" if cu is not None else "--"
-        _out(f"\n{'GPU peak':<10} {gb:>22} {gc:>22}")
-        _out(f"{'GPU mean':<10} {ub:>22} {uc:>22}")
+    _gpu_rows(base, cand)
+
+
+def _metric_rows(
+    keys: list[str], b: dict[str, Any], c: dict[str, Any], field: str
+) -> list[tuple[str, float | None, float | None]]:
+    return [
+        (k, b.get(k, {}).get(field), c.get(k, {}).get(field))
+        for k in keys
+        if field in b.get(k, {}) or field in c.get(k, {})
+    ]
+
+
+def _metric_row(key: str, bv: float | None, cv: float | None) -> str:
+    delta = "--"
+    if bv not in (None, 0) and cv is not None:
+        delta = f"{(cv - bv) / abs(bv) * 100:+.1f}%"
+    bs = f"{bv:.6g}" if bv is not None else "--"
+    cs = f"{cv:.6g}" if cv is not None else "--"
+    return f"    {key:<22} {bs:>14} {cs:>14} {delta:>9}"
 
 
 def _metric_table(base: Path, cand: Path, fname: str, label: str) -> None:
@@ -173,22 +199,12 @@ def _metric_table(base: Path, cand: Path, fname: str, label: str) -> None:
     _out(f"\n=== {label} ({fname}) ===")
     keys = sorted(set(b) | set(c))
     for family in FAMILIES:
-        field = f"{family}_after"
-        rows = [
-            (k, b.get(k, {}).get(field), c.get(k, {}).get(field))
-            for k in keys
-            if field in b.get(k, {}) or field in c.get(k, {})
-        ]
+        rows = _metric_rows(keys, b, c, f"{family}_after")
         if not rows:
             continue
         _out(f"\n  {family}_after")
         for key, bv, cv in rows:
-            delta = "--"
-            if bv not in (None, 0) and cv is not None:
-                delta = f"{(cv - bv) / abs(bv) * 100:+.1f}%"
-            bs = f"{bv:.6g}" if bv is not None else "--"
-            cs = f"{cv:.6g}" if cv is not None else "--"
-            _out(f"    {key:<22} {bs:>14} {cs:>14} {delta:>9}")
+            _out(_metric_row(key, bv, cv))
 
 
 def main() -> int:

@@ -1,3 +1,4 @@
+from .config import gaussian_config_from_run_config as gaussian_config_from_run_config
 from .config import parse_gaussian_config as parse_gaussian_config
 from .config import sigma_to_covariance as sigma_to_covariance
 from .datasets import ArrayDataset as ArrayDataset

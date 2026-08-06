@@ -1,0 +1,5 @@
+JobID                     JobName    Elapsed   TotalCPU     MaxRSS  MaxVMSize                                  ReqTRES      State 
+------------ -------------------- ---------- ---------- ---------- ---------- ---------------------------------------- ---------- 
+56389913              interactive   00:33:04   00:00:00                       billing=1,cpu=1,gres/gpu=4,mem=229902M,+    RUNNING 
+56389913.in+          interactive   00:33:04   00:00:00                                                                   RUNNING 
+56389913.ex+               extern   00:33:04   00:00:00                                                                   RUNNING 

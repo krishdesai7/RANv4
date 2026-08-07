@@ -1,0 +1,32 @@
+[08/07/26 01:33:32] INFO     2026-08-07T083220Z: running IBU (niter=10,         
+                             purity=0.7071)...                                  
+                    INFO     Loading dataset: gaussian                          
+                    INFO     Loading dataset from cache:                        
+                             .cache/gaussian_60c6b26decc9176e.npz               
+                    INFO     dim_0: 5 bins, 10 iterations                       
+[08/07/26 01:33:33] INFO     dim_1: 4 bins, 10 iterations                       
+                    INFO     2026-08-07T083220Z: saved IBU metrics to           
+                             runs/2026-08-07T083220Z/metrics_ibu.json and       
+                             weights to runs/2026-08-07T083220Z/ibu_weights.npz 
+           2026-08-07T083220Z [IBU] — Detector level           
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1718 │   0.0338 │      +80.3% │
+│          │ JS div       │ 0.011354 │ 0.006705 │      +40.9% │
+│          │ Delta (x1e3) │  42.5404 │  25.5760 │      +39.9% │
+│ dim_1    │ Wasserstein  │   0.1692 │   0.0830 │      +51.0% │
+│          │ JS div       │ 0.008890 │ 0.005492 │      +38.2% │
+│          │ Delta (x1e3) │  32.5522 │  20.3207 │      +37.6% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+           2026-08-07T083220Z [IBU] — Particle level           
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1777 │   0.0377 │      +78.8% │
+│          │ JS div       │ 0.011796 │ 0.006994 │      +40.7% │
+│          │ Delta (x1e3) │  44.2606 │  26.7989 │      +39.5% │
+│ dim_1    │ Wasserstein  │   0.1941 │   0.0557 │      +71.3% │
+│          │ JS div       │ 0.011284 │ 0.007200 │      +36.2% │
+│          │ Delta (x1e3) │  41.2694 │  26.8157 │      +35.0% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘

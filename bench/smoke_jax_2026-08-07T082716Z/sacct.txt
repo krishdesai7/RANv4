@@ -1,0 +1,5 @@
+JobID                     JobName    Elapsed   TotalCPU     MaxRSS  MaxVMSize                                  ReqTRES      State 
+------------ -------------------- ---------- ---------- ---------- ---------- ---------------------------------------- ---------- 
+56442352            ran_smoke_jax   00:02:48   00:00:00                       billing=32,cpu=32,gres/gpu=1,mem=57472M+    RUNNING 
+56442352.ba+                batch   00:02:48   00:00:00                                                                   RUNNING 
+56442352.ex+               extern   00:02:48   00:00:00                                                                   RUNNING 

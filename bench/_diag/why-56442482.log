@@ -1,5 +1,0 @@
-login_shell=no
-interactive($-)=hB
-BASH_ENV=/opt/cray/pe/lmod/lmod/init/bash
-juliaup_in_PATH=YES-bashrc-was-sourced
-SHELL=/bin/bash

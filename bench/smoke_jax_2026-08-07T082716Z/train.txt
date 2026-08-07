@@ -1,0 +1,51 @@
+[08/07/26 01:31:58] INFO     Loading dataset from cache:                        
+                             .cache/gaussian_60c6b26decc9176e.npz               
+[08/07/26 01:32:14] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/07/26 01:32:19] INFO     Epoch   1/100  D: 0.7005  G: 0.6996  | Val D:      
+                             0.6926  G: 0.6926  (patience 0/5)                  
+                    INFO     Epoch   2/100  D: 0.6916  G: 0.6915  | Val D:      
+                             0.6888  G: 0.6888  (patience 1/5)                  
+                    INFO     Epoch   3/100  D: 0.6895  G: 0.6887  | Val D:      
+                             0.6885  G: 0.6885  (patience 2/5)                  
+                    INFO     Epoch   4/100  D: 0.6895  G: 0.6900  | Val D:      
+                             0.6885  G: 0.6885  (patience 3/5)                  
+                    INFO     Epoch   5/100  D: 0.6898  G: 0.6904  | Val D:      
+                             0.6884  G: 0.6884  (patience 4/5)                  
+                    INFO     Epoch   6/100  D: 0.6898  G: 0.6894  | Val D:      
+                             0.6884  G: 0.6884  (patience 5/5)                  
+                    INFO     Early stopping at epoch 6                          
+[08/07/26 01:32:20] INFO     Test  D: 0.6933  G: 0.6933  (init seed 0)          
+                    INFO     Saved run to runs/2026-08-07T083220Z               
+[08/07/26 01:32:22] INFO     Saved runs/2026-08-07T083220Z/detector_level.pdf   
+[08/07/26 01:32:23] INFO     Saved runs/2026-08-07T083220Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-07T083220Z/losses.pdf           
+                    INFO     2026-08-07T083220Z: loading model and data...      
+                    INFO     Loading dataset: gaussian                          
+                    INFO     Loading dataset from cache:                        
+                             .cache/gaussian_60c6b26decc9176e.npz               
+                    INFO     2026-08-07T083220Z: saved metrics to               
+                             runs/2026-08-07T083220Z/metrics.json               
+              2026-08-07T083220Z — Detector level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1718 │   0.1321 │      +23.1% │
+│          │ JS div       │ 0.011354 │ 0.011884 │       -4.7% │
+│          │ Delta (x1e3) │  42.5404 │  44.1010 │       -3.7% │
+│ dim_1    │ Wasserstein  │   0.1692 │   0.2285 │      -35.1% │
+│          │ JS div       │ 0.008890 │ 0.012608 │      -41.8% │
+│          │ Delta (x1e3) │  32.5522 │  46.0909 │      -41.6% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+              2026-08-07T083220Z — Particle level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1777 │   0.1463 │      +17.7% │
+│          │ JS div       │ 0.011796 │ 0.012618 │       -7.0% │
+│          │ Delta (x1e3) │  44.2606 │  46.7468 │       -5.6% │
+│ dim_1    │ Wasserstein  │   0.1941 │   0.2618 │      -34.9% │
+│          │ JS div       │ 0.011284 │ 0.016928 │      -50.0% │
+│          │ Delta (x1e3) │  41.2694 │  61.7878 │      -49.7% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘

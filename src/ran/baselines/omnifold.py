@@ -104,7 +104,7 @@ def omnifold_unfold(
     w: NDArray[np.single] = (
         unfold.reweight(z_target, unfold.model2).astype(np.single).ravel()
     )
-    return w / w.mean()
+    return np.divide(w, w.mean(), dtype=np.single)
 
 
 def _run_and_evaluate(

@@ -408,7 +408,7 @@ def evaluate_single(
         # be "allow_pickle", which is declared bool. The complaint is therefore
         # sound rather than a stub bug (ty reports it too); it just cannot happen
         # here. A literal-key dict checks clean, but ours cannot be one.
-        **{f"weights_{i}": weights for i, weights in enumerate(result.weights)},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
+        **{f"weights_{i}": weights for i, weights in enumerate(result.weights)},  # pyrefly: ignore[bad-argument-type]
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",

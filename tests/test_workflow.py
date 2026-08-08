@@ -142,7 +142,7 @@ def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch) -> None
     seen: dict[str, object] = {}
     real = workflow.RANDataset
 
-    class Recording(real):  # ty:ignore[invalid-base]
+    class Recording(real):
         def __init__(self, *args, **kwargs) -> None:
             seen["seed"] = kwargs.get("seed")
             super().__init__(*args, **kwargs)

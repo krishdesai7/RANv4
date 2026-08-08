@@ -19,7 +19,10 @@ from .schema import TrainState as TrainState
 from .schema import UnfoldingPopulations as UnfoldingPopulations
 from .schema import VariableOutcome as VariableOutcome
 from .types import Batch as Batch
+from .types import KerasVariable as KerasVariable
 from .types import MetricRecord as MetricRecord
 from .types import Nested as Nested
+from .types import RANModel as RANModel
+from .types import StatelessOptimizer as StatelessOptimizer
 from .types import Variables as Variables
 from .types import VarInfo as VarInfo

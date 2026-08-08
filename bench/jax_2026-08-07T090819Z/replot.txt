@@ -1,0 +1,15 @@
+[08/07/26 04:47:01] INFO     Loading dataset from cache:                        
+                             .cache/gaussian_c5d0b9f766085880.npz               
+[08/07/26 04:47:02] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/07/26 04:47:03] INFO     Loaded run from runs/2026-08-07T113957Z            
+                    INFO     Loaded OmniFold weights from                       
+                             runs/2026-08-07T113957Z/omnifold_weights.npz       
+                    INFO     Loaded IBU weights from                            
+                             runs/2026-08-07T113957Z/ibu_weights.npz            
+[08/07/26 04:47:05] INFO     Saved runs/2026-08-07T113957Z/detector_level.pdf   
+[08/07/26 04:47:06] INFO     Saved runs/2026-08-07T113957Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-07T113957Z/losses.pdf           
+                    INFO     2026-08-07T113957Z: metrics.json exists, skipping  
+                             (use --force)                                      

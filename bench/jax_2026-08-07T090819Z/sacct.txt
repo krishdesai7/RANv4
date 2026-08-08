@@ -1,0 +1,5 @@
+JobID                     JobName    Elapsed   TotalCPU     MaxRSS  MaxVMSize                                  ReqTRES      State 
+------------ -------------------- ---------- ---------- ---------- ---------- ---------------------------------------- ---------- 
+56443300                  ran_jax   00:08:22   00:00:00                       billing=32,cpu=32,gres/gpu=1,mem=57472M+    RUNNING 
+56443300.ba+                batch   00:08:22   00:00:00                                                                   RUNNING 
+56443300.ex+               extern   00:08:22   00:00:00                                                                   RUNNING 

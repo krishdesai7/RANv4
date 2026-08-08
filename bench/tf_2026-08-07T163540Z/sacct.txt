@@ -1,0 +1,5 @@
+JobID                     JobName    Elapsed   TotalCPU     MaxRSS  MaxVMSize                                  ReqTRES      State 
+------------ -------------------- ---------- ---------- ---------- ---------- ---------------------------------------- ---------- 
+56455306                   ran_tf   00:31:02   00:00:00                       billing=32,cpu=32,gres/gpu=1,mem=57472M+    RUNNING 
+56455306.ba+                batch   00:31:02   00:00:00                                                                   RUNNING 
+56455306.ex+               extern   00:31:02   00:00:00                                                                   RUNNING 

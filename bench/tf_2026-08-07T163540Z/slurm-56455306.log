@@ -1,0 +1,17 @@
+=== [train] 00:22:40 ===
+=== [train] exit=0 wall=556s rss=7715508kB ===
+Run dir: runs/2026-08-08T002742Z
+=== [omnifold] 00:31:57 ===
+=== [omnifold] exit=0 wall=707s rss=6002072kB ===
+=== [ibu] 00:43:44 ===
+=== [ibu] exit=0 wall=269s rss=6008688kB ===
+=== [replot] 00:48:13 ===
+=== [replot] exit=0 wall=265s rss=5970720kB ===
+
+===================== SUMMARY (tf) =====================
+{"stage":"train","wall_s":556,"max_rss_kb":7715508,"exit":0}
+{"stage":"omnifold","wall_s":707,"max_rss_kb":6002072,"exit":0}
+{"stage":"ibu","wall_s":269,"max_rss_kb":6008688,"exit":0}
+{"stage":"replot","wall_s":265,"max_rss_kb":5970720,"exit":0}
+Run dir:   runs/2026-08-08T002742Z
+Bench dir: /global/u1/k/kdesai/RANv4/bench/tf_2026-08-07T163540Z

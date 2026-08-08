@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
@@ -15,6 +16,9 @@ from ran.experiments.cubic_sweep import (
 )
 from ran.rantypes import TrainResult
 from scipy.stats import wasserstein_distance
+
+if TYPE_CHECKING:
+    from ran.rantypes import RANModel
 
 
 def test_response_identity_at_zero() -> None:
@@ -59,10 +63,10 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
         # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
         # run_ran passes a seed through.
         return TrainResult(
-            # TrainResult declares g/d as keras.Model; run_ran only calls g and
-            # reads seed, so a lambda and None are enough to exercise it.
-            g=lambda z: np.ones((len(z), 1)),  # ty:ignore[invalid-argument-type]
-            d=None,  # ty:ignore[invalid-argument-type]
+            # TrainResult declares g/d as RANModel; run_ran only calls g and
+            # reads seed, so this test double is sufficient at runtime.
+            g=cast("RANModel", lambda z: np.ones((len(z), 1))),
+            d=cast("RANModel", None),
             history={},
             seed=seed or 0,
         )

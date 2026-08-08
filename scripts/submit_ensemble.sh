@@ -47,7 +47,11 @@
 # Anything passed on the command line is forwarded to every `ran train`.
 set -euo pipefail
 
-PROJECT_DIR=${PROJECT_DIR:-/global/u1/k/kdesai/RANv4}
+# Default to the tree this script lives in, not a fixed path: the launcher is
+# also run from `git worktree` checkouts of the other branch, and the job body
+# does `cd "${PROJECT_DIR}"`. A hardcoded default would send every one of them
+# back to the same directory -- wrong branch, and a shared runs/ to collide in.
+PROJECT_DIR=${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 CONFIG=${CONFIG:-params/2d_correlated.yaml}
 ARM=jax
 VARY=${VARY:-init}

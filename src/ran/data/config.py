@@ -65,23 +65,7 @@ def sigma_to_covariance(
 def gaussian_config_from_run_config(
     params: Mapping[str, Any], dim: int
 ) -> GaussianConfig:
-    """Rebuild a `GaussianConfig` from the `gaussian_params` block of a run's
-    config.json, across every format runs/ has ever held.
-
-    Three of them exist on disk, and two share their key names:
-
-    ``cov_gen``            covariance matrices, written since the type refactor.
-    ``sigma_gen`` (list)   covariance matrices under the old name -- master's
-                           `__main__` stored `cov_gen` as `sigma_gen`.
-    ``sigma_gen`` (scalar) a raw sigma, from before that, needing promotion.
-
-    Routing the ``sigma_*`` spelling through `sigma_to_covariance` resolves the
-    ambiguity without guessing: a raw scalar promotes to σ²I, a vector to
-    diag(σ²), and an already-formed matrix passes through unchanged (checked for
-    shape, symmetry and positive-definiteness on the way). So both readings land
-    on the same covariance, and the ``cov_*`` spelling needs no promotion at all.
-    """
-    missing = {"mu_gen", "mu_true"} - params.keys()
+    missing: set[str] = {"mu_gen", "mu_true"} - params.keys()
     if missing:
         raise ValueError(f"gaussian_params missing required keys: {missing}")
 

@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
-from numpy import ndarray
 from rich.console import Console
 from rich.table import Table
 from scipy.spatial.distance import jensenshannon
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from logging import Logger
 
-    from .rantypes import DatasetSplits, RANModel
+    from .rantypes import ZXY, DatasetSplits, Populations
 
 
 logger: Logger = logging.getLogger(__name__)
@@ -118,8 +117,8 @@ def _load_splits(config: dict) -> DatasetSplits:
     raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data(test_ds: ArrayDataset) -> tuple[ndarray, ndarray, ndarray]:
-    """Return the test split as flat (z, x, y) arrays."""
+def _collect_test_data(test_ds: ArrayDataset) -> ZXY:
+    """Return the test split as one flat labelled sample."""
     return test_ds.as_arrays()
 
 
@@ -244,11 +243,8 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
     g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
 
     splits: DatasetSplits = _load_splits(config)
-    z, x, y = _collect_test_data(splits.test)
-
-    z_data, z_mc = z[y == 1], z[y == 0]
-    x_data, x_mc = x[y == 1], x[y == 0]
-    w = _get_weights(g, z_mc)
+    test: Populations = _collect_test_data(splits.test).partition()
+    w = _get_weights(g, test.mc.z)
 
     # Variable names for labeling
     dataset = config.get("dataset", "gaussian")
@@ -260,7 +256,10 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
 
     metrics: dict = {}
 
-    for level, data, mc in [("detector", x_data, x_mc), ("particle", z_data, z_mc)]:
+    for level, data, mc in [
+        ("detector", test.data, test.mc.x),
+        ("particle", test.truth, test.mc.z),
+    ]:
         wd_before: list[float] = _wd_per_dim(data, mc)
         wd_after: list[float] = _wd_per_dim(data, mc, weights=w)
         js_before: list[float] = _js_per_dim(data, mc)

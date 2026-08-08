@@ -46,14 +46,14 @@ def test_evaluation_records_metrics_artifact_completion(
     import keras
     import numpy as np
     from ran import evaluate
+    from ran.rantypes import ZXY, Events
 
     run_dir = tmp_path / "sample-run"
     run_dir.mkdir()
     (run_dir / "config.json").write_text('{"dataset": "gaussian", "dim": 1}')
     (run_dir / "generator.keras").touch()
     z = np.array([[0.0], [1.0], [2.0], [3.0]])
-    x = z.copy()
-    y = np.array([1, 1, 0, 0])
+    test_data = ZXY(Events(z, z.copy()), np.array([1, 1, 0, 0], dtype=np.ubyte))
 
     # evaluate_run imports keras inside the function (so ran.evaluate stays
     # keras-free for the OmniFold backend pin), so patch the real module.
@@ -61,7 +61,7 @@ def test_evaluation_records_metrics_artifact_completion(
     monkeypatch.setattr(
         evaluate, "_load_splits", lambda _config: SimpleNamespace(test=object())
     )
-    monkeypatch.setattr(evaluate, "_collect_test_data", lambda _test: (z, x, y))
+    monkeypatch.setattr(evaluate, "_collect_test_data", lambda _test: test_data)
     monkeypatch.setattr(evaluate, "_get_weights", lambda _model, _values: np.ones(2))
     monkeypatch.setattr(evaluate, "_wd_per_dim", lambda *_args, **_kwargs: [1.0])
     monkeypatch.setattr(evaluate, "_js_per_dim", lambda *_args, **_kwargs: [0.5])

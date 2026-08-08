@@ -21,6 +21,7 @@ from .evaluate import (
     _triangular_per_dim,
     _wd_per_dim,
 )
+from .rantypes import Events, Populations
 from .train import train
 
 if TYPE_CHECKING:
@@ -56,14 +57,10 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
     if poison:
         z_true[:] = -999.0
 
-    z: NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
-    x: NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: NDArray[np.ubyte] = np.concatenate(
-        [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
-    )
+    data = Populations(mc=Events(z_gen, x_sim), data=x_data, truth=z_true).interleave()
 
-    splits: DatasetSplits = RANDataset(batch_size=1024, seed=seed).splits_from_arrays(
-        z, x, y
+    splits: DatasetSplits = RANDataset(batch_size=1024, seed=seed).splits_from_data(
+        data
     )
 
     # Fixed init_seed: both arms must start from identical weights, or the
@@ -72,24 +69,14 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
         splits, dim=1, hidden_units=32, n_layers=2, patience=5, seed=init_seed
     ).g
 
-    z_t: NDArray[np.double]
-    x_t: NDArray[np.double]
-    y_t: NDArray[np.ubyte]
-    z_t, x_t, y_t = _collect_test_data(splits.test)
+    test: Populations = _collect_test_data(splits.test).partition()
 
-    z_data_t: NDArray[np.double]
-    z_mc_t: NDArray[np.double]
-    x_data_t: NDArray[np.double]
-    x_mc_t: NDArray[np.double]
-    z_data_t, z_mc_t = z_t[y_t == 1], z_t[y_t == 0]
-    x_data_t, x_mc_t = x_t[y_t == 1], x_t[y_t == 0]
-
-    raw_w: NDArray[np.double] = np.asarray(g(z_mc_t)).flatten()
+    raw_w: NDArray[np.double] = np.asarray(g(test.mc.z)).flatten()
     w: NDArray[np.double] = raw_w / raw_w.mean()
 
     for level, ref, comp in [
-        ("DETECTOR", x_data_t, x_mc_t),
-        ("PARTICLE", z_data_t, z_mc_t),
+        ("DETECTOR", test.data, test.mc.x),
+        ("PARTICLE", test.truth, test.mc.z),
     ]:
         wd_b: float = _wd_per_dim(ref, comp)[0]
         wd_a: float = _wd_per_dim(ref, comp, weights=w)[0]

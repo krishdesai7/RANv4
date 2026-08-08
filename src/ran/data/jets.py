@@ -13,7 +13,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..rantypes import CACHE_DIR, CACHE_FILENAMES, SUBSTRUCTURE_VARIABLES
+from ..rantypes import (
+    CACHE_DIR,
+    CACHE_FILENAMES,
+    SUBSTRUCTURE_VARIABLES,
+    Events,
+    Populations,
+)
 from .datasets import DatasetSplits, RANDataset
 
 if TYPE_CHECKING:
@@ -95,15 +101,7 @@ def load_jet_dataset(
         z_gen[:, i] = (z_gen[:, i] - mu) / sigma
         x_sim[:, i] = (x_sim[:, i] - mu) / sigma
 
-    # Combine into dataset format: nature (y=1) + MC (y=0)
-    z: NDArray[np.double] = np.concatenate([z_true, z_gen], axis=0)
-    x: NDArray[np.double] = np.concatenate([x_data, x_sim], axis=0)
-    y: NDArray[np.ubyte] = np.concatenate(
-        [
-            np.ones(n_samples, dtype=np.ubyte),
-            np.zeros(n_samples, dtype=np.ubyte),
-        ]
-    )
+    data = Populations(mc=Events(z_gen, x_sim), data=x_data, truth=z_true).interleave()
 
-    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_data(data)
     return splits, n_features, std_params

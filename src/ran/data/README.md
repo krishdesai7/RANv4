@@ -33,11 +33,34 @@ Parse a Gaussian YAML config file and return a dictionary with the following key
 - `cov_true: NDArray[np.double]` The covariance matrix of the true data.
 - `cov_detector: NDArray[np.double]` The covariance matrix of the detector.
 
+### `ran.data.config::gaussian_config_from_run_config`
+
+Rebuild a `GaussianConfig` from the `gaussian_params` block of a run's `config.json`, across every format runs/ has ever held - two depracated formats and one current format. Two share their key names:
+
+- `cov_gen` covariance matrices, written since the type refactor.
+- `sigma_gen` (list) covariance matrices under the old name -- master's
+  `__main__` stored `cov_gen` as `sigma_gen`.
+- `sigma_gen` (scalar) a raw sigma, from before that, needing promotion.
+
+Routing the `sigma_*` spelling through `sigma_to_covariance` resolves the ambiguity without guessing: a raw scalar promotes to σ²I, a vector to diag(σ²), and an already-formed matrix passes through unchanged (checked for shape, symmetry and positive-definiteness on the way). So both readings land on the same covariance, and the `cov_*` spelling needs no promotion at all.
+
+## Two representations
+
+The same events are described two ways, at opposite ends of the pipeline.
+
+`Populations` is the physics form: `mc` (an `Events` pair of generated particle level `mc.z` and simulated detector level `mc.x`, aligned per event), `data` (the measurement), and `truth` (the particle-level answer key). Sources produce it, and analysis consumes it. `truth` sits outside `mc` on purpose, so a function handed the simulation cannot reach the one array no network may see.
+
+`ZXY` is the transport form: an `Events` pair plus a per-event label, `y = 1` for nature and `y = 0` for MC. It is what gets shuffled, split, batched and trained on.
+
+`Populations.interleave()` converts to the transport form (nature rows first, then MC) and `ZXY.partition()` converts back. Only the second composition is lossless: interleaving a partitioned sample discards the shuffled row order. Weight vectors are indexed against a `Populations`, never against a `ZXY`, so nothing should round-trip.
+
+`DatasetSplits.select(Split.TRAIN | Split.VAL)` concatenates the requested splits into one `ZXY`. The split an event came from is a property of the query, not of the event, so it is not recorded on the result.
+
 ## Datasets
 
 ### `ran.data.datasets::ArrayDataset`
 
-In-memory (z, x, y) arrays with deterministic minibatching.
+An in-memory `ZXY` with deterministic minibatching.
 
 Iterating yields `({"z": ..., "x": ...}, y)` batches of NumPy arrays. The final batch is short rather than dropped whenever the split length is not a multiple of `batch_size`.
 
@@ -45,16 +68,14 @@ Every split holds a view onto one shared pair of base arrays; slicing is done wi
 
 #### Fields
 
-- `z: NDArray[np.double]` Particle-level features, shape (n_events, dim).
-- `x: NDArray[np.double]` Detector-level features, shape (n_events, dim).
-- `y: NDArray[np.ubyte]` Per-event class label (1 = data, 0 = MC), shape (n_events,).
+- `data: ZXY` The split's events and labels. `data.z` and `data.x` reach through to the underlying `Events`.
 - `batch_size: int` Events per batch.
 - `shuffle: bool` Re-permute the event order before every pass. Used for the training split; validation and test iterate in fixed order.
 - `seed: int` Seed for the reshuffling generator.
 
 #### Properties
 
-- `n_events: int` Number of events in the dataset.
+- `size: int` Number of events in the dataset.
 
 Each pass draws its permutation from `(seed, pass_index)` rather than from a generator carried across passes, so the order an epoch sees depends only on how many passes preceded it, not on who else has iterated this object.
 
@@ -63,18 +84,7 @@ Each pass draws its permutation from `(seed, pass_index)` rather than from a gen
 - `reset() -> None` Return to the first pass.
 - `len() -> int` Number of batches per pass.
 - `iter() -> Iterator[Batch]` Iterate over the dataset.
-- `as_arrays() -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]` Return the dataset as NumPy arrays. Flattened (z, x, y) arrays, in stored order. Callers that just want every event (plotting, metrics, the baselines) should use this instead of concatenating iterations.
-
-### `ran.data.datasets::_parse_params`
-
-Normalize inline params dict into the shape `parse_gaussian_config` returns.
-**Arguments**:
-
-- `params: dict[str, ArrayLike]` Inline params dict.
-
-**Returns**:
-
-- `dict[str, int | NDArray[np.double]]` Normalized params dict.
+- `as_arrays() -> ZXY` Return the whole split in stored order. Callers that just want every event (plotting, metrics, the baselines) should use this instead of concatenating iterations, and usually follow it with `.partition()`.
 
 ### `ran.data.datasets::RANDataset`
 
@@ -90,7 +100,7 @@ Dataset class for RAN.
 
 #### Properties
 
-- `dataset: tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]` Dataset arrays in shuffled order.
+- `dataset: ZXY` The events in shuffled order.
 - `splits: DatasetSplits` Dataset splits.
 
 #### Methods
@@ -99,25 +109,23 @@ Dataset class for RAN.
 
 **Arguments**:
 
-- `z: NDArray[np.double]` Particle-level features, shape (n_events, dim).
-- `x: NDArray[np.double]` Detector-level features, shape (n_events, dim).
-- `y: NDArray[np.ubyte]` Per-event class label (1 = data, 0 = MC), shape (n_events,).
+- `data: ZXY` The events as `interleave` produced them.
 
 **Returns**:
 
-- `tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]` Shuffled dataset arrays.
+- `ZXY` The same events in shuffled order.
 
 **Description**:
 
-Interleave the data and MC halves with one fixed-seed permutation.
+Interleave the nature and MC halves with one fixed-seed permutation.
 
-The arrays arrive as data (y=1) stacked on MC (y=0); the splits below are contiguous slices, so they would otherwise be single-class. This shuffle happens once and is not repeated per epoch -- it defines the event ordering the splits cut into.
+`interleave` stacks nature (y=1) on MC (y=0); the splits below are contiguous slices, so they would otherwise be single-class. This shuffle happens once and is not repeated per epoch -- it defines the event ordering the splits cut into.
 
 ##### `_split_dataset`
 
 **Arguments**:
 
-- `dataset: tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]` Shuffled dataset arrays.
+- `dataset: ZXY` The events in shuffled order.
 
 **Returns**:
 
@@ -145,13 +153,11 @@ Test is taken off the end, validation off the end of what remains, so train occu
 
 Parse the config file or inline params, generate the dataset, and split it into train/val/test splits Exactly one of config_path or params must be provided.
 
-##### `splits_from_arrays`
+##### `splits_from_data`
 
 **Arguments**:
 
-- `z: NDArray[np.double]` Particle-level features, shape (n_events, dim).
-- `x: NDArray[np.double]` Detector-level features, shape (n_events, dim).
-- `y: NDArray[np.ubyte]` Per-event class label (1 = data, 0 = MC), shape (n_events,).
+- `data: ZXY` One labelled in-memory sample, usually straight from `Populations.interleave()`.
 
 **Returns**:
 
@@ -159,6 +165,6 @@ Parse the config file or inline params, generate the dataset, and split it into 
 
 **Description**:
 
-Build train/val/test splits directly from in-memory (z, x, y) arrays.
+Shuffle one labelled sample and cut it into train/val/test.
 
-z (particle level) and x (detector level) must have matching first dimension; y is the per-event class label (1 = data, 0 = MC).
+`ZXY` has already checked that the particle- and detector-level arrays are row-aligned and that every label is zero or one, so this does no validation of its own.

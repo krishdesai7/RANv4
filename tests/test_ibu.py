@@ -7,7 +7,7 @@ import pytest
 from ran.baselines import _shared as shared
 from ran.baselines import ibu
 from ran.data import ArrayDataset
-from ran.rantypes import DatasetSplits
+from ran.rantypes import ZXY, DatasetSplits, Events
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -15,9 +15,10 @@ if TYPE_CHECKING:
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
     return ArrayDataset(
-        np.asarray(z, dtype=np.double),
-        np.asarray(x, dtype=np.double),
-        np.asarray(y, dtype=np.ubyte),
+        ZXY(
+            Events(np.asarray(z, dtype=np.double), np.asarray(x, dtype=np.double)),
+            np.asarray(y, dtype=np.ubyte),
+        ),
         batch_size=8,
     )
 
@@ -119,13 +120,13 @@ def test_saturating_counts_conserve_observed_population() -> None:
 
 
 def test_prepare_data_names_response_and_test_populations() -> None:
-    data = shared.prepare_populations(_splits(), expected_dim=1)
+    full, test = shared.prepare_populations(_splits(), expected_dim=1)
 
-    assert data.response_gen.shape == (5, 1)
-    assert data.response_sim.shape == (5, 1)
-    assert data.observed_reco.shape == (5, 1)
-    assert data.test_mc_gen.shape == (2, 1)
-    assert data.test_data_reco.shape == (2, 1)
+    assert full.mc.z.shape == (5, 1)
+    assert full.mc.x.shape == (5, 1)
+    assert full.data.shape == (5, 1)
+    assert test.mc.z.shape == (2, 1)
+    assert test.data.shape == (2, 1)
 
 
 def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
@@ -135,7 +136,7 @@ def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
 
 def test_prepare_data_rejects_nonfinite_values() -> None:
     splits = _splits()
-    splits.train.x[0, 0] = np.nan
+    splits.train.data.x[0, 0] = np.nan
 
     with pytest.raises(ValueError, match="finite"):
         shared.prepare_populations(splits, expected_dim=1)
@@ -149,7 +150,7 @@ def test_prepare_data_rejects_empty_test_data_population() -> None:
         test=_split([[0.8], [1.8]], [[0.9], [2.5]], [0, 0]),
     )
 
-    with pytest.raises(ValueError, match="test data"):
+    with pytest.raises(ValueError, match="test split: populations must be nonempty"):
         shared.prepare_populations(without_test_data, expected_dim=1)
 
 

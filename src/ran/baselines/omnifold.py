@@ -111,15 +111,15 @@ def _run_and_evaluate(
     config: RunConfig, niter: int = 3, epochs: int = 50, out_dir: Path = Path()
 ) -> tuple[dict[str, MetricRecord], list[str], NDArray[np.single]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
-    data = load_populations(config)
+    full, test = load_populations(config)
 
     # OmniFold trains under TensorFlow, so cast the shared float64 populations
     # to float32 here rather than making every baseline pay for it.
     w: NDArray[np.single] = omnifold_unfold(
-        _as2d(data.observed_reco),
-        _as2d(data.response_sim),
-        _as2d(data.response_gen),
-        z_target=_as2d(data.test_mc_gen),
+        _as2d(full.data),
+        _as2d(full.mc.x),
+        _as2d(full.mc.z),
+        z_target=_as2d(test.mc.z),
         niter=niter,
         epochs=epochs,
         out_dir=out_dir,
@@ -130,13 +130,13 @@ def _run_and_evaluate(
     metrics: dict[str, MetricRecord] = {}
     for dimension, variable_name in enumerate(config.variable_names):
         metrics[f"detector_{variable_name}"] = evaluate_dimension(
-            data.test_data_reco[:, dimension],
-            data.test_mc_reco[:, dimension],
+            test.data[:, dimension],
+            test.mc.x[:, dimension],
             w,
         )
         metrics[f"particle_{variable_name}"] = evaluate_dimension(
-            data.test_data_gen[:, dimension],
-            data.test_mc_gen[:, dimension],
+            test.truth[:, dimension],
+            test.mc.z[:, dimension],
             w,
         )
 

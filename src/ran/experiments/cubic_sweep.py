@@ -28,6 +28,7 @@ from numpy import ndarray
 from scipy.stats import wasserstein_distance
 
 from ..data import RANDataset
+from ..rantypes import Events, Populations
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,11 @@ logger = logging.getLogger(__name__)
 def response(s: float, z: npt.NDArray[np.double]) -> npt.NDArray[np.double]:
     """Deterministic non-linear detector response r(s, z) = z + s * z**3."""
     return z + s * z**3
+
+
+def _column(a: npt.NDArray[np.double]) -> npt.NDArray[np.double]:
+    """Reshape a flat sample into the (n, 1) float64 column the models expect."""
+    return a.reshape(-1, 1).astype(np.double)
 
 
 def make_particles(
@@ -113,14 +119,12 @@ def run_ran(
 
     s, z_truth, z_gen, x_data, x_sim = _sweep_point(s_index, n_points, n_samples, seed)
 
-    # Data events carry z_truth (y=1, weight fixed to 1), sim events carry
-    # z_gen (y=0, reweighted by g). Matches generate_gaussian_dataset.
-    z = np.concatenate([z_truth, z_gen]).reshape(-1, 1).astype(np.double)
-    x = np.concatenate([x_data, x_sim]).reshape(-1, 1).astype(np.double)
-    y = np.concatenate(
-        [np.ones(n_samples, dtype=np.ubyte), np.zeros(n_samples, dtype=np.ubyte)]
-    )
-    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_arrays(z, x, y)
+    data = Populations(
+        mc=Events(_column(z_gen), _column(x_sim)),
+        data=_column(x_data),
+        truth=_column(z_truth),
+    ).interleave()
+    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_data(data)
     result = train(splits, dim=1, n_epochs=ran_epochs, seed=init_seed)
 
     raw = np.asarray(result.g(z_gen.reshape(-1, 1).astype(np.double))).ravel()

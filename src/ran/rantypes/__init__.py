@@ -7,13 +7,17 @@ from .schema import N_FILES as N_FILES
 from .schema import REQUIRED_KEYS as REQUIRED_KEYS
 from .schema import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
 from .schema import ZENODO_RECORD as ZENODO_RECORD
+from .schema import ZXY as ZXY
 from .schema import DatasetName as DatasetName
 from .schema import DatasetSplits as DatasetSplits
+from .schema import Events as Events
 from .schema import GaussianConfig as GaussianConfig
 from .schema import IBUResult as IBUResult
 from .schema import JetVarInfo as JetVarInfo
 from .schema import LogLevel as LogLevel
+from .schema import Populations as Populations
 from .schema import RunConfig as RunConfig
+from .schema import Split as Split
 from .schema import TrainResult as TrainResult
 from .schema import TrainState as TrainState
 from .schema import UnfoldingPopulations as UnfoldingPopulations

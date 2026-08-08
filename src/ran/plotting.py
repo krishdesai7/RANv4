@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import RANModel, VarInfo
+    from .rantypes import Populations, VarInfo
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -56,11 +56,9 @@ class _LevelStyle(NamedTuple):
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
-def _collect_data(
-    dataset: ArrayDataset,
-) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
-    # zs: (n_events, dim), xs: (n_events, dim), ys: (n_events,)
-    return dataset.as_arrays()
+def _collect_data(dataset: ArrayDataset) -> Populations:
+    """Return the split as the four physics populations, each (n, dim)."""
+    return dataset.as_arrays().partition()
 
 
 def _get_weights(g: RANModel, z_gen: NDArray[np.double]) -> NDArray[np.double]:
@@ -306,15 +304,12 @@ def plot_detector_level(
         omnifold_weights: Per-event OmniFold weights for MC events.
         ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
-    z: NDArray[np.double]
-    x: NDArray[np.double]
-    y: NDArray[np.ubyte]
-    z, x, y = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
-        nature=x[y == 1],
-        mc=x[y == 0],
-        w=_get_weights(g, z[y == 0]),
+        nature=test.data,
+        mc=test.mc.x,
+        w=_get_weights(g, test.mc.z),
         style=_DETECTOR,
         save_path=save_path,
         var_info=var_info,
@@ -340,15 +335,12 @@ def plot_particle_level(
         omnifold_weights: Per-event OmniFold weights for MC events.
         ibu_weights: Per-variable list of per-event IBU weights for MC events.
     """
-    _: Any
-    z: NDArray[np.double]
-    y: NDArray[np.ubyte]
-    z, _, y = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
-        nature=z[y == 1],
-        mc=z[y == 0],
-        w=_get_weights(g, z[y == 0]),
+        nature=test.truth,
+        mc=test.mc.z,
+        w=_get_weights(g, test.mc.z),
         style=_PARTICLE,
         save_path=save_path,
         var_info=var_info,

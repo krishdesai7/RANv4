@@ -121,9 +121,8 @@ extend-select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
-# The package __init__ is the backend bootstrap: it must set KERAS_BACKEND and
-# JAX_ENABLE_X64 before anything imports jax or keras, which is exactly the
-# import-time side effect RUF067 exists to prevent. See the module docstring.
+# package __init__ is the backend bootstrap: must set KERAS_BACKEND and
+# JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]
 
 [tool.ruff.format]
@@ -165,3 +164,19 @@ check-script = true
 no-ignore = true
 ignore-complexity = true
 failed = true
+
+
+[tool.tombi]
+toml-version = "v1.1.0"
+
+[tool.tombi.format.rules]
+group-blank-lines-limit = 2
+indent-sub-tables = true
+indent-table-key-value-pairs = true
+key-value-equals-sign-alignment = true
+table-blank-lines = 2
+trailing-comment-alignment = true
+
+
+[tool.tombi.extensions."tombi-toml/pyproject"]
+lsp.document-link.pypi-org.enabled = true

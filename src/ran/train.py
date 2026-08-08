@@ -32,7 +32,13 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import DatasetSplits, Variables
+    from .rantypes import (
+        DatasetSplits,
+        KerasVariable,
+        RANModel,
+        StatelessOptimizer,
+        Variables,
+    )
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -81,10 +87,10 @@ def weighted_bce(d_out, y, w):
 
 
 def _make_steps(
-    g: keras.Model,
-    d: keras.Model,
-    opt_g: keras.optimizers.Optimizer,
-    opt_d: keras.optimizers.Optimizer,
+    g: RANModel,
+    d: RANModel,
+    opt_g: StatelessOptimizer,
+    opt_d: StatelessOptimizer,
 ) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
     """Build the jitted disc/gen/eval steps, closing over the models.
 
@@ -127,13 +133,8 @@ def _make_steps(
         (loss, d_non_trainable), grads = disc_grad_fn(
             state.d_trainable, state.d_non_trainable, x, y, w
         )
-        # `Optimizer.stateless_apply` carries no annotations, so its return is
-        # inferred from the body as `list[Unknown | None]`. It documents itself
-        # as returning (trainable_variables, optimizer_variables) -- both lists
-        # of backend tensors, which under the JAX backend are jax.Arrays.
-        d_trainable, opt_d_vars = cast(
-            "tuple[Variables, Variables]",
-            opt_d.stateless_apply(state.opt_d, grads, state.d_trainable),
+        d_trainable, opt_d_vars = opt_d.stateless_apply(
+            state.opt_d, grads, state.d_trainable
         )
         return (
             state._replace(
@@ -156,9 +157,8 @@ def _make_steps(
             x,
             y,
         )
-        g_trainable, opt_g_vars = cast(  # see disc_step
-            "tuple[Variables, Variables]",
-            opt_g.stateless_apply(state.opt_g, grads, state.g_trainable),
+        g_trainable, opt_g_vars = opt_g.stateless_apply(
+            state.opt_g, grads, state.g_trainable
         )
         return (
             state._replace(
@@ -242,7 +242,7 @@ def _eval_dataset(
     return mean, mean
 
 
-def _assign(variables: list[keras.Variable], values: Variables) -> None:
+def _assign(variables: list[KerasVariable], values: Variables) -> None:
     """Write JAX arrays back into a model's `keras.Variable`s."""
     for var, val in zip(variables, values, strict=False):
         var.assign(val)
@@ -290,14 +290,12 @@ def train(
     # -- an ensemble loop over init seeds -- all see identical data.
     splits.train.reset()
 
-    g: keras.Model = build_generator(
+    g: RANModel = build_generator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
+    d: RANModel = build_discriminator(
         dim=dim, hidden_units=hidden_units, n_layers=n_layers
     )
-    d: keras.Model = build_discriminator(
-        dim=dim, hidden_units=hidden_units, n_layers=n_layers
-    )
-    opt_g: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_g)
-    opt_d: keras.optimizers.Optimizer = keras.optimizers.Adam(learning_rate=lr_d)
+    opt_g: StatelessOptimizer = keras.optimizers.Adam(learning_rate=lr_g)
+    opt_d: StatelessOptimizer = keras.optimizers.Adam(learning_rate=lr_d)
     opt_g.build(g.trainable_variables)
     opt_d.build(d.trainable_variables)
 

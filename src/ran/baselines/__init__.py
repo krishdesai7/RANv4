@@ -1,18 +1,3 @@
-"""Comparison baselines: IBU and OmniFold.
-
-Only the backend-agnostic helpers from :mod:`._shared` are re-exported. The two
-baseline modules are deliberately *not* imported here, because they need
-different Keras backends and there is one backend per interpreter:
-:mod:`.omnifold` hard-sets ``KERAS_BACKEND=tensorflow`` at import and must be
-the entry point of its own process, while :mod:`.ibu` reaches :mod:`ran.train`,
-which loads only on JAX. Re-exporting both would make each unimportable via the
-other -- and would leak the losing backend into every subprocess. Import the
-one you want directly::
-
-    from ran.baselines.ibu import evaluate_runs
-    from ran.baselines.omnifold import omnifold_unfold
-"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

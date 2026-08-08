@@ -8,6 +8,7 @@ import keras
 import numpy as np
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
+from ran.rantypes import ZXY, Events
 from ran.train import (
     EPS,
     TrainResult,
@@ -181,7 +182,7 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     z = np.concatenate([z_true, z_gen])
     x = np.concatenate([z_true, z_gen]) + rng.normal(0, 0.5, size=(2 * n, 1))
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    splits = RANDataset(batch_size=128, seed=0).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=128, seed=0).splits_from_data(ZXY(Events(z, x), y))
 
     g, _d, history, seed = train(
         splits, dim=1, n_epochs=3, patience=99, hidden_units=8, n_layers=1
@@ -209,7 +210,7 @@ def test_train_restores_best_weights_on_early_stop() -> None:
     z = rng.normal(size=(2 * n, 1))
     x = rng.normal(size=(2 * n, 1))
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    splits = RANDataset(batch_size=128, seed=0).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=128, seed=0).splits_from_data(ZXY(Events(z, x), y))
 
     # z carries no information about y here, so val D cannot keep improving and
     # patience=1 trips quickly.
@@ -228,7 +229,7 @@ class TestSeeding:
         z = rng.normal(size=(2 * n, 1))
         x = z + rng.normal(0, 0.3, size=(2 * n, 1))
         y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-        return RANDataset(batch_size=128, seed=3).splits_from_arrays(z, x, y)
+        return RANDataset(batch_size=128, seed=3).splits_from_data(ZXY(Events(z, x), y))
 
     @staticmethod
     def _run(splits: DatasetSplits, seed: int | None) -> TrainResult:

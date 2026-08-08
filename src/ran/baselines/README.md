@@ -2,6 +2,25 @@
 
 This directory contains the baselines for the RAN project.
 
+Comparison baselines: **IBU** and **OmniFold**.
+
+Only the backend-agnostic helpers from `._shared` are re-exported. The two baseline modules are deliberately _not_ exported externally, because they need different Keras backends and there is one backend per interpreter. `.omnifold` hard-sets `KERAS_BACKEND=tensorflow` at import and must be the entry point of its own process, while `.ibu` reaches `ran.train`, which loads only on JAX. Re-exporting both would make each unimportable via the other and would leak the losing backend into every subprocess. Import the desired module directly
+
+```python
+    from ran.baselines.ibu import evaluate_runs
+    from ran.baselines.omnifold import omnifold_unfold
+```
+
+## Shared
+
+Module `._shared` contains the data handling shared by the IBU and OmniFold baselines.
+
+Both methods attempt the same task: to generate weights to reweight Generation based on the relationship between Data and Simulation, and thus both baselines provide the same inputs and then score the result. So they need the same run config, the same event populations, and the same metric record. Only the unfolding method differs.
+
+`prepare_populations` returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
+
+This module must stay free of `keras` at import time. `ran.baselines.omnifold` pins `KERAS_BACKEND=tensorflow` before importing keras, and it imports from here; pulling keras in transitively would fix the backend to jax first and break OmniFold. `ran.evaluate` is safe to import for the same reason, namely that it defers its own keras import into the two functions that need it.
+
 ## IBU
 
 IBU (Iterative Bayesian Unfolding) baseline to compare with RAN. It is a simple unfolding method that uses a Bayesian approach to unfold the data.

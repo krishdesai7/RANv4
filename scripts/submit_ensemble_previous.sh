@@ -138,8 +138,15 @@ for ((i = 0; i < N_MEMBERS; i++)); do
     [[ -z "${rss}" ]] && rss=null
   fi
 
-  ls -1d runs/*/ 2> /dev/null | sort > "${after}"
-  run_dir=$(comm -13 "${before}" "${after}" | tail -1)
+  # Ask the run itself which directory it wrote. The runs/ diff below cannot
+  # tell our new directory from one a concurrent job created in the same
+  # window, and would silently attribute another job's metrics to this member.
+  # Both arms log this line verbatim.
+  run_dir=$(sed -n 's|.*Saved run to \(runs/[^ ]*\).*|\1|p' "${log}" | head -1)
+  if [[ -z "${run_dir}" ]]; then
+    ls -1d runs/*/ 2> /dev/null | sort > "${after}"
+    run_dir=$(comm -13 "${before}" "${after}" | tail -1)
+  fi
   rm -f "${before}" "${after}"
   run_dir=${run_dir%/}
 

@@ -23,10 +23,11 @@ import numpy as np
 import pytest
 from ran import workflow
 from ran.data import parse_gaussian_config
-from ran.rantypes.schema import DatasetSplits
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from ran.rantypes.schema import DatasetSplits
 
 CONFIG_2D = """
 mu_gen: [0.0, 1.0]

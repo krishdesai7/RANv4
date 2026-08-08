@@ -123,7 +123,7 @@ w_MC = g(z_gen) * N_MC / sum(g(z_gen))   (MC events)
 w_data = 1                                (data events)
 ```
 
-Keeping `g` out of the discriminator update is important: the discriminator should not backpropagate through the generator when updating its own parameters. Under JAX this needs no `stop_gradient` — `disc_step` computes the weights *before* calling the differentiated function, so they enter it as plain constants, and `jax.value_and_grad` differentiates only with respect to the discriminator's trainable variables.
+Keeping `g` out of the discriminator update is important: the discriminator should not backpropagate through the generator when updating its own parameters. Under JAX this needs no `stop_gradient` — `disc_step` computes the weights _before_ calling the differentiated function, so they enter it as plain constants, and `jax.value_and_grad` differentiates only with respect to the discriminator's trainable variables.
 
 ### Alternating update schedule
 

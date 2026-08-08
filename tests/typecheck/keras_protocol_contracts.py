@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, assert_type
 
 from jax._src.basearray import Array as JaxArray
+from ran.models import build_discriminator, build_generator
 from ran.rantypes import KerasVariable, RANModel, StatelessOptimizer, Variables
+from ran.train import _make_steps
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -32,3 +34,9 @@ def check_protocol_surfaces(
     trainable, optimizer_state = optimizer.stateless_apply(state, state, state)
     assert_type(trainable, Variables)
     assert_type(optimizer_state, Variables)
+
+
+def check_training_boundary(model: RANModel, optimizer: StatelessOptimizer) -> None:
+    assert_type(build_generator(), RANModel)
+    assert_type(build_discriminator(), RANModel)
+    _make_steps(model, model, optimizer, optimizer)

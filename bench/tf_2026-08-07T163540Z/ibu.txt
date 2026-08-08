@@ -1,0 +1,29 @@
+  2026-08-08T002742Z: running IBU (niter=10, purity=0.7071)...
+Loading dataset: gaussian
+Loading dataset from cache: .cache/gaussian_c5d0b9f766085880.npz
+  dim_0: 5 bins, 10 iterations
+  dim_1: 4 bins, 10 iterations
+
+========================================================================
+  Run: 2026-08-08T002742Z [IBU]
+========================================================================
+
+  DETECTOR LEVEL
+  Var        Metric             Before      After    Improv.
+  --------------------------------------------------------
+  dim_0      Wasserstein        0.1985     0.0046     +97.7%
+             JS div           0.005966   0.000225     +96.2%
+             Δ (x1e3)          23.4036     0.8717     +96.3%
+  dim_1      Wasserstein        0.2150     0.0266     +87.6%
+             JS div           0.004939   0.000628     +87.3%
+             Δ (x1e3)          19.1441     2.3588     +87.7%
+
+  PARTICLE LEVEL
+  Var        Metric             Before      After    Improv.
+  --------------------------------------------------------
+  dim_0      Wasserstein        0.2002     0.0180     +91.0%
+             JS div           0.008218   0.001653     +79.9%
+             Δ (x1e3)          32.0492     6.5255     +79.6%
+  dim_1      Wasserstein        0.2299     0.0465     +79.8%
+             JS div           0.007555   0.002974     +60.6%
+             Δ (x1e3)          29.2629    11.6966     +60.0%

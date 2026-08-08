@@ -1,0 +1,55 @@
+Horovod not found, will continue with single only GPUs.
+  2026-08-08T002742Z: running OmniFold (niter=3, epochs=50)...
+Loading dataset: gaussian
+Loading dataset from cache: .cache/gaussian_c5d0b9f766085880.npz
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating weights ...
+INFO: Creating pass reco flag ...
+INFO: Creating pass gen flag ...
+1953 training steps at reco and 1953 steps at gen
+ITERATION: 1
+RUNNING STEP 1
+Last val loss 0.684865415096283
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.6888458132743835
+INFO: Dumping training history ...
+ITERATION: 2
+RUNNING STEP 1
+Last val loss 0.6940608024597168
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.6846681237220764
+INFO: Dumping training history ...
+ITERATION: 3
+RUNNING STEP 1
+Last val loss 0.690655529499054
+INFO: Dumping training history ...
+RUNNING STEP 2
+Last val loss 0.6841750741004944
+INFO: Dumping training history ...
+
+========================================================================
+  Run: 2026-08-08T002742Z [OmniFold]
+========================================================================
+
+  DETECTOR LEVEL
+  Var        Metric             Before      After    Improv.
+  --------------------------------------------------------
+  dim_0      Wasserstein        0.1985     0.0064     +96.8%
+             JS div           0.005966   0.000219     +96.3%
+             Δ (x1e3)          23.4036     0.8508     +96.4%
+  dim_1      Wasserstein        0.2150     0.0182     +91.5%
+             JS div           0.004939   0.000237     +95.2%
+             Δ (x1e3)          19.1441     0.8881     +95.4%
+
+  PARTICLE LEVEL
+  Var        Metric             Before      After    Improv.
+  --------------------------------------------------------
+  dim_0      Wasserstein        0.2002     0.0068     +96.6%
+             JS div           0.008218   0.000236     +97.1%
+             Δ (x1e3)          32.0492     0.9001     +97.2%
+  dim_1      Wasserstein        0.2299     0.0194     +91.6%
+             JS div           0.007555   0.000245     +96.8%
+             Δ (x1e3)          29.2629     0.9566     +96.7%

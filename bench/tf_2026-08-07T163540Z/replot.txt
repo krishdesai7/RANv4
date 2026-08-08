@@ -1,0 +1,8 @@
+Loading dataset from cache: .cache/gaussian_c5d0b9f766085880.npz
+Loaded run from runs/2026-08-08T002742Z
+Loaded OmniFold weights from runs/2026-08-08T002742Z/omnifold_weights.npz
+Loaded IBU weights from runs/2026-08-08T002742Z/ibu_weights.npz
+Saved runs/2026-08-08T002742Z/detector_level.pdf
+Saved runs/2026-08-08T002742Z/particle_level.pdf
+Saved runs/2026-08-08T002742Z/losses.pdf
+  2026-08-08T002742Z: metrics.json exists, skipping (use --force)

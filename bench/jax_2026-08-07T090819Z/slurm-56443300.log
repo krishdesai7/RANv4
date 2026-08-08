@@ -1,0 +1,17 @@
+=== [train] 11:39:22 ===
+=== [train] exit=0 wall=43s rss=3787152kB ===
+Run dir: runs/2026-08-07T113957Z
+=== [omnifold] 11:40:05 ===
+=== [omnifold] exit=0 wall=401s rss=4859092kB ===
+=== [ibu] 11:46:46 ===
+=== [ibu] exit=0 wall=8s rss=317224kB ===
+=== [replot] 11:46:54 ===
+=== [replot] exit=0 wall=13s rss=3058084kB ===
+
+===================== SUMMARY (jax) =====================
+{"stage":"train","wall_s":43,"max_rss_kb":3787152,"exit":0}
+{"stage":"omnifold","wall_s":401,"max_rss_kb":4859092,"exit":0}
+{"stage":"ibu","wall_s":8,"max_rss_kb":317224,"exit":0}
+{"stage":"replot","wall_s":13,"max_rss_kb":3058084,"exit":0}
+Run dir:   runs/2026-08-07T113957Z
+Bench dir: /global/u1/k/kdesai/RANv4/bench/jax_2026-08-07T090819Z

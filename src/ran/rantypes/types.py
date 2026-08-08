@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Protocol, TypedDict
 
 if TYPE_CHECKING:
+    from os import PathLike
+
     import numpy as np
     from jax._src.basearray import Array as JaxArray
-    from numpy.typing import NDArray
+    from numpy.typing import ArrayLike, NDArray
 
 # ---------------------------------
 # Plotting
@@ -24,6 +26,48 @@ class VarInfo(TypedDict):
 # Training
 # ---------------------------------
 type Variables = list[JaxArray]
+
+
+class KerasVariable(Protocol):
+    @property
+    def value(self) -> JaxArray: ...
+
+    def assign(self, value: JaxArray) -> None: ...
+
+
+class RANModel(Protocol):
+    @property
+    def trainable_variables(self) -> list[KerasVariable]: ...
+
+    @property
+    def non_trainable_variables(self) -> list[KerasVariable]: ...
+
+    def __call__(self, inputs: ArrayLike) -> JaxArray: ...
+
+    def stateless_call(
+        self,
+        trainable_variables: Variables,
+        non_trainable_variables: Variables,
+        inputs: ArrayLike,
+        *,
+        training: bool,
+    ) -> tuple[JaxArray, Variables]: ...
+
+    def save(self, filepath: str | PathLike[str]) -> None: ...
+
+
+class StatelessOptimizer(Protocol):
+    @property
+    def variables(self) -> list[KerasVariable]: ...
+
+    def build(self, variables: list[KerasVariable]) -> None: ...
+
+    def stateless_apply(
+        self,
+        optimizer_variables: Variables,
+        gradients: Variables,
+        trainable_variables: Variables,
+    ) -> tuple[Variables, Variables]: ...
 
 
 # ---------------------------------

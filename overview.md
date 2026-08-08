@@ -35,14 +35,14 @@ The difficulty: we never measure `z_true` for real data events. We only have MC 
 **Discriminator `d(x)`** — reco-level network
 
 - Input: `x` (reco-level events, both data and reweighted sim)
-- Output: probability in [0,1] via sigmoid
+- Output: probability in \[0,1\] via sigmoid
 - Trained to distinguish data (y=1) from reweighted sim (y=0)
 
 ### Loss function
 
 Weighted binary cross-entropy:
 
-```
+```text
 L = -mean[ w_i * y_i * log(d(x_i)) + w_i * (1-y_i) * log(1 - d(x_i)) ]
 ```
 
@@ -102,7 +102,7 @@ bit-identical between the two arms.
 
 Both networks share the same MLP structure:
 
-```
+```text
 Input (dim,) → [Dense(64, relu)] × n_layers → Dense(1, activation)
 ```
 
@@ -118,7 +118,7 @@ Hyperparameters exposed at CLI: `--hidden-units`, `--n-layers`.
 
 ### Weight normalization (`_compute_weights`)
 
-```
+```python
 w_MC = g(z_gen) * N_MC / sum(g(z_gen))   (MC events)
 w_data = 1                                (data events)
 ```
@@ -152,7 +152,7 @@ Controlled test where the true answer is known analytically. Each YAML in `param
 
 Data generation:
 
-```
+```python
 z_true ~ N(mu_true, cov_true)       # data particle-level
 x_data = z_true + ε, ε ~ N(0, cov_detector)   # data reco
 
@@ -245,8 +245,8 @@ Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs e
 
 Classic frequentist unfolding. 1D per-variable:
 
-1. Build response matrix R[t,r] = P(reco=r | truth=t) from MC
-2. Apply Bayes iteratively: P(t|r) = R[t,r]·P(t) / Σ R[t',r]·P(t')
+1. Build response matrix R\[t,r\] = P(reco=r | truth=t) from MC
+2. Apply Bayes iteratively: P(t|r) = R\[t,r\]·P(t) / Σ R\[t',r\]·P(t')
 3. Convert unfolded histogram → per-event weights for comparison
 
 **Purity-based binning:** bins are grown greedily from the left until P(same bin at gen and reco) > √0.5 ≈ 0.707. This ensures the response matrix is well-conditioned.
@@ -271,7 +271,7 @@ All three plots overlay OmniFold and IBU curves if their weights are present in 
 
 ## 11. Run Lifecycle
 
-```
+```shell
 uv run -m ran --config params/1d_default.yaml
   └─ parse YAML → generate/load dataset → train (adversarial) → save to runs/<timestamp>/
        ├── generator.keras, discriminator.keras

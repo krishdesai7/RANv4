@@ -33,3 +33,35 @@ def test_builder_contract_hides_unsupported_model_members(tmp_path: Path) -> Non
     assert "unsupported_builder_model_member" in completed.stdout
     assert "unsupported_loaded_model_member" in completed.stdout
     assert "missing-attribute" in completed.stdout
+
+
+def test_builder_contract_rejects_invalid_keras_construction(tmp_path: Path) -> None:
+    """Pyrefly checks the narrow Keras construction surface."""
+    probe = tmp_path / "keras_construction_contract.py"
+    probe.write_text(
+        "from ran.models import _keras_dense, _keras_input, _keras_model\n\n"
+        "inputs = _keras_input(shape=(1,), dtype='float64')\n"
+        "_keras_input(shape=(1,), dtype='float64', unexpected=True)\n"
+        "_keras_dense('64', activation='relu', dtype='float64')\n"
+        "_keras_dense(64, activation='relu', dtype='float64')(object())\n"
+        "_keras_model(object(), inputs, name='invalid')\n"
+    )
+    root = Path(__file__).parents[1]
+    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed local probe
+        [
+            str(root / ".venv" / "bin" / "pyrefly"),
+            "check",
+            "--config",
+            str(root / "pyproject.toml"),
+            str(probe),
+        ],
+        check=False,
+        capture_output=True,
+        cwd=root,
+        text=True,
+    )
+
+    assert completed.returncode != 0, completed.stdout
+    assert "Unexpected keyword argument `unexpected`" in completed.stdout
+    assert "parameter `units` with type `int`" in completed.stdout
+    assert "parameter `inputs` with type `KerasTensor`" in completed.stdout

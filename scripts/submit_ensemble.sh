@@ -1,12 +1,21 @@
 #!/bin/bash
-# HEP ensemble on the JAX arm: N trainings that differ only in weight init.
+# HEP ensemble on the JAX arm: N trainings that differ along exactly one axis.
 #
 #   Run on the login node:  SHARED=1 scripts/submit_ensemble.sh
+#                           SHARED=1 VARY=data scripts/submit_ensemble.sh
 #
-# `data_seed` is held fixed so every member sees identical events, splits and
-# batch order; only `--seed` moves. The spread across members is therefore the
-# model uncertainty from initialization alone, which is the number needed to say
-# whether a single run's result is a real effect or run-to-run noise.
+# The two seeds are independent (see the Seeding section of CLAUDE.md) and this
+# moves one at a time, so the spread across members attributes cleanly:
+#
+#   VARY=init   --seed moves, --data-seed pinned. Every member sees identical
+#               events, splits and batch order, so the spread is the model
+#               uncertainty from initialization -- what says whether a single
+#               run's result is an effect or run-to-run noise.
+#   VARY=data   --data-seed moves, --seed pinned. The spread is instead how much
+#               a score depends on which events landed in the test split. That
+#               is the floor under any cross-arm comparison, because the two
+#               arms partition differently and no ensemble can separate a
+#               split effect from an implementation effect.
 #
 # Trains only. The baselines are init-independent -- OmniFold and IBU would
 # produce the same answer every member and cost ~7 minutes each doing it -- and
@@ -21,8 +30,18 @@
 # together would collide on a name and on the runs/ diff that finds it.
 #
 # Knobs (environment):
-#   SEEDS="0 1 ... 7"   weight-init seeds, one member each
-#   DATA_SEED=42        held fixed across members -- this is the whole point
+#   VARY=init           vary --seed at fixed --data-seed: model uncertainty from
+#                       initialization. The default, and what an ensemble means
+#                       in the HEP sense.
+#   VARY=data           vary --data-seed at fixed --seed instead: how much a
+#                       score moves when only the train/val/test partition
+#                       changes. Needed to interpret any cross-arm difference,
+#                       because the two arms do not share a test split -- see
+#                       the _split_mismatch warning in scripts/compare_runs.py.
+#                       Each member is a cache miss, so this arm regenerates the
+#                       dataset every time; at 500k 2D that is seconds.
+#   SEEDS="0 1 ... 7"   the values to sweep, one member each
+#   SEED / DATA_SEED    whichever of the two VARY does not move
 #   SHARED=1, LOCAL=1, CONFIG, N_SAMPLES, GPUS, TIME, QOS
 #                       as in scripts/submit.sh
 # Anything passed on the command line is forwarded to every `ran train`.
@@ -31,6 +50,8 @@ set -euo pipefail
 PROJECT_DIR=${PROJECT_DIR:-/global/u1/k/kdesai/RANv4}
 CONFIG=${CONFIG:-params/2d_correlated.yaml}
 ARM=jax
+VARY=${VARY:-init}
+SEED=${SEED:-0}
 # Eight members: the sample SD carries ~27% relative error at n=8 against ~35%
 # at n=5, and at ~45s a member the extra three are close to free.
 SEEDS=${SEEDS:-"0 1 2 3 4 5 6 7"}
@@ -48,14 +69,20 @@ else
   NODE_FLAGS=(--nodes=1 --gpus-per-node="${GPUS}")
 fi
 
-BENCH_DIR="${PROJECT_DIR}/bench/ensemble_${ARM}_$(date -u +%Y-%m-%dT%H%M%SZ)"
+case "${VARY}" in
+  init) HELD="data_seed=${DATA_SEED}" ;;
+  data) HELD="seed=${SEED}" ;;
+  *) echo "VARY must be 'init' or 'data', got '${VARY}'" >&2; exit 2 ;;
+esac
+
+BENCH_DIR="${PROJECT_DIR}/bench/ensemble_${ARM}_${VARY}_$(date -u +%Y-%m-%dT%H%M%SZ)"
 mkdir -p "${BENCH_DIR}"
 printf '%s\n' "$@" > "${BENCH_DIR}/train_args"
 
 echo "Arm:        ${ARM} (JAX), train only"
 echo "Bench dir:  ${BENCH_DIR}"
 echo "Config:     ${CONFIG}   n_samples=${N_SAMPLES}"
-echo "Seeds:      ${SEEDS}   (data_seed=${DATA_SEED}, fixed)"
+echo "Varying:    ${VARY}   over ${SEEDS}   (${HELD}, fixed)"
 echo "Resources:  ${GPUS} GPU, qos=${QOS}, time=${TIME}"
 
 cat > "${BENCH_DIR}/job.sh" <<'EOF'
@@ -76,7 +103,9 @@ BENCH="${BENCH_DIR}/bench.jsonl"
   echo "slurm_job=${SLURM_JOB_ID:-none}"
   echo "config=${CONFIG}"
   echo "n_samples=${N_SAMPLES}"
+  echo "vary=${VARY}"
   echo "seeds=${SEEDS}"
+  echo "seed=${SEED}"
   echo "data_seed=${DATA_SEED}"
   echo "date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "${BENCH_DIR}/provenance.txt"
@@ -105,29 +134,38 @@ mkdir -p runs
 FAILED=0
 
 for s in ${SEEDS}; do
-  log="${BENCH_DIR}/train_seed${s}.txt"
-  tv="${BENCH_DIR}/train_seed${s}.time"
+  # Whichever axis VARY names takes the sweep value; the other is pinned.
+  if [[ ${VARY} == data ]]; then
+    m_seed=${SEED}
+    m_data_seed=${s}
+  else
+    m_seed=${s}
+    m_data_seed=${DATA_SEED}
+  fi
+
+  log="${BENCH_DIR}/train_member${s}.txt"
+  tv="${BENCH_DIR}/train_member${s}.time"
 
   before=$(mktemp); after=$(mktemp)
   ls -1d runs/*/ 2> /dev/null | sort > "${before}"
 
-  echo "=== [seed ${s}] $(date -u +%H:%M:%S) ==="
+  echo "=== [member ${s}: seed=${m_seed} data_seed=${m_data_seed}] $(date -u +%H:%M:%S) ==="
   start=$(date +%s)
   if [[ ${HAVE_GNU_TIME} == 1 ]]; then
     /usr/bin/time -v -o "${tv}" \
       uv run -m ran train \
       --config="${CONFIG}" \
       --n-samples="${N_SAMPLES}" \
-      --seed="${s}" \
-      --data-seed="${DATA_SEED}" \
+      --seed="${m_seed}" \
+      --data-seed="${m_data_seed}" \
       ${EXTRA[@]+"${EXTRA[@]}"} > "${log}" 2>&1
     rc=$?
   else
     uv run -m ran train \
       --config="${CONFIG}" \
       --n-samples="${N_SAMPLES}" \
-      --seed="${s}" \
-      --data-seed="${DATA_SEED}" \
+      --seed="${m_seed}" \
+      --data-seed="${m_data_seed}" \
       ${EXTRA[@]+"${EXTRA[@]}"} > "${log}" 2>&1
     rc=$?
   fi
@@ -144,19 +182,19 @@ for s in ${SEEDS}; do
   rm -f "${before}" "${after}"
   run_dir=${run_dir%/}
 
-  printf '{"stage":"train_seed%s","seed":%s,"wall_s":%d,"max_rss_kb":%s,"exit":%d,"run_dir":"%s"}\n' \
-    "${s}" "${s}" "${wall}" "${rss}" "${rc}" "${run_dir}" >> "${BENCH}"
-  echo "=== [seed ${s}] exit=${rc} wall=${wall}s run_dir=${run_dir} ==="
+  printf '{"stage":"train_member%s","seed":%s,"data_seed":%s,"wall_s":%d,"max_rss_kb":%s,"exit":%d,"run_dir":"%s"}\n' \
+    "${s}" "${m_seed}" "${m_data_seed}" "${wall}" "${rss}" "${rc}" "${run_dir}" >> "${BENCH}"
+  echo "=== [member ${s}] exit=${rc} wall=${wall}s run_dir=${run_dir} ==="
 
-  # One bad member must not cost the other four; the aggregator reports how
-  # many it actually found rather than assuming all of them landed.
+  # One bad member must not cost the others; the aggregator reports how many it
+  # actually found rather than assuming all of them landed.
   if [[ ${rc} -ne 0 || -z "${run_dir}" ]]; then
-    echo "WARNING: seed ${s} failed; see ${log}"
+    echo "WARNING: member ${s} failed; see ${log}"
     FAILED=$((FAILED + 1))
     continue
   fi
-  cp "${run_dir}/metrics.json" "${BENCH_DIR}/metrics_seed${s}.json" 2> /dev/null \
-    || echo "WARNING: seed ${s} wrote no metrics.json"
+  cp "${run_dir}/metrics.json" "${BENCH_DIR}/metrics_member${s}.json" 2> /dev/null \
+    || echo "WARNING: member ${s} wrote no metrics.json"
 done
 
 sacct -j "${SLURM_JOB_ID:-0}" \
@@ -173,7 +211,7 @@ uv run scripts/ensemble_spread.py "${BENCH_DIR}" \
 EOF
 chmod +x "${BENCH_DIR}/job.sh"
 
-export PROJECT_DIR BENCH_DIR CONFIG N_SAMPLES ARM SEEDS DATA_SEED
+export PROJECT_DIR BENCH_DIR CONFIG N_SAMPLES ARM SEEDS SEED DATA_SEED VARY
 export REFERENCE="${REFERENCE:-}"
 
 if [[ ${LOCAL:-0} == 1 ]]; then
@@ -193,9 +231,9 @@ fi
 JOB=$(sbatch --parsable \
   --qos="${QOS}" --constraint=gpu --account=m3246_g --time="${TIME}" \
   "${NODE_FLAGS[@]}" \
-  --job-name="ran_ensemble" \
+  --job-name="ran_ens_${VARY}" \
   --output="${BENCH_DIR}/slurm-%j.log" \
-  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEEDS=${SEEDS},DATA_SEED=${DATA_SEED},ARM=${ARM},REFERENCE=${REFERENCE}" \
+  --export="ALL,PROJECT_DIR=${PROJECT_DIR},BENCH_DIR=${BENCH_DIR},CONFIG=${CONFIG},N_SAMPLES=${N_SAMPLES},SEEDS=${SEEDS},SEED=${SEED},DATA_SEED=${DATA_SEED},VARY=${VARY},ARM=${ARM},REFERENCE=${REFERENCE}" \
   "${BENCH_DIR}/job.sh")
 
 echo

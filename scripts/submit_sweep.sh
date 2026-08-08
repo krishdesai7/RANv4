@@ -10,7 +10,11 @@
 # srun step placement. collect runs inline at the end of the same job.
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/RANv4
+# Default to the tree this script lives in, not a fixed path: the launcher is
+# also run from `git worktree` checkouts of the other branch, and the job body
+# does `cd "${PROJECT_DIR}"`. A hardcoded default would send every one of them
+# back to the same directory -- wrong branch, and a shared runs/ to collide in.
+PROJECT_DIR=${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 N_POINTS=24
 
 # NODES=6 -> 24 GPUs == 24 points -> every point runs at once, one GPU each

@@ -241,7 +241,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
 
     config = json.loads((run_dir / "config.json").read_text())
     logger.info("%s: loading model and data...", run_dir.name)
-    g = keras.saving.load_model(run_dir / "generator.keras")
+    g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
 
     splits: DatasetSplits = _load_splits(config)
     z, x, y = _collect_test_data(splits.test)

@@ -10,11 +10,10 @@ import numpy as np
 if TYPE_CHECKING:
     from typing import Any, Final, Literal
 
-    import keras
     from numpy.typing import NDArray
 
     from ..data import ArrayDataset
-    from .types import MetricRecord, Variables
+    from .types import MetricRecord, RANModel, Variables
 
 # --------------------------------
 # Training
@@ -26,8 +25,8 @@ if TYPE_CHECKING:
 class TrainResult(NamedTuple):
     """What `train` returns. Unpacks as ``(g, d, history, seed)``."""
 
-    g: keras.Model
-    d: keras.Model
+    g: RANModel
+    d: RANModel
     history: dict[str, list[float]]
     seed: int
 

@@ -1,0 +1,54 @@
+=== [member 0: seed=0 data_seed=0] 03:51:53 ===
+=== [member 0] exit=0 wall=50s run_dir=runs/2026-08-08T035234Z ===
+=== [member 1: seed=0 data_seed=1] 03:52:43 ===
+=== [member 1] exit=0 wall=32s run_dir=runs/2026-08-08T035306Z ===
+=== [member 2: seed=0 data_seed=2] 03:53:15 ===
+=== [member 2] exit=0 wall=36s run_dir=runs/2026-08-08T035343Z ===
+=== [member 3: seed=0 data_seed=3] 03:53:51 ===
+=== [member 3] exit=0 wall=34s run_dir=runs/2026-08-08T035418Z ===
+=== [member 4: seed=0 data_seed=4] 03:54:27 ===
+=== [member 4] exit=0 wall=35s run_dir=runs/2026-08-08T035454Z ===
+=== [member 5: seed=0 data_seed=5] 03:55:03 ===
+=== [member 5] exit=0 wall=35s run_dir=runs/2026-08-08T035530Z ===
+=== [member 6: seed=0 data_seed=6] 03:55:38 ===
+=== [member 6] exit=0 wall=35s run_dir=runs/2026-08-08T035604Z ===
+=== [member 7: seed=0 data_seed=7] 03:56:13 ===
+=== [member 7] exit=0 wall=34s run_dir=runs/2026-08-08T035638Z ===
+
+===================== SUMMARY (ensemble) =====================
+{"stage":"train_member0","seed":0,"data_seed":0,"wall_s":50,"max_rss_kb":2819868,"exit":0,"run_dir":"runs/2026-08-08T035234Z"}
+{"stage":"train_member1","seed":0,"data_seed":1,"wall_s":32,"max_rss_kb":2807448,"exit":0,"run_dir":"runs/2026-08-08T035306Z"}
+{"stage":"train_member2","seed":0,"data_seed":2,"wall_s":36,"max_rss_kb":2786628,"exit":0,"run_dir":"runs/2026-08-08T035343Z"}
+{"stage":"train_member3","seed":0,"data_seed":3,"wall_s":34,"max_rss_kb":2782904,"exit":0,"run_dir":"runs/2026-08-08T035418Z"}
+{"stage":"train_member4","seed":0,"data_seed":4,"wall_s":35,"max_rss_kb":2799600,"exit":0,"run_dir":"runs/2026-08-08T035454Z"}
+{"stage":"train_member5","seed":0,"data_seed":5,"wall_s":35,"max_rss_kb":2814672,"exit":0,"run_dir":"runs/2026-08-08T035530Z"}
+{"stage":"train_member6","seed":0,"data_seed":6,"wall_s":35,"max_rss_kb":2786620,"exit":0,"run_dir":"runs/2026-08-08T035604Z"}
+{"stage":"train_member7","seed":0,"data_seed":7,"wall_s":34,"max_rss_kb":2803632,"exit":0,"run_dir":"runs/2026-08-08T035638Z"}
+failed members: 0
+
+==============================================================================
+ensemble spread: jax (vary=data), 8 members (0, 1, 2, 3, 4, 5, 6, 7)
+source: /global/homes/k/kdesai/RANv4d/bench/ensemble_jax_data_2026-08-08T030537Z
+==============================================================================
+
+wasserstein_improvement_pct
+  VARIABLE                MEAN       SD       MIN       MAX
+  detector_dim_0        93.667    3.881    86.698    97.076
+  detector_dim_1        87.123    3.578    81.094    91.203
+  particle_dim_0        93.006    3.265    85.711    96.205
+  particle_dim_1        85.236    2.841    80.603    88.786
+
+jensenshannon_improvement_pct
+  VARIABLE                MEAN       SD       MIN       MAX
+  detector_dim_0        95.268    1.101    92.995    96.417
+  detector_dim_1        93.231    0.838    92.471    94.658
+  particle_dim_0        95.606    0.732    94.145    96.427
+  particle_dim_1        92.266    0.720    91.214    93.146
+
+triangular_improvement_pct
+  VARIABLE                MEAN       SD       MIN       MAX
+  detector_dim_0        95.360    1.065    93.137    96.435
+  detector_dim_1        93.256    0.841    92.510    94.695
+  particle_dim_0        95.638    0.776    94.097    96.492
+  particle_dim_1        92.226    0.724    91.104    93.111
+

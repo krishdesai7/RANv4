@@ -27,7 +27,7 @@ from ran.data import parse_gaussian_config
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ran.rantypes.schema import DatasetSplits
+    from ran.rantypes import DatasetSplits
 
 CONFIG_2D = """
 mu_gen: [0.0, 1.0]

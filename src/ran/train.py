@@ -15,7 +15,7 @@ gradient transform and jit are native JAX.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
 import keras
@@ -23,7 +23,6 @@ import numpy as np
 from keras import ops
 
 from .models import build_discriminator, build_generator
-from .rantypes import TrainResult, TrainState
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -52,8 +51,34 @@ if keras.backend.backend() != "jax":
     )
 
 # Floor for logs and divisions. Lives here rather than in `ran.rantypes`, which
-# has to stay importable without committing a Keras backend.
+# has to stay importable without committing a Keras backend. The two types
+# below are here for the same reason: nothing outside this module builds them,
+# and both name a Keras or JAX object.
 EPS: float = keras.config.epsilon()
+
+
+class TrainResult(NamedTuple):
+    """What `train` returns. Unpacks as ``(g, d, history, seed)``."""
+
+    g: keras.Model
+    d: keras.Model
+    history: dict[str, list[float]]
+    seed: int
+
+
+class TrainState(NamedTuple):
+    """All mutable training state, as a JAX pytree.
+
+    Held outside the `keras.Model`s so jitted steps stay pure and no
+    host/device sync happens between steps.
+    """
+
+    g_trainable: Variables
+    g_non_trainable: Variables
+    d_trainable: Variables
+    d_non_trainable: Variables
+    opt_g: Variables
+    opt_d: Variables
 
 
 def normalize_weights(raw_w, y):

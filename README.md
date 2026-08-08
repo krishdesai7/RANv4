@@ -264,7 +264,11 @@ RANv4/
 │   ├── leakage.py                Data-poisoning leakage check
 │   ├── py.typed                  PEP 561 typing marker
 │   ├── rantypes/
-│   │   ├── schema.py             Dataclasses and enums (RunConfig, TrainState, ...)
+│   │   ├── events.py             Split, Events, ZXY, Populations, DatasetSplits
+│   │   ├── configs.py            GaussianConfig, RunConfig
+│   │   ├── results.py            UnfoldingPopulations, VariableOutcome, IBUResult
+│   │   ├── constants.py          Zenodo record, cache layout, jet plot metadata
+│   │   ├── enums.py              CLI choice enums
 │   │   └── types.py              TypedDicts and array aliases
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion

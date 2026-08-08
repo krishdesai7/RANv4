@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-    from .rantypes import DatasetSplits
+    from .rantypes import DatasetSplits, RANModel
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -105,8 +105,8 @@ def _to_list(v: Any) -> Any:
 
 
 def _save_run(
-    g: keras.Model,
-    d: keras.Model,
+    g: RANModel,
+    d: RANModel,
     history: dict[str, list[float]],
     *,
     batch_size: int,
@@ -154,9 +154,9 @@ def _save_run(
     return run_dir
 
 
-def _load_artifacts(run_dir: Path) -> tuple[keras.Model, dict[str, list[float]]]:
+def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
-    g: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
+    g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
     history: dict[str, list[float]] = {
         k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
     }
@@ -252,13 +252,13 @@ def run(
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
-    g: keras.Model
+    g: RANModel
     history: dict[str, list[float]]
     if load_run is not None:
         run_dir = Path(load_run)
         g, history = _load_artifacts(run_dir)
     else:
-        d: keras.Model
+        d: RANModel
         init_seed: int
         g, d, history, init_seed = train(
             splits,

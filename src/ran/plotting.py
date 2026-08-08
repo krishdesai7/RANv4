@@ -13,11 +13,10 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from logging import Logger
 
-    import keras
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import VarInfo
+    from .rantypes import RANModel, VarInfo
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ def _collect_data(
     return dataset.as_arrays()
 
 
-def _get_weights(g: keras.Model, z_gen: NDArray[np.double]) -> NDArray[np.double]:
+def _get_weights(g: RANModel, z_gen: NDArray[np.double]) -> NDArray[np.double]:
     raw_w: NDArray[np.double] = np.asarray(g(z_gen)).flatten()
     return raw_w / raw_w.mean()
 
@@ -292,7 +291,7 @@ def _plot_level(
 
 def plot_detector_level(
     test_dataset: ArrayDataset,
-    g: keras.Model,
+    g: RANModel,
     save_path: str | Path = "plots/detector_level.pdf",
     var_info: list[VarInfo] | None = None,
     omnifold_weights: NDArray[np.double] | None = None,
@@ -326,7 +325,7 @@ def plot_detector_level(
 
 def plot_particle_level(
     test_dataset: ArrayDataset,
-    g: keras.Model,
+    g: RANModel,
     save_path: str | Path = "plots/particle_level.pdf",
     var_info: list[VarInfo] | None = None,
     omnifold_weights: NDArray[np.double] | None = None,

@@ -1,0 +1,55 @@
+[08/07/26 20:40:55] INFO     Loading dataset from cache:                        
+                             .cache/gaussian_c5d0b9f766085880.npz               
+[08/07/26 20:40:58] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/07/26 20:41:03] INFO     Epoch   1/100  D: 0.6912  G: 0.6912  | Val D:      
+                             0.6920  G: 0.6920  (patience 0/5)                  
+                    INFO     Epoch   2/100  D: 0.6922  G: 0.6922  | Val D:      
+                             0.6928  G: 0.6928  (patience 0/5)                  
+[08/07/26 20:41:04] INFO     Epoch   3/100  D: 0.6930  G: 0.6930  | Val D:      
+                             0.6932  G: 0.6932  (patience 0/5)                  
+                    INFO     Epoch   4/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6931  G: 0.6931  (patience 1/5)                  
+[08/07/26 20:41:05] INFO     Epoch   5/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6930  G: 0.6930  (patience 2/5)                  
+                    INFO     Epoch   6/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6930  G: 0.6930  (patience 3/5)                  
+[08/07/26 20:41:06] INFO     Epoch   7/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6930  G: 0.6930  (patience 4/5)                  
+                    INFO     Epoch   8/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6931  G: 0.6931  (patience 5/5)                  
+                    INFO     Early stopping at epoch 8                          
+[08/07/26 20:41:07] INFO     Test  D: 0.6932  G: 0.6932  (init seed 6)          
+                    INFO     Saved run to runs/2026-08-08T034107Z               
+[08/07/26 20:41:09] INFO     Saved runs/2026-08-08T034107Z/detector_level.pdf   
+[08/07/26 20:41:10] INFO     Saved runs/2026-08-08T034107Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-08T034107Z/losses.pdf           
+                    INFO     2026-08-08T034107Z: loading model and data...      
+                    INFO     Loading dataset: gaussian                          
+                    INFO     Loading dataset from cache:                        
+                             .cache/gaussian_c5d0b9f766085880.npz               
+[08/07/26 20:41:13] INFO     2026-08-08T034107Z: saved metrics to               
+                             runs/2026-08-08T034107Z/metrics.json               
+              2026-08-08T034107Z — Detector level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.2051 │   0.0115 │      +94.4% │
+│          │ JS div       │ 0.006297 │ 0.000274 │      +95.6% │
+│          │ Delta (x1e3) │  24.6600 │   1.0640 │      +95.7% │
+│ dim_1    │ Wasserstein  │   0.2241 │   0.0336 │      +85.0% │
+│          │ JS div       │ 0.004958 │ 0.000304 │      +93.9% │
+│          │ Delta (x1e3) │  19.3164 │   1.1733 │      +93.9% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+              2026-08-08T034107Z — Particle level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.2083 │   0.0098 │      +95.3% │
+│          │ JS div       │ 0.008585 │ 0.000293 │      +96.6% │
+│          │ Delta (x1e3) │  33.4282 │   1.1418 │      +96.6% │
+│ dim_1    │ Wasserstein  │   0.2369 │   0.0354 │      +85.1% │
+│          │ JS div       │ 0.007837 │ 0.000571 │      +92.7% │
+│          │ Delta (x1e3) │  30.2030 │   2.2029 │      +92.7% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘

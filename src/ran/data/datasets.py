@@ -8,15 +8,15 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ..rantypes import DatasetSplits, GaussianConfig
-from .config import parse_gaussian_config, sigma_to_covariance
+from ..rantypes import ZXY, DatasetSplits, Events, GaussianConfig, Populations
+from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from logging import Logger
     from typing import Final, SupportsFloat
 
-    from numpy.typing import ArrayLike, NDArray
+    from numpy.typing import NDArray
 
     from ..rantypes import Batch, Nested
 
@@ -30,27 +30,22 @@ class ArrayDataset:
 
     def __init__(
         self,
-        z: NDArray[np.double],
-        x: NDArray[np.double],
-        y: NDArray[np.ubyte],
+        data: ZXY,
         batch_size: int = 128,
         shuffle: bool = False,
         seed: int = 42,
     ) -> None:
-        if not (len(z) == len(x) == len(y)):
-            raise ValueError(
-                "z, x, y must share a first dimension; "
-                f"got {len(z)}, {len(x)}, {len(y)}"
-            )
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
-        self.z = z
-        self.x = x
-        self.y = y
+        self.data = data
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.seed = seed
         self._pass = 0
+
+    @property
+    def size(self) -> int:
+        return len(self.data)
 
     def reset(self) -> None:
         """Rewind to the first pass, so iteration repeats from the start."""
@@ -58,47 +53,23 @@ class ArrayDataset:
 
     def __len__(self) -> int:
         """Number of batches per pass."""
-        return int(np.ceil(len(self.y) / self.batch_size))
-
-    @property
-    def n_events(self) -> int:
-        return len(self.y)
+        return (self.size + self.batch_size - 1) // self.batch_size
 
     def __iter__(self) -> Iterator[Batch]:
-        order: NDArray[np.intp]
         if self.shuffle:
-            order = np.random.default_rng([self.seed, self._pass]).permutation(
-                len(self.y)
-            )
+            order: NDArray[np.intp] = np.random.default_rng(
+                [self.seed, self._pass]
+            ).permutation(self.size)
             self._pass += 1
         else:
-            order = np.arange(len(self.y))
+            order = np.arange(self.size)
         for start in range(0, len(order), self.batch_size):
-            idx = order[start : start + self.batch_size]
-            yield {"z": self.z[idx], "x": self.x[idx]}, self.y[idx]
+            idx: NDArray[np.intp] = order[start : start + self.batch_size]
+            yield {"z": self.data.z[idx], "x": self.data.x[idx]}, self.data.y[idx]
 
-    def as_arrays(
-        self,
-    ) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
-        """Return the whole split as flat (z, x, y) arrays, in stored order."""
-        return self.z, self.x, self.y.reshape(-1)
-
-
-def _parse_params(params: dict[str, ArrayLike]) -> GaussianConfig:
-    """Normalize inline params dict into the shape `parse_gaussian_config` returns."""
-    mu_gen: NDArray[np.double] = np.asarray(params["mu_gen"], dtype=np.double).ravel()
-    mu_true: NDArray[np.double] = np.asarray(params["mu_true"], dtype=np.double).ravel()
-    dim: int = mu_gen.shape[0]
-    if mu_true.shape[0] != dim:
-        raise ValueError(f"mu_true has dim {mu_true.shape[0]}, expected {dim}")
-    return GaussianConfig(
-        dim,
-        mu_gen,
-        mu_true,
-        sigma_to_covariance(params["sigma_gen"], dim),
-        sigma_to_covariance(params["sigma_true"], dim),
-        sigma_to_covariance(params["sigma_detector"], dim),
-    )
+    def as_arrays(self) -> ZXY:
+        """Return the whole split as flat labelled arrays, in stored order."""
+        return self.data
 
 
 class RANDataset:
@@ -123,9 +94,7 @@ class RANDataset:
 
         self.val_fraction = val_fraction
         self.test_fraction = test_fraction
-        self.dataset: (
-            tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]] | None
-        ) = None
+        self.dataset: ZXY | None = None
         self.splits: DatasetSplits | None = None
 
     @staticmethod
@@ -154,22 +123,14 @@ class RANDataset:
         cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
 
-    def _build_dataset(
-        self,
-        z: NDArray[np.double],
-        x: NDArray[np.double],
-        y: NDArray[np.ubyte],
-    ) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]]:
+    def _build_dataset(self, data: ZXY) -> ZXY:
+        """Shuffle so that both classes are spread across every split."""
         rng: np.random.Generator = np.random.default_rng(self.seed)
-        order: NDArray[np.intp] = rng.permutation(len(y))
-        return z[order], x[order], y[order]
+        order: NDArray[np.intp] = rng.permutation(len(data))
+        return ZXY(Events(data.z[order], data.x[order]), data.y[order])
 
-    def _split_dataset(
-        self,
-        dataset: tuple[NDArray[np.double], NDArray[np.double], NDArray[np.ubyte]],
-    ) -> DatasetSplits:
-        z, x, y = dataset
-        n: int = len(y)
+    def _split_dataset(self, dataset: ZXY) -> DatasetSplits:
+        n: int = len(dataset)
         n_test: int = int(n * self.test_fraction)
         n_non_test: int = n - n_test
         val_of_non_test: float = self.val_fraction / (1.0 - self.test_fraction)
@@ -183,9 +144,10 @@ class RANDataset:
 
         def _slice(lo: int, hi: int, shuffle: bool) -> ArrayDataset:
             return ArrayDataset(
-                z[lo:hi],
-                x[lo:hi],
-                y[lo:hi],
+                ZXY(
+                    Events(dataset.z[lo:hi], dataset.x[lo:hi]),
+                    dataset.y[lo:hi],
+                ),
                 batch_size=self.batch_size,
                 shuffle=shuffle,
                 seed=self.seed,
@@ -225,10 +187,8 @@ class RANDataset:
 
         if cache_path.exists():
             logger.info("Loading dataset from cache: %s", cache_path)
-            with np.load(cache_path) as data:
-                z = data["z"]
-                x = data["x"]
-                y = data["y"]
+            with np.load(cache_path) as cached:
+                data = ZXY(Events(cached["z"], cached["x"]), cached["y"])
         else:
             rng: np.random.Generator = np.random.default_rng(self.seed)
 
@@ -255,26 +215,17 @@ class RANDataset:
             s_sim: NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
             x_sim: NDArray[np.double] = z_gen + s_sim @ chol_det.T
 
-            y_nat: NDArray[np.ubyte] = np.ones(n_samples, dtype=np.ubyte)
-            y_mc: NDArray[np.ubyte] = np.zeros(n_samples, dtype=np.ubyte)
+            data = Populations(
+                mc=Events(z_gen, x_sim), data=x_data, truth=z_true
+            ).interleave()
 
-            z: NDArray[np.double] = np.concatenate((z_true, z_gen), axis=0)
-            x: NDArray[np.double] = np.concatenate((x_data, x_sim), axis=0)
-            y: NDArray[np.ubyte] = np.concatenate((y_nat, y_mc), axis=0)
-
-            np.savez_compressed(cache_path, z=z, x=x, y=y)
+            np.savez_compressed(cache_path, z=data.z, x=data.x, y=data.y)
             logger.info("Generated and saved dataset to cache: %s", cache_path)
 
-        self.dataset = self._build_dataset(z, x, y)
-        self.splits = self._split_dataset(self.dataset)
-        return self.splits
+        return self.splits_from_data(data)
 
-    def splits_from_arrays(
-        self,
-        z: NDArray[np.double],
-        x: NDArray[np.double],
-        y: NDArray[np.ubyte],
-    ) -> DatasetSplits:
-        self.dataset = self._build_dataset(z, x, y)
+    def splits_from_data(self, data: ZXY) -> DatasetSplits:
+        """Shuffle one labelled sample and cut it into train/val/test."""
+        self.dataset = self._build_dataset(data)
         self.splits = self._split_dataset(self.dataset)
         return self.splits

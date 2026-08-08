@@ -118,6 +118,7 @@ extend-select = [
     "LOG",  # (flake8-logging): Flags logging anti-patterns (such as string formatting inside logger calls instead of passing lazy arguments).
     "TC",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
 ]
+ignore = ["runtime-cast-value"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
@@ -147,13 +148,6 @@ ignore-labels = ["internal", "ci", "testing", "automations"]
 "Rust API" = ["rustlib"]
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
-
-
-[tool.pyright]
-venvPath = "."
-venv = ".venv"
-stubPath = ""
-extraPaths = []
 
 
 [tool.complexipy]

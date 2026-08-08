@@ -335,31 +335,31 @@ def _run_and_evaluate(
     if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
         raise ValueError("purity_threshold must be finite and between zero and one")
 
-    data = load_populations(config)
-    weights = np.empty((config.dim, data.test_mc_gen.shape[0]), dtype=np.double)
+    full, test = load_populations(config)
+    weights = np.empty((config.dim, len(test.mc)), dtype=np.double)
     metrics: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(config.variable_names):
         unfolding = _unfold_variable(
             variable_name=variable_name,
-            response_gen=data.response_gen[:, dimension],
-            response_sim=data.response_sim[:, dimension],
-            observed_reco=data.observed_reco[:, dimension],
-            test_mc_gen=data.test_mc_gen[:, dimension],
+            response_gen=full.mc.z[:, dimension],
+            response_sim=full.mc.x[:, dimension],
+            observed_reco=full.data[:, dimension],
+            test_mc_gen=test.mc.z[:, dimension],
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
         )
         weights[dimension] = unfolding.weights
         outcomes.append(unfolding.outcome)
         metrics[f"detector_{variable_name}"] = evaluate_dimension(
-            data.test_data_reco[:, dimension],
-            data.test_mc_reco[:, dimension],
+            test.data[:, dimension],
+            test.mc.x[:, dimension],
             unfolding.weights,
         )
         metrics[f"particle_{variable_name}"] = evaluate_dimension(
-            data.test_data_gen[:, dimension],
-            data.test_mc_gen[:, dimension],
+            test.truth[:, dimension],
+            test.mc.z[:, dimension],
             unfolding.weights,
         )
 

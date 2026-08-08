@@ -11,13 +11,13 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "jax>=0.11.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "jax[cuda12]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
-    "keras>=3.13.2",
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.3",
+    "jax[cuda13]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "keras>=3.15.1",
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
     "omnifold>=0.1.36",
-    "pyyaml>=6.0",
-    "scipy>=1.15.0",
+    "pyyaml>=6.0.3",
+    "scipy>=1.18.0",
     "typer>=0.27.1",
 ]
 
@@ -34,13 +34,13 @@ email = "krish@desai.ml"
 [dependency-groups]
 dev = [
     "complexipy>=6.2.0",
-    "ipykernel>=7.2.0",
+    "ipykernel>=7.3.0",
     "pre-commit>=4.6.1",
     "pyrefly>=1.2.0",
-    "pytest>=8.0",
+    "pytest>=9.1.1",
     "ruff>=0.16.1",
     "rust-just>=1.58.0",
-    "types-pyyaml>=6.0.12",
+    "types-pyyaml>=6.0.12.20260724",
 ]
 release = [
     "rooster>=0.1.1",
@@ -59,7 +59,6 @@ cache-keys = [
 ]
 
 [tool.uv.build-backend]
-editable-profile = "dev"
 module-name = "ran"
 
 
@@ -68,10 +67,8 @@ pythonpath = ["."]
 filterwarnings = [
     # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a
     # `copy` kwarg, so every `model.save()` trips this from inside Keras's own
-    # `convert_to_numpy`. Third-party and still unfixed as of keras 3.15.1;
-    # nothing on our side reaches it. Python's default filters hide it outside
-    # pytest (it is attributed to keras, not __main__), so this only silences
-    # test output. Scoped to the one message so our own deprecations still show.
+    # `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1. Python's
+    # default filters hide it outside pytest, so this only silences test output.
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
 ]
 
@@ -92,9 +89,7 @@ extend-exclude = ["*.ipynb"]
 [tool.ruff.lint]
 future-annotations = true
 preview = true
-# Physics notation, used deliberately in docstrings and log lines: σ for standard
-# deviation, × for the 1e3 scale factor on the triangular discriminator, Δ for a
-# difference. Confusable with o/x/A only to a reader who is not reading physics.
+# Physics notation
 allowed-confusables = ["σ", "×", "Δ"]
 extend-select = [
     "B",   # flake8-bugbear: likely bugs / footguns
@@ -121,7 +116,7 @@ extend-select = [
     "FURB", # refurb: Modernizes older idiom patterns to modern Python standards
     "T20",  # (flake8-print): Disallows print() statements in production code. Useful if you want to force all output through logging or dedicated output pipelines.
     "LOG",  # (flake8-logging): Flags logging anti-patterns (such as string formatting inside logger calls instead of passing lazy arguments).
-    "TCH",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
+    "TC",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
 ]
 
 [tool.ruff.lint.per-file-ignores]

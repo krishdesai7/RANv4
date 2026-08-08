@@ -1,25 +1,25 @@
-# RANv4: Reweighting Adversarial Networks
+# RAN: Reweighting Adversarial Networks
 
-An adversarial neural network that learns per-event weights to correct simulated (Monte Carlo) distributions so they match observed data. Built with TensorFlow/Keras.
+An adversarial neural network that learns per-event weights to correct simulated (Monte Carlo) distributions so they match observed data. Built with Keras 3 on the JAX backend.
 
 ## Motivation
 
-In particle physics, Monte Carlo (MC) simulations are used to model detector responses and physical processes. These simulations never perfectly reproduce real data -- there are always residual mismodelling effects. Traditional reweighting uses hand-tuned correction factors binned in one or two variables, which scales poorly to high-dimensional feature spaces.
+In particle physics, Monte Carlo (MC) simulations are used to model detector responses and physical processes. These simulations never perfectly reproduce real data. There are always residual mismodelling effects. Traditional reweighting uses hand-tuned correction factors binned in one or two variables, which scales poorly to high-dimensional feature spaces.
 
 RANv4 replaces this with a learned reweighting: a **generator** network predicts a continuous per-event weight from particle-level (truth) features, while an **adversarial discriminator** tries to distinguish the reweighted simulation from real data. At convergence the discriminator can no longer tell them apart, and the generator's weights constitute an optimal correction.
 
-## How It Works
+## Model
 
 The system is a two-player adversarial game over event weights:
 
-| Component                | Input                      | Output                                         | Role                                        |
-| ------------------------ | -------------------------- | ---------------------------------------------- | ------------------------------------------- |
-| **Generator** $g(z)$     | Particle-level feature $z$ | Per-event weight (`logplus` = $\log(1+\exp)$ ) | Predict weights that make MC look like data |
-| **Discriminator** $d(x)$ | Detector-level feature $x$ | Data vs MC probability (`sigmoid`)             | Distinguish real data from reweighted MC    |
+| Component                | Input                      | Output                                         | Role                                          |
+| ------------------------ | -------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| **Generator** $g(z)$     | Particle-level feature $z$ | Per-event weight (`logplus` = $\log(1+\exp)$ ) | Predict weights that make MC look like nature |
+| **Discriminator** $d(x)$ | Detector-level feature $x$ | Data vs MC probability (`sigmoid`)             | Distinguish real data from reweighted MC      |
 
-**Training loop:**
+### Training loop
 
-1. **Discriminator step**: freeze $g$, update $d$ to maximize weighted binary cross-entropy (classify data vs reweighted MC)
+1. **Discriminator step**: freeze $g$, update $d$ to maximize weighted binary cross-entropy (classify Data vs reweighted Simulation)
 2. **Generator step**: freeze $d$, update $g$ to minimize the same loss (fool the discriminator).
 3. Repeat with 5:1 D:G update ratio
 
@@ -31,24 +31,35 @@ In equilibrium, both losses converge to $\log(2)$ and the reweighted MC matches 
 
 ## Installation
 
-Uses [`UV-Astral`](https://docs.astral.sh/uv/) for dependency management. One way to install `uv` is with `pip install uv`. For alternative installation methods, see the [UV documentation](https://docs.astral.sh/uv/getting-started/installation/).
+Requires Python >= 3.13. Uses [`uv`](https://docs.astral.sh/uv/) for dependency management. One way to install it is with `pip install uv`; for alternatives see the [uv documentation](https://docs.astral.sh/uv/getting-started/installation/).
 
-```bash
-git clone <repo-url> && cd RANv4
+```shell
+git clone https://github.com/krishdesai7/RANv4.git
+cd RANv4
 uv sync
 ```
 
 ### GPU Support
 
-NVIDIA cuDNN is included in the dependencies for GPU acceleration. Ensure compatible CUDA drivers are installed on your system.
+The JAX dependency is platform-resolved:
+
+#### Linux, x86_64
+
+Built against `jax[cuda13]` on x86_64 Linux, compiled against CUDA version 13.0. For NVIDIA GPUs, the CUDA 13 runtime libraries are available as pypi wheels that the JAX binary is built against, so only a compatible NVIDIA driver is needed.
+
+#### macOS, arm64 (Apple Silicon)
+
+The official macOS arm64 wheels for JAX do not provide GPU acceleration. Therefore JAX and consequentially RAN only offer CPU support on Apple Silicon;
+
+Experimental alternatives, such as `jax-mps` or `IREE`-based workflows, may enable Metal acceleration, but these configurations are not tested or supported by RAN. Users should independently validate their correctness and performance.
 
 ## Usage
 
 ### Gaussian Datasets
 
-Gaussian datasets are configured via YAML files in `params/`:
+Gaussian datasets are configured via YAML files. Examples are provided in `params/`:
 
-```bash
+```shell
 # 1D uncorrelated Gaussian
 uv run -m ran train --config params/1d_default.yaml
 
@@ -81,7 +92,7 @@ Sigma values are promoted to covariance matrices:
 
 ### Jet Substructure
 
-```bash
+```shell
 # All 6 jet variables
 uv run -m ran train --dataset jets
 
@@ -91,7 +102,7 @@ uv run -m ran train --dataset jets --variable m --variable w
 
 ### Other Options
 
-```bash
+```shell
 # Reload an existing run (regenerate plots/metrics)
 uv run -m ran train --load-run runs/2026-03-14T061023Z
 
@@ -103,17 +114,19 @@ sbatch scripts/submit.sh --config params/2d_correlated.yaml
 sbatch scripts/submit.sh --dataset jets
 ```
 
-| Flag             | Default    | Description                                 |
-| ---------------- | ---------- | ------------------------------------------- |
-| `--config`       | `None`     | Path to Gaussian YAML config                |
-| `--dataset`      | `gaussian` | Dataset type: `gaussian` or `jets`          |
-| `--n-samples`    | `500000`   | Number of events per class (data + MC)      |
-| `--batch-size`   | `1024`     | Training batch size                         |
-| `--hidden-units` | `64`       | Units per hidden layer                      |
-| `--n-layers`     | `2`        | Number of hidden layers                     |
-| `--patience`     | `5`        | Early stopping patience (epochs)            |
-| `--variable`     | all 6      | Repeat once for each jet substructure variable to use |
-| `--load-run`     | `None`     | Path to an existing run directory to reload |
+| Flag             | Default        | Description                                           |
+| ---------------- | -------------- | ----------------------------------------------------- |
+| `--config`       | `None`         | Path to Gaussian YAML config                          |
+| `--dataset`      | `gaussian`     | Dataset type: `gaussian` or `jets`                    |
+| `--n-samples`    | `500_000`      | Number of events per class (data + MC)                |
+| `--batch-size`   | `1024`         | Training batch size                                   |
+| `--hidden-units` | `64`           | Units per hidden layer                                |
+| `--n-layers`     | `2`            | Number of hidden layers                               |
+| `--patience`     | `5`            | Early stopping patience (epochs)                      |
+| `--variable`     | all 6          | Repeat once for each jet substructure variable to use |
+| `--load-run`     | `None`         | Path to an existing run directory to reload           |
+| `--seed`         | system entropy | Weight-initialization seed (see [Seeding](#seeding))  |
+| `--data-seed`    | `42`           | Data generation, shuffle, split and batch order       |
 
 The pipeline will:
 
@@ -175,7 +188,7 @@ uv run -m ran sweep collect --sweep-dir runs/cubic-sweep
 
 ### Leakage Verification
 
-A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$ — the particle-level values of real data events, which are unknowable in a real experiment. The `leakage-check` command verifies this empirically via a **data poisoning test**:
+A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$, the particle-level values of measured data events, which are unknowable in a real experiment. The `leakage-check` command verifies this empirically via a **data poisoning test**:
 
 ```bash
 # Clean run — z_true drawn from N(0, 1) as normal
@@ -187,28 +200,85 @@ uv run -m ran leakage-check --poison
 
 The poisoned run corrupts every data particle-level value to a nonsense sentinel (-999) while leaving $x_\text{data}$ (the reco-level observations the discriminator actually sees) unchanged. If $g$ had any access to $z_\text{true}$, the poisoned run would produce degraded weights. Both runs should report statistically identical Wasserstein and triangular discriminator improvements. Matching results confirm that no leakage path exists.
 
+Both arms must share `--seed`, or initialization variance swamps the effect and
+the arms differ even with no leakage. With it fixed, detector-level results are
+bit-identical between the clean and poisoned arms.
+
+## Backend
+
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=1`. **Any `ran.*` import must come before `import keras`.** The backend is fixed at the
+first keras import. `src/ran/train.py` raises a clear error if the backend has been incorrectly initialized.
+
+The project is run in float64 precision end to end. Improved GPU throughput can be achieved by reducing precision to float32 by setting `JAX_ENABLE_X64=0` and switching the`dtype=`arguments in`src/ran/models.py`.
+
+`src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
+
+- Model state lives in JAX pytrees (`TrainState`) for the duration of training
+- Updates are applied through `stateless_call`/`stateless_apply`
+- Each step is a single jitted function.
+- Values are written back into the Keras models at the end, so the returned objects are ordinary saveable `keras.Model`s.
+- Loss math is written in backend-agnostic `keras.ops`.
+- Only the gradient transform and `jit` are native JAX.
+
+It is important to flag two potentially unexpected behaviours that may lead to bugs:
+
+- **`keras.ops.mean` is not float64-safe.**
+  - For float64 input, it selects a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error.
+  - This is why RAN's `src/ran/train.py` reduces with `ops.sum(...) / n` instead of `ops.mean(...)`;
+  - `tests/test_train.py` guards this behaviour.
+  - `ops.sum` is unaffected.
+- **`omnifold` cannot run on JAX.**
+  - Its `weighted_binary_crossentropy` calls raw `tf.gather`, which raises `TracerArrayConversionError` under JAX tracing.
+  - Therefore, `src/ran/baselines/omnifold.py` pins `KERAS_BACKEND=tensorflow` at import and must be the entry point of its own process.
+  - This is why RAN does not allow `omnifold` to be imported from a module that has already touched JAX, and why the cubic sweep splits into separate `sweep ran` / `sweep omnifold` subcommands.
+
+## Seeding
+
+Two independent randomness axes, deliberately kept separate:
+
+| Seed          | Controls                                               |
+| ------------- | ------------------------------------------------------ |
+| `--data-seed` | Generation, shuffle, train/val/test split, batch order |
+| `--seed`      | Weight initialization only                             |
+
+`--seed` defaults to a draw from system entropy, and the value used is recorded in `config.json`, so a run stays reproducible after the fact.
+
+Configs predating this default used `data_seed=42`.
+
+To estimate model uncertainty, ensemble, i.e. rerun on the same inputs with fresh initializations and take the variance as the model uncertainty, is a loop over `--seed` at fixed `--data-seed`.
+
+Because the networks are Dense-only (no dropout or batch norm) and Adam is deterministic, the two seeds together fully determine a run, up to non-deterministic GPU reductions.
+
+Force bitwise reproducibility with `XLA_FLAGS=--xla_gpu_deterministic_ops=true`. This costs throughput and is not needed for variance estimates.
+
 ## Project Structure
 
 ```txt
 RANv4/
-├── ran/                          Python package
+├── src/ran/                      Python package
+│   ├── __init__.py               Pins KERAS_BACKEND=jax and JAX_ENABLE_X64=1
 │   ├── __main__.py               Entry point (uv run -m ran)
 │   ├── cli.py                    Unified Typer command tree
 │   ├── workflow.py               Training and reload workflow
 │   ├── logging_config.py         Structured application logging
 │   ├── leakage.py                Data-poisoning leakage check
+│   ├── py.typed                  PEP 561 typing marker
+│   ├── rantypes/
+│   │   ├── schema.py             Dataclasses and enums (RunConfig, TrainState, ...)
+│   │   └── types.py              TypedDicts and array aliases
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion
 │   │   ├── datasets.py           DatasetSplits, RANDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
 │   │   └── download.py           One-time Zenodo data download
 │   ├── baselines/
-│   │   ├── omnifold.py           OmniFold comparison baseline
+│   │   ├── _shared.py            Run config and populations shared by both (keras-free)
+│   │   ├── omnifold.py           OmniFold comparison baseline (pins TensorFlow)
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 │   ├── experiments/
-│   │   └── cubic_sweep.py         Cubic-response RAN-vs-OmniFold sweep
+│   │   └── cubic_sweep.py        Cubic-response RAN-vs-OmniFold sweep
 │   ├── models.py                 Generator and discriminator architectures
-│   ├── train.py                  Adversarial training loop with early stopping
+│   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
 │   └── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular)
 ├── params/                       Gaussian config YAML files
@@ -220,10 +290,15 @@ RANv4/
 │   ├── submit.sh                 Training and baseline SLURM submission script
 │   └── submit_sweep.sh           Packed cubic-response sweep launcher
 ├── tests/                        pytest tests
+├── .github/workflows/ci.yml      Lint, format, types, complexity, tests, audit
+├── Justfile                      Development recipes (just check, just fix, ...)
 ├── pyproject.toml                Project metadata and dependencies
 ├── runs/                         Output directory (timestamped subdirectories)
 └── .cache/                       Cached datasets
 ```
+
+`src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with
+module-level detail.
 
 ## Datasets
 
@@ -276,14 +351,30 @@ training options are listed above.
 | `hidden_units` | 64      | Units per hidden layer                     |
 | `n_layers`     | 2       | Number of hidden layers                    |
 
+## Development
+
+```shell
+just check     # all local, read-only validation (format, lint, types, complexity, tests)
+just fix       # apply safe lint fixes, then format
+just test      # pytest, forwards extra args
+just typecheck # pyrefly
+just ci        # the full CI suite
+just           # list every recipe
+```
+
+GitHub Actions runs the same suite on push. Lint and format are
+[`ruff`](https://docs.astral.sh/ruff/), type checking is
+[`pyrefly`](https://pyrefly.org/) at `--min-severity info`, and
+[`complexipy`](https://github.com/rohaquinlop/complexipy) enforces a maximum
+cognitive complexity of 10.
+
 ## Dependencies
 
-- [`TensorFlow`](https://www.tensorflow.org/) >= 2.21
-- [`Keras`](https://keras.io/) >= 3.13
-- [`NumPy`](https://numpy.org/) >= 2.4
-- [`SciPy`](https://scipy.org/) >= 1.15
-- [`Matplotlib`](https://matplotlib.org/) >= 3.10
+- [`JAX`](https://docs.jax.dev/) >= 0.11 \(`jax[cuda13]` on x86_64 Linux\)
+- [`Keras`](https://keras.io/) >= 3.15.1
+- [`NumPy`](https://numpy.org/) >= 2.5.1
+- [`SciPy`](https://scipy.org/) >= 1.18.0
+- [`Matplotlib`](https://matplotlib.org/) >= 3.11.1
 - [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
-- [`Rich`](https://rich.readthedocs.io/) >= 13.0
-- [`PyYAML`](https://pyyaml.org/) >= 6.0
-- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1
+- [`PyYAML`](https://pyyaml.org/) >= 6.0.3
+- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1.36

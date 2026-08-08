@@ -67,9 +67,9 @@ If `g` successfully fools `d`, then the reweighted reco-level sim distribution m
 
 This is enforced structurally: the dataset stores `z` for both classes (where `z_true` goes in for data events, `z_gen` for MC), but the training loop only feeds the z-features of MC events (y=0) to `g`. Data event weights are hard-coded to 1.
 
-### Data Poisoning Verification (`scripts/leakage_check.py`)
+### Data Poisoning Verification (`ran leakage-check`, in `src/ran/leakage.py`)
 
-To prove empirically that `g` never sees `z_true`, the script runs two full training trials back-to-back on the same 1D Gaussian setup and compares results:
+To prove empirically that `g` never sees `z_true`, the check runs two full training trials on the same 1D Gaussian setup and compares results:
 
 **CLEAN run:** `z_true ~ N(0, 1)` — normal data particle-level values.
 
@@ -88,13 +88,17 @@ The reco-level `x_data` is generated _before_ poisoning, so the data that the di
 **To run:**
 
 ```bash
-uv run python scripts/leakage_check.py --poison=False   # clean baseline
-uv run python scripts/leakage_check.py --poison=True    # poisoned — should match
+uv run -m ran leakage-check --clean    # clean baseline
+uv run -m ran leakage-check --poison   # poisoned — should match
 ```
+
+Both arms must share `--seed`, or initialization variance swamps the effect and
+they differ even with no leakage. With it fixed, detector-level results are
+bit-identical between the two arms.
 
 ---
 
-## 4. Network Architecture (`ran/models.py`)
+## 4. Network Architecture (`src/ran/models.py`)
 
 Both networks share the same MLP structure:
 
@@ -106,11 +110,11 @@ Input (dim,) → [Dense(64, relu)] × n_layers → Dense(1, activation)
 - Discriminator output: **sigmoid** → probability in (0, 1)
 - Default: 64 hidden units, 2 layers, float64 throughout (physics requires precision)
 
-Hyperparameters exposed at CLI: `--hidden_units`, `--n_layers`.
+Hyperparameters exposed at CLI: `--hidden-units`, `--n-layers`.
 
 ---
 
-## 5. Training Loop (`ran/train.py`)
+## 5. Training Loop (`src/ran/train.py`)
 
 ### Weight normalization (`_compute_weights`)
 
@@ -136,7 +140,7 @@ This is standard GAN practice — the discriminator needs to be slightly "ahead"
 
 ---
 
-## 6. Data Pipeline (`ran/data/`)
+## 6. Data Pipeline (`src/ran/data/`)
 
 ### Gaussian toy datasets (`datasets.py`, `config.py`)
 
@@ -210,7 +214,7 @@ The sigma promotion (`sigma_to_covariance`) unifies all three input forms into a
 
 ---
 
-## 8. Evaluation Metrics (`ran/evaluate.py`)
+## 8. Evaluation Metrics (`src/ran/evaluate.py`)
 
 Three distributional distance metrics, computed **before and after reweighting**, at both detector and particle levels:
 
@@ -226,7 +230,7 @@ All computed per-dimension (1D marginals). Improvement reported as percent reduc
 
 ## 9. Baselines
 
-### OmniFold (`ran/baselines/omnifold.py`)
+### OmniFold (`src/ran/baselines/omnifold.py`)
 
 The standard ML unfolding method. Trains two networks iteratively:
 
@@ -237,7 +241,7 @@ Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs e
 
 **Key difference from RAN:** OmniFold uses a two-step iterative procedure and operates differently at each level. RAN trains both networks simultaneously in an adversarial game, with the generator directly producing particle-level weights in one shot.
 
-### IBU (`ran/baselines/ibu.py`)
+### IBU (`src/ran/baselines/ibu.py`)
 
 Classic frequentist unfolding. 1D per-variable:
 
@@ -251,7 +255,7 @@ Classic frequentist unfolding. 1D per-variable:
 
 ---
 
-## 10. Output Plots (`ran/plotting.py`)
+## 10. Output Plots (`src/ran/plotting.py`)
 
 Each run produces three PDFs:
 

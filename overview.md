@@ -67,9 +67,9 @@ If `g` successfully fools `d`, then the reweighted reco-level sim distribution m
 
 This is enforced structurally: the dataset stores `z` for both classes (where `z_true` goes in for data events, `z_gen` for MC), but the training loop only feeds the z-features of MC events (y=0) to `g`. Data event weights are hard-coded to 1.
 
-### Data Poisoning Verification (`scripts/leakage_check.py`)
+### Data Poisoning Verification (`ran leakage-check`, in `src/ran/leakage.py`)
 
-To prove empirically that `g` never sees `z_true`, the script runs two full training trials back-to-back on the same 1D Gaussian setup and compares results:
+To prove empirically that `g` never sees `z_true`, the check runs two full training trials on the same 1D Gaussian setup and compares results:
 
 **CLEAN run:** `z_true ~ N(0, 1)` — normal data particle-level values.
 
@@ -88,13 +88,17 @@ The reco-level `x_data` is generated _before_ poisoning, so the data that the di
 **To run:**
 
 ```bash
-uv run python scripts/leakage_check.py --poison=False   # clean baseline
-uv run python scripts/leakage_check.py --poison=True    # poisoned — should match
+uv run -m ran leakage-check --clean    # clean baseline
+uv run -m ran leakage-check --poison   # poisoned — should match
 ```
+
+Both arms must share `--seed`, or initialization variance swamps the effect and
+they differ even with no leakage. With it fixed, detector-level results are
+bit-identical between the two arms.
 
 ---
 
-## 4. Network Architecture (`ran/models.py`)
+## 4. Network Architecture (`src/ran/models.py`)
 
 Both networks share the same MLP structure:
 
@@ -106,11 +110,11 @@ Input (dim,) → [Dense(64, relu)] × n_layers → Dense(1, activation)
 - Discriminator output: **sigmoid** → probability in (0, 1)
 - Default: 64 hidden units, 2 layers, float64 throughout (physics requires precision)
 
-Hyperparameters exposed at CLI: `--hidden_units`, `--n_layers`.
+Hyperparameters exposed at CLI: `--hidden-units`, `--n-layers`.
 
 ---
 
-## 5. Training Loop (`ran/train.py`)
+## 5. Training Loop (`src/ran/train.py`)
 
 ### Weight normalization (`_compute_weights`)
 
@@ -119,7 +123,7 @@ w_MC = g(z_gen) * N_MC / sum(g(z_gen))   (MC events)
 w_data = 1                                (data events)
 ```
 
-The `tf.stop_gradient` on weights during the disc step is important: the discriminator should not backpropagate through the generator when updating its own parameters.
+Keeping `g` out of the discriminator update is important: the discriminator should not backpropagate through the generator when updating its own parameters. Under JAX this needs no `stop_gradient` — `disc_step` computes the weights _before_ calling the differentiated function, so they enter it as plain constants, and `jax.value_and_grad` differentiates only with respect to the discriminator's trainable variables.
 
 ### Alternating update schedule
 
@@ -136,7 +140,7 @@ This is standard GAN practice — the discriminator needs to be slightly "ahead"
 
 ---
 
-## 6. Data Pipeline (`ran/data/`)
+## 6. Data Pipeline (`src/ran/data/`)
 
 ### Gaussian toy datasets (`datasets.py`, `config.py`)
 
@@ -210,7 +214,7 @@ The sigma promotion (`sigma_to_covariance`) unifies all three input forms into a
 
 ---
 
-## 8. Evaluation Metrics (`ran/evaluate.py`)
+## 8. Evaluation Metrics (`src/ran/evaluate.py`)
 
 Three distributional distance metrics, computed **before and after reweighting**, at both detector and particle levels:
 
@@ -226,7 +230,7 @@ All computed per-dimension (1D marginals). Improvement reported as percent reduc
 
 ## 9. Baselines
 
-### OmniFold (`ran/baselines/omnifold.py`)
+### OmniFold (`src/ran/baselines/omnifold.py`)
 
 The standard ML unfolding method. Trains two networks iteratively:
 
@@ -237,7 +241,7 @@ Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs e
 
 **Key difference from RAN:** OmniFold uses a two-step iterative procedure and operates differently at each level. RAN trains both networks simultaneously in an adversarial game, with the generator directly producing particle-level weights in one shot.
 
-### IBU (`ran/baselines/ibu.py`)
+### IBU (`src/ran/baselines/ibu.py`)
 
 Classic frequentist unfolding. 1D per-variable:
 
@@ -251,7 +255,7 @@ Classic frequentist unfolding. 1D per-variable:
 
 ---
 
-## 10. Output Plots (`ran/plotting.py`)
+## 10. Output Plots (`src/ran/plotting.py`)
 
 Each run produces three PDFs:
 
@@ -278,9 +282,9 @@ uv run -m ran --config params/1d_default.yaml
        ├── losses.pdf
        └── metrics.json
 
-uv run -m ran.baselines.omnifold --run_dir=runs/...   → metrics_omnifold.json, omnifold_weights.npz
-uv run -m ran.baselines.ibu --run_dir=runs/...        → metrics_ibu.json, ibu_weights.npz
-uv run -m ran --load_run=runs/...                     → reload + re-plot with baseline overlays
+uv run -m ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
+uv run -m ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
+uv run -m ran train --load-run runs/...             → reload + re-plot with baseline overlays
 ```
 
 `config.json` stores full covariance matrices (not just the original YAML scalars) so runs are self-contained and exactly reproducible without the original config file.
@@ -290,11 +294,12 @@ uv run -m ran --load_run=runs/...                     → reload + re-plot with 
 ## 12. Tech Stack
 
 - **Python 3.13** + **uv** (no pip, lockfile-based)
-- **TensorFlow / Keras** — training, `@tf.function` JIT for disc/gen steps
+- **Keras 3 on the JAX backend** — training, `@jax.jit` on each disc/gen/eval step, float64 end to end
 - **NumPy** — data generation and evaluation
 - **SciPy** — Wasserstein distance, Jensen-Shannon divergence
 - **Matplotlib** — publication-quality plots (serif font, ratio panels)
-- **python-fire** — CLI interface (all flags auto-derived from function signatures)
+- **Typer** + **Rich** — one CLI command tree, structured logging and metrics tables
+- **TensorFlow** — only for the OmniFold baseline, which cannot run on JAX and so runs in its own process
 - **SLURM** — `scripts/submit.sh` for cluster runs
 
 ---
@@ -304,8 +309,8 @@ uv run -m ran --load_run=runs/...                     → reload + re-plot with 
 **Q: How do you know the weights learned at reco level give the correct particle-level unfolding?**
 The generator weights are a function of `z_gen` (particle-level). When `g` fools `d`, the reweighted reco distribution matches data. Because the detector smearing is applied on top of the particle-level variable, the weight function on particle space is self-consistent at both levels — it's the same weight for each MC event, applied wherever that event appears.
 
-**Q: Why is `stop_gradient` needed in the disc step?**
-During the discriminator update, weights from `g(z)` are treated as constants. Without `stop_gradient`, TensorFlow would propagate gradients through `g` during the disc update, mixing generator and discriminator gradients. This is standard GAN hygiene.
+**Q: How is `g` held constant during the disc step?**
+During the discriminator update, weights from `g(z)` must be treated as constants — otherwise gradients propagate through `g` during the disc update, mixing generator and discriminator gradients. This is standard GAN hygiene. The TensorFlow implementation used `tf.stop_gradient`; the JAX one does not need it. `disc_step` evaluates the weights outside the function that `jax.value_and_grad` differentiates, and that function is differentiated only with respect to the discriminator's trainable variables, so `g` is structurally excluded rather than gradient-blocked.
 
 **Q: Why does early stopping maximize val D loss rather than minimize it?**
 The discriminator loss measures how well it distinguishes data from sim. At the optimum (distributions matched), it reaches `log(2)`. A higher val D loss means the discriminator is doing better — closer to the equilibrium. We save the checkpoint where val D is highest (best convergence), not lowest.

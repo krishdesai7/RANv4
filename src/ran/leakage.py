@@ -27,10 +27,9 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Literal
 
-    import keras
     from numpy.typing import NDArray
 
-    from .rantypes import DatasetSplits
+    from .rantypes import DatasetSplits, RANModel
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.
-    g: keras.Model = train(
+    g: RANModel = train(
         splits, dim=1, hidden_units=32, n_layers=2, patience=5, seed=init_seed
     ).g
 

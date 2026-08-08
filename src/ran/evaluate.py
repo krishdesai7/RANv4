@@ -37,9 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from logging import Logger
 
-    import keras
-
-    from .rantypes import DatasetSplits
+    from .rantypes import DatasetSplits, RANModel
 
 
 logger: Logger = logging.getLogger(__name__)
@@ -126,7 +124,7 @@ def _collect_test_data(test_ds: ArrayDataset) -> tuple[ndarray, ndarray, ndarray
 
 
 def _get_weights(
-    g: keras.Model, z_gen: npt.NDArray, chunk_size: int = 10_000
+    g: RANModel, z_gen: npt.NDArray, chunk_size: int = 10_000
 ) -> npt.NDArray:
     """Compute normalized generator weights in chunks to limit peak memory."""
     n = len(z_gen)

@@ -14,7 +14,7 @@ from ran.experiments.cubic_sweep import (
     response,
     unfolded_wasserstein,
 )
-from ran.rantypes import TrainResult
+from ran.train import TrainResult
 from scipy.stats import wasserstein_distance
 
 if TYPE_CHECKING:

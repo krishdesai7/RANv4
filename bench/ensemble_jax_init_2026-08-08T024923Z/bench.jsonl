@@ -1,0 +1,8 @@
+{"stage":"train_member0","seed":0,"data_seed":42,"wall_s":37,"max_rss_kb":3717080,"exit":0,"run_dir":"runs/2026-08-08T033830Z"}
+{"stage":"train_member1","seed":1,"data_seed":42,"wall_s":27,"max_rss_kb":3721660,"exit":0,"run_dir":"runs/2026-08-08T033857Z"}
+{"stage":"train_member2","seed":2,"data_seed":42,"wall_s":26,"max_rss_kb":3724160,"exit":0,"run_dir":"runs/2026-08-08T033924Z"}
+{"stage":"train_member3","seed":3,"data_seed":42,"wall_s":25,"max_rss_kb":3708304,"exit":0,"run_dir":"runs/2026-08-08T033950Z"}
+{"stage":"train_member4","seed":4,"data_seed":42,"wall_s":25,"max_rss_kb":3725632,"exit":0,"run_dir":"runs/2026-08-08T034015Z"}
+{"stage":"train_member5","seed":5,"data_seed":42,"wall_s":26,"max_rss_kb":3734992,"exit":0,"run_dir":"runs/2026-08-08T034042Z"}
+{"stage":"train_member6","seed":6,"data_seed":42,"wall_s":24,"max_rss_kb":3720908,"exit":0,"run_dir":"runs/2026-08-08T034107Z"}
+{"stage":"train_member7","seed":7,"data_seed":42,"wall_s":25,"max_rss_kb":3712140,"exit":0,"run_dir":"runs/2026-08-08T034133Z"}

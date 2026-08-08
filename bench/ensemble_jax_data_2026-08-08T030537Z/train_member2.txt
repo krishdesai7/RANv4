@@ -1,0 +1,59 @@
+[08/07/26 20:53:29] INFO     Generated and saved dataset to cache:              
+                             .cache/gaussian_6f8ae71bef7bde96.npz               
+[08/07/26 20:53:32] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/07/26 20:53:38] INFO     Epoch   1/100  D: 0.6907  G: 0.6906  | Val D:      
+                             0.6915  G: 0.6915  (patience 0/5)                  
+                    INFO     Epoch   2/100  D: 0.6922  G: 0.6919  | Val D:      
+                             0.6928  G: 0.6928  (patience 0/5)                  
+[08/07/26 20:53:39] INFO     Epoch   3/100  D: 0.6929  G: 0.6928  | Val D:      
+                             0.6931  G: 0.6931  (patience 0/5)                  
+                    INFO     Epoch   4/100  D: 0.6931  G: 0.6930  | Val D:      
+                             0.6930  G: 0.6930  (patience 1/5)                  
+[08/07/26 20:53:40] INFO     Epoch   5/100  D: 0.6931  G: 0.6932  | Val D:      
+                             0.6932  G: 0.6932  (patience 0/5)                  
+                    INFO     Epoch   6/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6931  G: 0.6931  (patience 1/5)                  
+[08/07/26 20:53:41] INFO     Epoch   7/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6931  G: 0.6931  (patience 2/5)                  
+                    INFO     Epoch   8/100  D: 0.6930  G: 0.6930  | Val D:      
+                             0.6932  G: 0.6932  (patience 3/5)                  
+[08/07/26 20:53:42] INFO     Epoch   9/100  D: 0.6930  G: 0.6929  | Val D:      
+                             0.6931  G: 0.6931  (patience 4/5)                  
+                    INFO     Epoch  10/100  D: 0.6931  G: 0.6931  | Val D:      
+                             0.6931  G: 0.6931  (patience 5/5)                  
+                    INFO     Early stopping at epoch 10                         
+[08/07/26 20:53:43] INFO     Test  D: 0.6931  G: 0.6931  (init seed 0)          
+                    INFO     Saved run to runs/2026-08-08T035343Z               
+[08/07/26 20:53:45] INFO     Saved runs/2026-08-08T035343Z/detector_level.pdf   
+[08/07/26 20:53:46] INFO     Saved runs/2026-08-08T035343Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-08T035343Z/losses.pdf           
+                    INFO     2026-08-08T035343Z: loading model and data...      
+                    INFO     Loading dataset: gaussian                          
+                    INFO     Loading dataset from cache:                        
+                             .cache/gaussian_6f8ae71bef7bde96.npz               
+[08/07/26 20:53:50] INFO     2026-08-08T035343Z: saved metrics to               
+                             runs/2026-08-08T035343Z/metrics.json               
+              2026-08-08T035343Z — Detector level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1953 │   0.0088 │      +95.5% │
+│          │ JS div       │ 0.005978 │ 0.000285 │      +95.2% │
+│          │ Delta (x1e3) │  23.4658 │   1.1084 │      +95.3% │
+│ dim_1    │ Wasserstein  │   0.2130 │   0.0221 │      +89.6% │
+│          │ JS div       │ 0.004700 │ 0.000354 │      +92.5% │
+│          │ Delta (x1e3) │  18.4075 │   1.3787 │      +92.5% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+              2026-08-08T035343Z — Particle level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dim_0    │ Wasserstein  │   0.1981 │   0.0113 │      +94.3% │
+│          │ JS div       │ 0.008220 │ 0.000331 │      +96.0% │
+│          │ Delta (x1e3) │  31.9940 │   1.2455 │      +96.1% │
+│ dim_1    │ Wasserstein  │   0.2309 │   0.0286 │      +87.6% │
+│          │ JS div       │ 0.007606 │ 0.000526 │      +93.1% │
+│          │ Delta (x1e3) │  29.5455 │   2.0669 │      +93.0% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘

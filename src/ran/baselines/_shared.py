@@ -56,7 +56,6 @@ def _parse_variable_names(
 
 
 def parse_run_config(raw: object) -> RunConfig:
-    """Validate a run's config.json into a RunConfig."""
     if not isinstance(raw, dict) or not all(isinstance(k, str) for k in raw):
         raise ValueError("run config must be a JSON object")
 
@@ -83,11 +82,6 @@ def parse_run_config(raw: object) -> RunConfig:
 
 
 def _partitioned(data: ZXY, expected_dim: int, label: str) -> Populations:
-    """Check the shape assumptions the baselines rely on, then partition.
-
-    `label` names the sample in any error, since a caller partitions several
-    and the failures otherwise read identically.
-    """
     if data.z.ndim != 2 or data.x.ndim != 2 or data.z.shape != data.x.shape:
         raise ValueError(
             f"{label}: z and x must be identically shaped two-dimensional arrays"
@@ -107,11 +101,6 @@ def _partitioned(data: ZXY, expected_dim: int, label: str) -> Populations:
 def prepare_populations(
     splits: DatasetSplits, expected_dim: int
 ) -> UnfoldingPopulations:
-    """Validate the dataset and cut it into the populations baselines need.
-
-    Arrays stay float64; a baseline that needs another dtype (OmniFold wants
-    float32 for TensorFlow) casts at its own boundary.
-    """
     return UnfoldingPopulations(
         full=_partitioned(splits.select(Split.ALL), expected_dim, "every split"),
         test=_partitioned(splits.select(Split.TEST), expected_dim, "test split"),
@@ -119,21 +108,14 @@ def prepare_populations(
 
 
 def load_populations(config: RunConfig) -> UnfoldingPopulations:
-    """Rebuild the run's dataset and split it into the baseline populations."""
     return prepare_populations(_load_splits(config.source), config.dim)
 
 
-def evaluate_dimension(
-    reference: NDArray[np.double],
-    comparison: NDArray[np.double],
-    weights: NDArray[np.floating],
+def evaluate_dimension[T: np.floating](
+    reference: NDArray[T],
+    comparison: NDArray[T],
+    weights: NDArray[T],
 ) -> MetricRecord:
-    """Score one dimension before and after reweighting `comparison`.
-
-    `reference` and `comparison` are 1D slices, so each per-dim metric returns a
-    single-element list. `weights` is any float precision -- OmniFold's come
-    back from TensorFlow as float32 and are stored that way.
-    """
     wasserstein_before: float = _wd_per_dim(reference, comparison)[0]
     wasserstein_after: float = _wd_per_dim(reference, comparison, weights=weights)[0]
     jensenshannon_before: float = _js_per_dim(reference, comparison)[0]

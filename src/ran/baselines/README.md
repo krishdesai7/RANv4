@@ -17,9 +17,64 @@ Module `._shared` contains the data handling shared by the IBU and OmniFold base
 
 Both methods attempt the same task: to generate weights to reweight Generation based on the relationship between Data and Simulation, and thus both baselines provide the same inputs and then score the result. So they need the same run config, the same event populations, and the same metric record. Only the unfolding method differs.
 
-`prepare_populations` returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
-
 This module must stay free of `keras` at import time. `ran.baselines.omnifold` pins `KERAS_BACKEND=tensorflow` before importing keras, and it imports from here; pulling keras in transitively would fix the backend to jax first and break OmniFold. `ran.evaluate` is safe to import for the same reason, namely that it defers its own keras import into the two functions that need it.
+
+### `_shared::parse_run_config`
+
+Validate a run's config.json into a RunConfig.
+
+#### Arguments
+
+- `raw: dict[str, Any]` The raw config.json as a dictionary.
+
+#### Returns
+
+- A `RunConfig` object from the validated config.json.
+
+### `_shared::_partitioned`
+
+Checks the shape assumptions the baselines rely on, then partitions.
+
+### `_shared::prepare_populations`
+
+Returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
+
+Arrays maintain their dtype; a baseline that needs another dtype will cast at its own boundary.
+
+#### Arguments
+
+- `splits: DatasetSplits` The DatasetSplits object to partition.
+- `expected_dim: int` The expected dimension of the dataset.
+
+#### Returns
+
+- An `UnfoldingPopulations` object containing the full and test populations.
+
+### `_shared::load_populations`
+
+Rebuild the run's dataset and split it into the baseline populations.
+
+#### Arguments
+
+- `config: RunConfig` The RunConfig object to load the populations from.
+
+#### Returns
+
+- An `UnfoldingPopulations` object containing the full and test populations.
+
+### `_shared::evaluate_dimension`
+
+Score one dimension before and after reweighting `comparison`.
+
+#### Arguments
+
+- `reference: NDArray[np.floating]` The reference distribution.
+- `comparison: NDArray[np.floating]` The comparison distribution.
+- `weights: NDArray[np.floating]` The weights to apply to the comparison distribution.
+
+#### Returns
+
+- A `MetricRecord` containing the metrics.
 
 ## IBU
 
@@ -28,7 +83,7 @@ IBU (Iterative Bayesian Unfolding) baseline to compare with RAN. It is a simple 
 It is implemented in the [**`ibu.py`**](ibu.py) file.
 Usage:
 
-```zsh
+```shell
 uv run -m ran baseline ibu --run-dir runs/2026-...
 uv run -m ran baseline ibu --run-dir runs # all runs
 ```

@@ -35,15 +35,15 @@ class Split(Flag):
 # `__eq__` compares fields with `==` and a generated `__hash__` hashes them,
 # and both raise. Identity comparison is what these are wanted for anyway.
 @dataclass(frozen=True, eq=False, slots=True)
-class Events:
+class Events[T: np.floating = np.double]:
     """Particle-level `z` and detector-level `x` for one set of events.
 
     The arrays are row-aligned: row `i` of each is the same event seen at the
     two levels.
     """
 
-    z: NDArray[np.double]
-    x: NDArray[np.double]
+    z: NDArray[T]
+    x: NDArray[T]
 
     def __post_init__(self) -> None:
         if self.z.shape[0] != self.x.shape[0]:
@@ -66,14 +66,14 @@ class Events:
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class ZXY:
+class ZXY[T: np.floating = np.double]:
     """Events labelled by provenance: y = 1 for nature, y = 0 for MC.
 
     The transport form -- what gets shuffled, split, batched and trained on.
     `partition` converts to the physics form, `Populations.interleave` back.
     """
 
-    events: Events
+    events: Events[T]
     y: NDArray[np.ubyte]
 
     def __post_init__(self) -> None:
@@ -89,11 +89,11 @@ class ZXY:
         return self.y.shape[0]
 
     @property
-    def z(self) -> NDArray[np.double]:
+    def z(self) -> NDArray[T]:
         return self.events.z
 
     @property
-    def x(self) -> NDArray[np.double]:
+    def x(self) -> NDArray[T]:
         return self.events.x
 
     @classmethod
@@ -101,23 +101,23 @@ class ZXY:
         if not parts:
             raise ValueError("cannot concatenate an empty sequence of labelled events")
         return cls(
-            Events.concatenate([part.events for part in parts]),
+            Events[T].concatenate([part.events for part in parts]),
             np.concatenate([part.y for part in parts], axis=0),
         )
 
-    def partition(self) -> Populations:
+    def partition(self) -> Populations[T]:
         """Separate the labelled events into the four physics populations."""
         mc: NDArray[np.bool] = self.y == 0
         nature: NDArray[np.bool] = ~mc
         return Populations(
-            mc=Events(self.events.z[mc], self.events.x[mc]),
+            mc=Events[T](self.events.z[mc], self.events.x[mc]),
             data=self.events.x[nature],
             truth=self.events.z[nature],
         )
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class Populations:
+class Populations[T: np.floating = np.double]:
     """The physics view of a labelled sample.
 
     `mc` is the simulation, its generated particle level (`mc.z`) paired per
@@ -130,9 +130,9 @@ class Populations:
     handed the simulation cannot reach it.
     """
 
-    mc: Events
-    data: NDArray[np.double]
-    truth: NDArray[np.double]
+    mc: Events[T]
+    data: NDArray[T]
+    truth: NDArray[T]
 
     def __post_init__(self) -> None:
         if self.data.shape[0] != self.truth.shape[0]:
@@ -146,14 +146,14 @@ class Populations:
                 f"and {len(self.mc)} MC events"
             )
 
-    def interleave(self) -> ZXY:
+    def interleave(self) -> ZXY[T]:
         """Stack into the labelled transport form, nature rows first.
 
         The resulting row order is an artifact of stacking rather than
         anything meaningful, so callers shuffle before splitting.
         """
-        return ZXY(
-            Events(
+        return ZXY[T](
+            Events[T](
                 np.concatenate([self.truth, self.mc.z], axis=0),
                 np.concatenate([self.data, self.mc.x], axis=0),
             ),
@@ -166,19 +166,19 @@ class Populations:
         )
 
 
-class DatasetSplits(NamedTuple):
-    train: ArrayDataset
-    val: ArrayDataset
-    test: ArrayDataset
+class DatasetSplits[T: np.floating = np.double](NamedTuple):
+    train: ArrayDataset[T]
+    val: ArrayDataset[T]
+    test: ArrayDataset[T]
 
-    def select(self, which: Split = Split.ALL) -> ZXY:
+    def select(self, which: Split = Split.ALL) -> ZXY[T]:
         """Concatenate the requested splits into one labelled sample.
 
         The split a row came from is not recorded on the result: it is a
         property of the query, not of the events, and nothing downstream of
         this call can act on it.
         """
-        chosen: list[ZXY] = [
+        chosen: list[ZXY[T]] = [
             split.as_arrays()
             for flag, split in (
                 (Split.TRAIN, self.train),
@@ -189,4 +189,4 @@ class DatasetSplits(NamedTuple):
         ]
         if not chosen:
             raise ValueError("select needs at least one split")
-        return ZXY.concatenate(chosen)
+        return ZXY[T].concatenate(chosen)

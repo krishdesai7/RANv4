@@ -258,7 +258,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
 
     for level, data, mc in [
         ("detector", test.data, test.mc.x),
-        ("particle", test.truth, test.mc.z),
+        ("particle", test.require_truth(), test.mc.z),
     ]:
         wd_before: list[float] = _wd_per_dim(data, mc)
         wd_after: list[float] = _wd_per_dim(data, mc, weights=w)

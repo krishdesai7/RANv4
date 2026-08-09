@@ -39,7 +39,9 @@ Checks the shape assumptions the baselines rely on, then partitions.
 
 Returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
-Arrays maintain their dtype; a baseline that needs another dtype will cast at its own boundary.
+Arrays maintain their dtype; a baseline that needs another dtype will cast at its own boundary with `Populations.astype`.
+
+That is not a detail. RAN is float64 end to end, but both baselines are float32: OmniFold trains under TensorFlow, and IBU has to match the arithmetic its published results were produced with for the comparison to mean anything. So `load_populations` hands back the float64 the dataset was generated in, and each baseline narrows for itself — OmniFold in `_as2d`, IBU with `load_populations(config).astype(np.single)`. The IBU internals are generic over the floating type and carry whatever they are given; only the two population-count checks and the mean-one postcondition accumulate in float64, because those compare against exact integers and float32 stops representing those past 2^24.
 
 #### Arguments
 
@@ -149,6 +151,29 @@ Iterative Bayesian Unfolding.
 #### Returns
 
 - A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
+
+### `ibu::_BinnedReweighting`
+
+What IBU actually produces: one multiplicative factor per bin of the particle-level axis, held with the edges that define those bins. `weights_for(gen)` looks up a factor for each particle-level value and renormalizes to mean one, so a reweighting can be applied to any number of events of the same variable.
+
+Fitting and applying are separate because the two use different samples. The reweighting is fit on `full` — every split, for the largest response and measurement available — and applied to `test.mc.z`, so that the sample it scores is not the sample it learned from.
+
+### `ibu::_unfold_variable`
+
+Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `_VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
+
+#### Arguments
+
+- `variable_name: str` The variable being unfolded, for logging and the outcome record.
+- `mc_gen: NDArray[T]` One column of `mc.z`, the generated particle level.
+- `mc_sim: NDArray[T]` One column of `mc.x`, row-aligned with `mc_gen`; together they give the response.
+- `observed: NDArray[T]` One column of `data`, the measurement.
+- `n_iterations: int` Number of unfolding iterations.
+- `purity_threshold: float` The purity threshold for automatic binning.
+
+#### Returns
+
+- A `_VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
 
 ## <span style="font-variant: small-caps;">OmniFold</span>
 

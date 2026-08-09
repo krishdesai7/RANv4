@@ -338,7 +338,7 @@ def plot_particle_level(
     test: Populations = _collect_data(test_dataset)
 
     _plot_level(
-        nature=test.truth,
+        nature=test.require_truth(),
         mc=test.mc.z,
         w=_get_weights(g, test.mc.z),
         style=_PARTICLE,

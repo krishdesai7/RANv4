@@ -5,17 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
+import numpy as np
+
 if TYPE_CHECKING:
     from typing import Literal
 
-    import numpy as np
     from numpy.typing import NDArray
 
     from .events import Populations
     from .types import MetricRecord
 
 
-class UnfoldingPopulations(NamedTuple):
+class UnfoldingPopulations[T: np.floating = np.double](NamedTuple):
     """What every baseline needs: a sample to unfold with, a sample to score on.
 
     `full` spans every split and supplies the response (`full.mc`) and the
@@ -23,8 +24,12 @@ class UnfoldingPopulations(NamedTuple):
     where the metrics are computed.
     """
 
-    full: Populations
-    test: Populations
+    full: Populations[T]
+    test: Populations[T]
+
+    def astype[U: np.floating](self, dtype: type[U]) -> UnfoldingPopulations[U]:
+        """Both samples at another precision; see `Populations.astype`."""
+        return UnfoldingPopulations[U](self.full.astype(dtype), self.test.astype(dtype))
 
 
 @dataclass(frozen=True)
@@ -39,5 +44,6 @@ class VariableOutcome:
 class IBUResult:
     metrics: dict[str, MetricRecord]
     variable_names: tuple[str, ...]
-    weights: NDArray[np.double]
+    # Single precision, matching the published IBU results -- see `ibu`.
+    weights: NDArray[np.single]
     outcomes: tuple[VariableOutcome, ...]

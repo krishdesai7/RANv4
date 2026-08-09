@@ -25,12 +25,12 @@ logger: Logger = logging.getLogger(__name__)
 _ONE_SOURCE_ONLY: Final = "Exactly one of config_path or params must be provided"
 
 
-class ArrayDataset:
+class ArrayDataset[T: np.floating = np.double]:
     """In-memory (z, x, y) arrays with deterministic minibatching."""
 
     def __init__(
         self,
-        data: ZXY,
+        data: ZXY[T],
         batch_size: int = 128,
         shuffle: bool = False,
         seed: int = 42,
@@ -67,7 +67,7 @@ class ArrayDataset:
             idx: NDArray[np.intp] = order[start : start + self.batch_size]
             yield {"z": self.data.z[idx], "x": self.data.x[idx]}, self.data.y[idx]
 
-    def as_arrays(self) -> ZXY:
+    def as_arrays(self) -> ZXY[T]:
         """Return the whole split as flat labelled arrays, in stored order."""
         return self.data
 

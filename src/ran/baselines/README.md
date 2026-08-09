@@ -90,6 +90,66 @@ uv run -m ran baseline ibu --run-dir runs # all runs
 
 IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN and <span style="font-variant: small-caps;">OmniFold</span>.
 
+### `ibu::_assign_bins`
+
+Assign every value to a saturated bin. Underflow enters the first bin; overflow and values equal to the upper edge enter the last bin, so every finite input value receives an assignment.
+
+#### Arguments
+
+- `values: NDArray[np.floating]` The values to assign to bins.
+- `edges: NDArray[np.floating]` The bin edges.
+
+#### Returns
+
+- A `NDArray[np.intp]` containing the bin indices.
+
+### `ibu::_bin_counts`
+
+Count saturated assignments while preserving every assigned event. Assignments from `_assign_bins` place underflow in the first bin and both overflow and the upper edge in the last bin; their counts therefore retain one entry for every assigned event.
+
+#### Arguments
+
+- `indices: NDArray[np.intp]` The bin indices.
+- `n_bins: int` The number of bins.
+
+#### Returns
+
+- A `NDArray[np.intp]` containing the bin counts.
+
+### `ibu::_next_pure_edge`
+
+Find the first candidate edge whose bin exceeds the purity threshold.
+
+#### Arguments
+
+- `gen_sorted: NDArray[np.floating]` The sorted gen values.
+- `upper_sorted: NDArray[np.floating]` The sorted upper values.
+- `lower_by_upper: NDArray[np.floating]` The lower values by upper values.
+- `lo: np.floating` The lower edge.
+- `gen_max: np.floating` The maximum gen value.
+- `purity_threshold: float` The purity threshold.
+- `n_candidates: int` The number of candidates.
+
+#### Returns
+
+- A `T | None` containing the first candidate edge whose bin exceeds the purity threshold.
+
+### `ibu::_ibu`
+
+Iterative Bayesian Unfolding.
+
+#### Arguments
+
+- `prior: NDArray[np.floating]` Initial truth estimate (MC gen histogram), shape (n_bins,).
+- `data_hist: NDArray[np.floating]` Observed reco-level measured histogram, shape (n_bins,).
+- `response: NDArray[np.floating]` R\[t,r\] = P(sim=r | gen=t), shape (n_bins, n_bins).
+- `n_iterations: int` Number of unfolding iterations.
+- `strict: bool = False` If True, raise an error if the observed data has zero support under the response and prior. If False \[default\], return zero weights for such events.
+
+#### Returns
+
+- A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
+
 ## <span style="font-variant: small-caps;">OmniFold</span>
 
 <span style="font-variant: small-caps;">OmniFold</span> baseline to compare with RAN. It is a deep learning-based unfolding method that uses a Bayesian approach to unfold the data.

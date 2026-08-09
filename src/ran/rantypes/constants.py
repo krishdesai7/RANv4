@@ -49,4 +49,4 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
     "sdm": JetVarInfo((-14, -2), "Soft Drop Jet Mass", r"$\ln\rho$"),
 }
 
-DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5, dtype=np.double)
+DEFAULT_PURITY_THRESHOLD: Final[float] = np.sqrt(0.5)

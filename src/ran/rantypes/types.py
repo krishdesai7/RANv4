@@ -94,4 +94,4 @@ class MetricRecord(TypedDict):
 # ---------------------------------
 type Nested[T] = T | list[Nested[T]]
 
-type Batch = tuple[dict[str, NDArray[np.double]], NDArray[np.ubyte]]
+type Batch[T: np.floating = np.double] = tuple[dict[str, NDArray[T]], NDArray[np.ubyte]]

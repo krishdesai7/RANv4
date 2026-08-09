@@ -81,7 +81,9 @@ def parse_run_config(raw: object) -> RunConfig:
     )
 
 
-def _partitioned(data: ZXY, expected_dim: int, label: str) -> Populations:
+def _partitioned[T: np.floating](
+    data: ZXY[T], expected_dim: int, label: str
+) -> Populations[T]:
     if data.z.ndim != 2 or data.x.ndim != 2 or data.z.shape != data.x.shape:
         raise ValueError(
             f"{label}: z and x must be identically shaped two-dimensional arrays"
@@ -98,16 +100,20 @@ def _partitioned(data: ZXY, expected_dim: int, label: str) -> Populations:
         raise ValueError(f"{label}: {error}") from error
 
 
-def prepare_populations(
-    splits: DatasetSplits, expected_dim: int
-) -> UnfoldingPopulations:
+def prepare_populations[T: np.floating](
+    splits: DatasetSplits[T], expected_dim: int
+) -> UnfoldingPopulations[T]:
     return UnfoldingPopulations(
         full=_partitioned(splits.select(Split.ALL), expected_dim, "every split"),
         test=_partitioned(splits.select(Split.TEST), expected_dim, "test split"),
     )
 
 
-def load_populations(config: RunConfig) -> UnfoldingPopulations:
+def load_populations(config: RunConfig) -> UnfoldingPopulations[np.double]:
+    """The run's dataset as populations, at the float64 RAN generated it in.
+
+    Baselines that need another precision call `astype` at their own boundary.
+    """
     return prepare_populations(_load_splits(config.source), config.dim)
 
 

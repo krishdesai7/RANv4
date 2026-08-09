@@ -112,6 +112,7 @@ def _run_and_evaluate(
 ) -> tuple[dict[str, MetricRecord], list[str], NDArray[np.single]]:
     """Train OmniFold on a RAN dataset and evaluate on test set."""
     full, test = load_populations(config)
+    test_truth = test.require_truth()
 
     # OmniFold trains under TensorFlow, so cast the shared float64 populations
     # to float32 here rather than making every baseline pay for it.
@@ -135,7 +136,7 @@ def _run_and_evaluate(
             w,
         )
         metrics[f"particle_{variable_name}"] = evaluate_dimension(
-            test.truth[:, dimension],
+            test_truth[:, dimension],
             test.mc.z[:, dimension],
             w,
         )

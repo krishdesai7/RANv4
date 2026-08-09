@@ -76,7 +76,7 @@ def run_leakage_check(poison: bool = False, seed: int = 42, init_seed: int = 0) 
 
     for level, ref, comp in [
         ("DETECTOR", test.data, test.mc.x),
-        ("PARTICLE", test.truth, test.mc.z),
+        ("PARTICLE", test.require_truth(), test.mc.z),
     ]:
         wd_b: float = _wd_per_dim(ref, comp)[0]
         wd_a: float = _wd_per_dim(ref, comp, weights=w)[0]

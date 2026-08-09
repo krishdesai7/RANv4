@@ -1,4 +1,5 @@
-"""Fixed values: the Zenodo jet dataset, its cache layout, and plot metadata."""
+"""Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the
+default purity threshold, and the stand-in for an absent particle level."""
 
 from __future__ import annotations
 
@@ -49,4 +50,21 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
     "sdm": JetVarInfo((-14, -2), "Soft Drop Jet Mass", r"$\ln\rho$"),
 }
 
-DEFAULT_PURITY_THRESHOLD: Final[float] = np.sqrt(0.5)
+DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)
+
+# Stands in for a particle-level value that does not exist, in the one place
+# that happens: a real measurement, which has data but no answer key.
+#
+# It has to be finite. `normalize_weights` annihilates the nature rows of the
+# generator's output by multiplying by (1 - y) = 0, and under IEEE 754 that
+# annihilates a number but not a NaN -- 0 * NaN is NaN, which then spreads
+# through the class-normalizing sum to every weight in the batch, and through
+# jax.grad to every gradient. Sanitizing the masked output would not help
+# either, since the NaN is already in z when g forward-passes it. The fix has
+# to sit at the input, and be an ordinary number.
+#
+# -2^15 is that number: absurd on sight for any standardized observable, exact
+# in every IEEE binary format down to float16, and far enough inside float16's
+# range (65504) that it survives a narrowing cast instead of becoming an inf,
+# which would put 0 * inf = NaN right back.
+TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(np.short).min)

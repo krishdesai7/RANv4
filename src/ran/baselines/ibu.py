@@ -29,19 +29,14 @@ logger: Logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class _VariableUnfolding:
-    weights: NDArray[np.double]
+class _VariableUnfolding[T: np.floating]:
+    weights: NDArray[T]
     outcome: VariableOutcome
 
 
-def _assign_bins(
-    values: NDArray[np.double], edges: NDArray[np.double]
+def _assign_bins[T: np.floating](
+    values: NDArray[T], edges: NDArray[T]
 ) -> NDArray[np.intp]:
-    """Assign every value to a saturated bin.
-
-    Underflow enters the first bin; overflow and values equal to the upper edge
-    enter the last bin, so every finite input value receives an assignment.
-    """
     if values.ndim != 1 or not np.all(np.isfinite(values)):
         raise ValueError("bin values must be a finite one-dimensional array")
     if edges.ndim != 1 or edges.size < 2 or not np.all(np.diff(edges) > 0):
@@ -52,23 +47,17 @@ def _assign_bins(
     )
 
 
-def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.double]:
-    """Count saturated assignments while preserving every assigned event.
-
-    Assignments from `_assign_bins` place underflow in the first bin and both
-    overflow and the upper edge in the last bin; their counts therefore retain
-    one entry for every assigned event.
-    """
+def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
     if n_bins < 1 or indices.ndim != 1:
         raise ValueError("bin indices must be one-dimensional with n_bins >= 1")
     if np.any((indices < 0) | (indices >= n_bins)):
         raise ValueError("bin index outside configured range")
-    return np.bincount(indices, minlength=n_bins).astype(np.double)
+    return np.bincount(indices, minlength=n_bins)
 
 
-def _unfolded_to_bin_weights(
-    unfolded: NDArray[np.double], prior: NDArray[np.double]
-) -> NDArray[np.double]:
+def _unfolded_to_bin_weights[T: np.floating](
+    unfolded: NDArray[T], prior: NDArray[T]
+) -> NDArray[T]:
     if (
         unfolded.ndim != 1
         or prior.ndim != 1
@@ -85,12 +74,12 @@ def _unfolded_to_bin_weights(
     if np.any((prior == 0) & (unfolded > EPS)):
         raise ValueError("unfolded mass in a zero-prior bin")
 
-    weights: NDArray[np.double] = np.zeros_like(unfolded, dtype=np.double)
+    weights: NDArray[T] = np.zeros_like(unfolded)
     np.divide(unfolded, prior, out=weights, where=prior > 0)
     return weights
 
 
-def _normalize_weights(weights: NDArray[np.double]) -> NDArray[np.double]:
+def _normalize_weights[T: np.floating](weights: NDArray[T]) -> NDArray[T]:
     if weights.ndim != 1 or weights.size == 0:
         raise ValueError("weights must be a nonempty one-dimensional vector")
     if not np.all(np.isfinite(weights)):
@@ -98,11 +87,11 @@ def _normalize_weights(weights: NDArray[np.double]) -> NDArray[np.double]:
     if np.any(weights < 0):
         raise ValueError("weights must be nonnegative")
 
-    mean: np.double = np.mean(weights, dtype=np.double)
+    mean: T = np.mean(weights)
     if not np.isfinite(mean) or mean <= 0:
         raise ValueError("weights mean must be finite and strictly positive")
 
-    normalized: NDArray[np.double] = np.asarray(weights / mean, dtype=np.double)
+    normalized: NDArray[T] = np.divide(weights, mean)
     if not np.all(np.isfinite(normalized)) or np.any(normalized < 0):
         raise ValueError("normalized weights must be finite and nonnegative")
     if not np.isclose(normalized.mean(), 1.0):
@@ -110,26 +99,19 @@ def _normalize_weights(weights: NDArray[np.double]) -> NDArray[np.double]:
     return normalized
 
 
-def _next_pure_edge(
-    gen_sorted: NDArray[np.double],
-    upper_sorted: NDArray[np.double],
-    lower_by_upper: NDArray[np.double],
-    lo: np.double,
-    gen_max: np.double,
-    purity_threshold: np.double,
+def _next_pure_edge[T: np.floating](
+    gen_sorted: NDArray[T],
+    upper_sorted: NDArray[T],
+    lower_by_upper: NDArray[T],
+    lo: T,
+    gen_max: T,
+    purity_threshold: float,
     n_candidates: int = 100,
-) -> np.double | None:
-    """Return the first candidate edge whose bin exceeds the purity threshold.
-
-    `gen_sorted` is sorted `gen`.
-
-    `upper_sorted` is sorted `maximum(gen, sim)`, and
-    `lower_by_upper` is `minimum(gen, sim)` in the corresponding order.
-    """
+) -> T | None:
     if n_candidates <= 0:
         raise ValueError("n_candidates must be positive")
 
-    candidates: NDArray[np.double] = np.linspace(
+    candidates: NDArray[T] = np.linspace(
         lo + 1 / n_candidates,
         gen_max,
         n_candidates,
@@ -175,12 +157,12 @@ def _next_pure_edge(
     return candidates[qualifying[0]]
 
 
-def _purity_bins(
-    gen: NDArray[np.double],
-    sim: NDArray[np.double],
-    purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
+def _purity_bins[T: np.floating](
+    gen: NDArray[T],
+    sim: NDArray[T],
+    purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
     max_bins: int = 50,
-) -> NDArray[np.double]:
+) -> NDArray[T]:
     """Determine bin edges where purity exceeds the threshold."""
     if gen.ndim != 1 or sim.ndim != 1:
         raise ValueError("gen and sim must be one-dimensional")
@@ -192,23 +174,23 @@ def _purity_bins(
         raise ValueError("max_bins must be positive")
 
     # One-time preprocessing.
-    gen_sorted: NDArray[np.double] = np.sort(gen)
+    gen_sorted: NDArray[T] = np.sort(gen)
 
-    lower: NDArray[np.double] = np.minimum(gen, sim)
-    upper: NDArray[np.double] = np.maximum(gen, sim)
+    lower: NDArray[T] = np.minimum(gen, sim)
+    upper: NDArray[T] = np.maximum(gen, sim)
 
     upper_order: NDArray[np.intp] = np.argsort(upper)
-    upper_sorted: NDArray[np.double] = upper[upper_order]
-    lower_by_upper: NDArray[np.double] = lower[upper_order]
+    upper_sorted: NDArray[T] = upper[upper_order]
+    lower_by_upper: NDArray[T] = lower[upper_order]
 
     # max_bins bins require at most max_bins + 1 edges.
-    edges: NDArray[np.double] = np.empty(max_bins + 1, dtype=gen.dtype)
+    edges: NDArray[T] = np.empty(max_bins + 1, dtype=gen.dtype)
     edges[0] = gen.min()
     n_edges = 1
 
-    gen_max: Final[np.double] = gen.max()
+    gen_max: Final[T] = gen.max()
     while n_edges <= max_bins and edges[n_edges - 1] < gen_max:
-        edge: np.double | None = _next_pure_edge(
+        edge: T | None = _next_pure_edge(
             gen_sorted=gen_sorted,
             upper_sorted=upper_sorted,
             lower_by_upper=lower_by_upper,
@@ -239,30 +221,31 @@ def _build_response(
     return response
 
 
-def _ibu(
-    prior: NDArray[np.double],
-    data_hist: NDArray[np.double],
-    response: NDArray[np.double],
+def _ibu[T: np.floating](
+    prior: NDArray[T],
+    data_hist: NDArray[T],
+    response: NDArray[T],
     n_iterations: int,
-) -> NDArray[np.double]:
-    """Iterative Bayesian Unfolding.
+    strict: bool = False,
+) -> NDArray[T]:
 
-    Args:
-        prior: Initial truth estimate (MC gen histogram), shape (n_bins,).
-        data_hist: Observed reco-level measured histogram, shape (n_bins,).
-        response: R[t,r] = P(sim=r | gen=t), shape (n_bins, n_bins).
-        n_iterations: Number of unfolding iterations.
+    posterior: NDArray[T] = prior.copy()
 
-    Returns:
-        Unfolded truth histogram, shape (n_bins,).
-    """
-    posterior: NDArray[np.double] = prior.copy()
-    m: NDArray[np.double]
     for _ in range(n_iterations):
-        # Bayes: P(t|r) = R[t,r]*P(t) / sum_t' R[t',r]*P(t')
-        m = response.T * posterior  # m[r,t] = R[t,r] * P(t)
-        m /= m.sum(axis=1, keepdims=True) + EPS  # m[r,t] = P(t|r)
-        posterior = m.T @ data_hist  # P(t) = sum_r P(t|r) * data(r)
+        # The NumPy-stub loses the specific floating precision
+        # There is no type promotion at runtime
+        marginal: NDArray[T] = response.T @ posterior  # pyrefly: ignore[bad-assignment]
+        if strict and np.any((marginal == 0) & (data_hist != 0)):
+            raise ValueError(
+                "Observed data has zero support under the response and prior"
+            )
+        likelihood: NDArray[T] = np.zeros_like(posterior)
+        likelihood = np.divide(
+            data_hist,
+            marginal,
+            where=marginal != 0,
+        )
+        posterior *= response @ likelihood
     return posterior
 
 

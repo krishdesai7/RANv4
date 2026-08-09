@@ -52,6 +52,8 @@ The same events are described two ways, at opposite ends of the pipeline.
 
 `ZXY` is the transport form: an `Events` pair plus a per-event label, `y = 1` for nature and `y = 0` for MC. It is what gets shuffled, split, batched and trained on.
 
+Every dataset here is a closure test, so `truth` is always known; a real measurement is the case where it is not. `Populations.create(mc, data)` covers that by filling `truth` with `TRUTH_SENTINEL`, and `has_truth` distinguishes the two. The stand-in is a number (-2^15) and not NaN because `interleave` puts `truth` into the nature rows of `z`, which the generator forward-passes: `normalize_weights` discards those rows by multiplying by `1 - y = 0`, and that annihilates a number but not a NaN. Metrics computed against a sentinel `truth` are finite and meaningless, so the particle-level comparisons read the answer key through `require_truth()`, which returns it or refuses. `has_truth` is the same question without the exception.
+
 `Populations.interleave()` converts to the transport form (nature rows first, then MC) and `ZXY.partition()` converts back. Only the second composition is lossless: interleaving a partitioned sample discards the shuffled row order. Weight vectors are indexed against a `Populations`, never against a `ZXY`, so nothing should round-trip.
 
 `DatasetSplits.select(Split.TRAIN | Split.VAL)` concatenates the requested splits into one `ZXY`. The split an event came from is a property of the query, not of the event, so it is not recorded on the result.

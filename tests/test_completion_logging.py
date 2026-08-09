@@ -150,7 +150,7 @@ def test_ibu_records_metric_and_weight_artifact_completion(
         return ibu.IBUResult(
             metrics={"detector_mass": metric_record},
             variable_names=("mass", "momentum"),
-            weights=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.double),
+            weights=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.single),
             outcomes=(
                 ibu.VariableOutcome(
                     variable_name="mass",

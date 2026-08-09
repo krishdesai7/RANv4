@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
+from .constants import TRUTH_SENTINEL
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Self
@@ -63,6 +65,9 @@ class Events[T: np.floating = np.double]:
             np.concatenate([part.z for part in parts], axis=0),
             np.concatenate([part.x for part in parts], axis=0),
         )
+
+    def astype[U: np.floating](self, dtype: type[U]) -> Events[U]:
+        return Events[U](self.z.astype(dtype), self.x.astype(dtype))
 
 
 @dataclass(frozen=True, eq=False, slots=True)
@@ -127,7 +132,8 @@ class Populations[T: np.floating = np.double]:
     `truth` is the particle-level answer key. It exists only because every
     dataset here is a closure test -- a real measurement has no such array --
     and no network may ever see it. Keeping it out of `mc` means a function
-    handed the simulation cannot reach it.
+    handed the simulation cannot reach it. Construct through `create` to leave
+    it out; the field itself is always present.
     """
 
     mc: Events[T]
@@ -145,6 +151,71 @@ class Populations[T: np.floating = np.double]:
                 f"populations must be nonempty, got {self.data.shape[0]} nature "
                 f"and {len(self.mc)} MC events"
             )
+
+    @classmethod
+    def create(
+        cls,
+        mc: Events[T],
+        data: NDArray[T],
+        truth: NDArray[T] | None = None,
+    ) -> Self:
+        """Build a sample, filling `truth` with `TRUTH_SENTINEL` if there is none.
+
+        A real measurement has no answer key. Filling the field rather than
+        dropping it keeps one type for both cases, and keeps the sample
+        trainable: the nature rows of `z` are `truth`, so they reach the
+        generator, and only a finite value there lets `normalize_weights`
+        annihilate them as intended. See `TRUTH_SENTINEL` for why not NaN.
+
+        `truth` is particle level, so it takes its columns from `mc.z` and its
+        rows from `data`.
+        """
+        if truth is None:
+            truth = np.full(
+                (data.shape[0], *mc.z.shape[1:]), TRUTH_SENTINEL, dtype=mc.z.dtype
+            )
+        return cls(mc=mc, data=data, truth=truth)
+
+    @property
+    def has_truth(self) -> bool:
+        """Whether `truth` holds answers rather than the `create` stand-in.
+
+        Any metric computed against a sentinel `truth` is meaningless but
+        finite, so unfolding code that scores against the particle level has
+        to ask rather than wait to be told.
+        """
+        return not bool(np.any(self.truth == TRUTH_SENTINEL))
+
+    def astype[U: np.floating](self, dtype: type[U]) -> Populations[U]:
+        """The same sample at another precision.
+
+        RAN is float64 end to end, but the baselines are not: OmniFold trains
+        under TensorFlow and IBU has to match the single-precision arithmetic
+        the published results were produced with. Each casts at its own
+        boundary rather than making the shared pipeline pick a side.
+
+        `TRUTH_SENTINEL` is exact in every IEEE binary format, so `has_truth`
+        answers the same question on either side of this call.
+        """
+        return Populations[U](
+            self.mc.astype(dtype),
+            self.data.astype(dtype),
+            self.truth.astype(dtype),
+        )
+
+    def require_truth(self) -> NDArray[T]:
+        """`truth`, or a refusal if there is none.
+
+        Scoring against the sentinel yields a finite, meaningless number
+        instead of an obvious failure, so the particle-level comparisons ask
+        for the answer key through here rather than reading the field.
+        """
+        if not self.has_truth:
+            raise ValueError(
+                "this sample has no particle-level truth to score against: it "
+                "was built without one, so `truth` is the sentinel stand-in"
+            )
+        return self.truth
 
     def interleave(self) -> ZXY[T]:
         """Stack into the labelled transport form, nature rows first.

@@ -55,7 +55,7 @@ class ArrayDataset[T: np.floating = np.double]:
         """Number of batches per pass."""
         return (self.size + self.batch_size - 1) // self.batch_size
 
-    def __iter__(self) -> Iterator[Batch]:
+    def __iter__(self) -> Iterator[Batch[T]]:
         if self.shuffle:
             order: NDArray[np.intp] = np.random.default_rng(
                 [self.seed, self._pass]

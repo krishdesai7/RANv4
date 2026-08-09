@@ -7,7 +7,15 @@ import pytest
 import yaml
 from numpy import dtype, float64, ndarray
 from ran.data import ArrayDataset, RANDataset
-from ran.rantypes import ZXY, DatasetSplits, Events, GaussianConfig, Populations, Split
+from ran.rantypes import (
+    TRUTH_SENTINEL,
+    ZXY,
+    DatasetSplits,
+    Events,
+    GaussianConfig,
+    Populations,
+    Split,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -338,6 +346,66 @@ class TestLabelledAndPhysicsForms:
 
         np.testing.assert_array_equal(labelled.y, [1, 1, 1, 0, 0, 0])
         assert len(labelled) == 6
+
+    def test_create_stands_in_a_sentinel_for_absent_truth(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        assert not measured.has_truth
+        assert measured.truth.shape == (5, 2)
+        np.testing.assert_array_equal(measured.truth, TRUTH_SENTINEL)
+
+    def test_astype_changes_precision_without_losing_the_sentinel(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        single = measured.astype(np.single)
+
+        assert single.mc.z.dtype == np.single
+        assert single.data.dtype == np.single
+        assert single.truth.dtype == np.single
+        assert not single.has_truth
+
+    def test_astype_preserves_real_truth(self) -> None:
+        single = self._populations().astype(np.single)
+
+        assert single.has_truth
+        assert single.truth.dtype == np.single
+
+    def test_require_truth_refuses_the_sentinel(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        with pytest.raises(ValueError, match="no particle-level truth"):
+            measured.require_truth()
+
+    def test_require_truth_returns_real_answers(self) -> None:
+        original = self._populations()
+
+        np.testing.assert_array_equal(original.require_truth(), original.truth)
+
+    def test_create_keeps_truth_when_given(self) -> None:
+        original = self._populations()
+
+        rebuilt = Populations.create(original.mc, original.data, original.truth)
+
+        assert rebuilt.has_truth
+        np.testing.assert_array_equal(rebuilt.truth, original.truth)
+
+    def test_absent_truth_reaches_z_as_a_finite_number(self) -> None:
+        """`interleave` puts truth in the nature rows of z, so g will see this.
+
+        Training survives that only because the stand-in is an ordinary number
+        -- see `test_a_missing_particle_level_cannot_poison_the_batch`.
+        """
+        mc = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+
+        labelled = Populations.create(mc=mc, data=np.ones((2, 1))).interleave()
+
+        assert np.all(np.isfinite(labelled.z))
+        np.testing.assert_array_equal(labelled.z[labelled.y == 1], TRUTH_SENTINEL)
 
     def test_partition_rejects_a_single_class_sample(self) -> None:
         events = Events(np.zeros((3, 1)), np.zeros((3, 1)))

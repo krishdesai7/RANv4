@@ -28,10 +28,35 @@ if TYPE_CHECKING:
 logger: Logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class _VariableUnfolding[T: np.floating]:
-    weights: NDArray[T]
+@dataclass(frozen=True, eq=False, slots=True)
+class _BinnedReweighting[T: np.floating = np.double]:
+    """A per-bin correction, learned from one population and applied to another.
+
+    This is all IBU actually produces: one multiplicative factor per bin of the
+    particle-level axis. Which events it is then applied to is a separate
+    choice -- here the unfolding is fit on every split and applied to the test
+    split, so the sample it scores is not the sample it learned from.
+    """
+
+    edges: NDArray[T]
+    bin_weights: NDArray[T]
+
+    def weights_for(self, gen: NDArray[T]) -> NDArray[T]:
+        """Per-event weights for particle-level values `gen`, mean one."""
+        return _normalize_weights(self.bin_weights[_assign_bins(gen, self.edges)])
+
+
+@dataclass(frozen=True, eq=False, slots=True)
+class _VariableUnfolding[T: np.floating = np.double]:
+    """One variable's reweighting, or `None` where it could not be fit."""
+
+    reweighting: _BinnedReweighting[T] | None
     outcome: VariableOutcome
+
+    def weights_for(self, gen: NDArray[T]) -> NDArray[T]:
+        if self.reweighting is None:
+            return np.ones(gen.shape[0], dtype=gen.dtype)
+        return self.reweighting.weights_for(gen)
 
 
 def _assign_bins[T: np.floating](
@@ -94,7 +119,9 @@ def _normalize_weights[T: np.floating](weights: NDArray[T]) -> NDArray[T]:
     normalized: NDArray[T] = np.divide(weights, mean)
     if not np.all(np.isfinite(normalized)) or np.any(normalized < 0):
         raise ValueError("normalized weights must be finite and nonnegative")
-    if not np.isclose(normalized.mean(), 1.0):
+    # The division runs in the caller's precision; only the check that it
+    # worked is accumulated wider, so a float32 resummation cannot fail it.
+    if not np.isclose(normalized.mean(dtype=np.double), 1.0):
         raise ValueError("normalized weights must have mean one")
     return normalized
 
@@ -207,15 +234,16 @@ def _purity_bins[T: np.floating](
     return edges[:n_edges]
 
 
-def _build_response(
-    gen_bins: NDArray[np.long],
-    reco_bins: NDArray[np.long],
+def _build_response[T: np.floating](
+    gen_bins: NDArray[np.intp],
+    reco_bins: NDArray[np.intp],
     n_bins: int,
-) -> NDArray[np.double]:
+    dtype: np.dtype[T],
+) -> NDArray[T]:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
-    response: NDArray[np.double] = np.zeros((n_bins, n_bins), dtype=np.double)
+    response: NDArray[T] = np.zeros((n_bins, n_bins), dtype=dtype)
     np.add.at(response, (gen_bins, reco_bins), 1)
-    row_sums: NDArray[np.double] = response.sum(axis=1, keepdims=True)
+    row_sums: NDArray[T] = response.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1
     response /= row_sums
     return response
@@ -239,33 +267,40 @@ def _ibu[T: np.floating](
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
+        # `out=` is what makes the zeros the value of the skipped entries.
+        # Rebinding instead leaves them whatever the fresh allocation held.
         likelihood: NDArray[T] = np.zeros_like(posterior)
-        likelihood = np.divide(
+        np.divide(
             data_hist,
             marginal,
+            out=likelihood,
             where=marginal != 0,
         )
         posterior *= response @ likelihood
     return posterior
 
 
-def _unfold_variable(
+def _unfold_variable[T: np.floating](
     variable_name: str,
-    response_gen: NDArray[np.double],
-    response_sim: NDArray[np.double],
-    observed_reco: NDArray[np.double],
-    test_mc_gen: NDArray[np.double],
+    mc_gen: NDArray[T],
+    mc_sim: NDArray[T],
+    observed: NDArray[T],
     n_iterations: int,
-    purity_threshold: np.double,
-) -> _VariableUnfolding:
-    bins: NDArray[np.double] = _purity_bins(
-        response_gen, response_sim, purity_threshold
-    )
+    purity_threshold: float,
+) -> _VariableUnfolding[T]:
+    """Fit one variable's reweighting from a simulation and a measurement.
+
+    `mc_gen` and `mc_sim` are one column of a `Populations`' `mc.z` and `mc.x`;
+    they are row-aligned and together give the response. `observed` is the same
+    column of its `data`. No part of `truth` belongs here.
+    """
+    dtype: np.dtype[T] = mc_gen.dtype
+    bins: NDArray[T] = _purity_bins(mc_gen, mc_sim, purity_threshold)
     n_bins: int = bins.size - 1
     if n_bins < 2:
         logger.warning("%s: only %d bin(s), skipping", variable_name, n_bins)
         return _VariableUnfolding(
-            weights=np.ones(test_mc_gen.size, dtype=np.double),
+            reweighting=None,
             outcome=VariableOutcome(
                 variable_name,
                 "skipped",
@@ -274,35 +309,36 @@ def _unfold_variable(
             ),
         )
 
-    response_gen_bins: NDArray[np.intp] = _assign_bins(response_gen, bins)
-    response_sim_bins: NDArray[np.intp] = _assign_bins(response_sim, bins)
-    observed_reco_bins: NDArray[np.intp] = _assign_bins(observed_reco, bins)
-    test_mc_gen_bins: NDArray[np.intp] = _assign_bins(test_mc_gen, bins)
+    mc_gen_bins: NDArray[np.intp] = _assign_bins(mc_gen, bins)
+    mc_sim_bins: NDArray[np.intp] = _assign_bins(mc_sim, bins)
+    observed_bins: NDArray[np.intp] = _assign_bins(observed, bins)
 
-    response: NDArray[np.double] = _build_response(
-        response_gen_bins, response_sim_bins, n_bins
-    )
-    prior: NDArray[np.double] = _bin_counts(response_gen_bins, n_bins)
-    observed: NDArray[np.double] = _bin_counts(observed_reco_bins, n_bins)
-    prior_count: np.double = prior.sum()
-    if prior_count != response_gen.size:
+    response: NDArray[T] = _build_response(mc_gen_bins, mc_sim_bins, n_bins, dtype)
+    prior: NDArray[T] = _bin_counts(mc_gen_bins, n_bins).astype(dtype)
+    data_hist: NDArray[T] = _bin_counts(observed_bins, n_bins).astype(dtype)
+    # Accumulated in float64 whatever the unfolding runs in: these are exact
+    # integer counts, and float32 stops representing those past 2**24, which
+    # would fail the comparison on sample size alone.
+    prior_count: np.double = prior.sum(dtype=np.double)
+    if prior_count != mc_gen.size:
         raise ValueError(
             "prior/response population count mismatch: "
-            f"actual={prior_count}, expected={response_gen.size}"
+            f"actual={prior_count}, expected={mc_gen.size}"
         )
-    observed_count: np.double = observed.sum()
-    if observed_count != observed_reco.size:
+    observed_count: np.double = data_hist.sum(dtype=np.double)
+    if observed_count != observed.size:
         raise ValueError(
             "observed/data population count mismatch: "
-            f"actual={observed_count}, expected={observed_reco.size}"
+            f"actual={observed_count}, expected={observed.size}"
         )
 
-    unfolded: NDArray[np.double] = _ibu(prior, observed, response, n_iterations)
-    bin_weights: NDArray[np.double] = _unfolded_to_bin_weights(unfolded, prior)
-    weights: NDArray[np.double] = _normalize_weights(bin_weights[test_mc_gen_bins])
+    unfolded: NDArray[T] = _ibu(prior, data_hist, response, n_iterations)
     logger.info("%s: %d bins, %d iterations", variable_name, n_bins, n_iterations)
     return _VariableUnfolding(
-        weights=weights,
+        reweighting=_BinnedReweighting(
+            edges=bins,
+            bin_weights=_unfolded_to_bin_weights(unfolded, prior),
+        ),
         outcome=VariableOutcome(variable_name, "completed", n_bins),
     )
 
@@ -318,32 +354,38 @@ def _run_and_evaluate(
     if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
         raise ValueError("purity_threshold must be finite and between zero and one")
 
-    full, test = load_populations(config)
-    weights = np.empty((config.dim, len(test.mc)), dtype=np.double)
+    # Single precision, at its own boundary: RAN generated these in float64 and
+    # trains in float64, but the IBU results this is compared against were
+    # produced in float32, and the binning is sharp enough that the arithmetic
+    # has to match for the comparison to mean anything.
+    full, test = load_populations(config).astype(np.single)
+    test_truth = test.require_truth()
+    weights = np.empty((config.dim, len(test.mc)), dtype=np.single)
     metrics: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(config.variable_names):
+        # Fit on every split, then score the test split with the result.
         unfolding = _unfold_variable(
             variable_name=variable_name,
-            response_gen=full.mc.z[:, dimension],
-            response_sim=full.mc.x[:, dimension],
-            observed_reco=full.data[:, dimension],
-            test_mc_gen=test.mc.z[:, dimension],
+            mc_gen=full.mc.z[:, dimension],
+            mc_sim=full.mc.x[:, dimension],
+            observed=full.data[:, dimension],
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
         )
-        weights[dimension] = unfolding.weights
+        test_weights = unfolding.weights_for(test.mc.z[:, dimension])
+        weights[dimension] = test_weights
         outcomes.append(unfolding.outcome)
         metrics[f"detector_{variable_name}"] = evaluate_dimension(
             test.data[:, dimension],
             test.mc.x[:, dimension],
-            unfolding.weights,
+            test_weights,
         )
         metrics[f"particle_{variable_name}"] = evaluate_dimension(
-            test.truth[:, dimension],
+            test_truth[:, dimension],
             test.mc.z[:, dimension],
-            unfolding.weights,
+            test_weights,
         )
 
     return IBUResult(

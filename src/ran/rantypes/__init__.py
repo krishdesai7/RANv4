@@ -22,6 +22,7 @@ from .constants import GENERATORS as GENERATORS
 from .constants import JET_OBS as JET_OBS
 from .constants import N_FILES as N_FILES
 from .constants import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
+from .constants import TRUTH_SENTINEL as TRUTH_SENTINEL
 from .constants import ZENODO_RECORD as ZENODO_RECORD
 from .constants import JetVarInfo as JetVarInfo
 from .enums import DatasetName as DatasetName

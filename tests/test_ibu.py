@@ -203,17 +203,19 @@ def test_unfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
 
     result = ibu._unfold_variable(
         variable_name="dim_0",
-        response_gen=np.array([0.2, 0.8], dtype=np.double),
-        response_sim=np.array([0.3, 0.7], dtype=np.double),
-        observed_reco=np.array([-1.0, 2.0], dtype=np.double),
-        test_mc_gen=np.array([0.4, 0.6], dtype=np.double),
+        mc_gen=np.array([0.2, 0.8], dtype=np.double),
+        mc_sim=np.array([0.3, 0.7], dtype=np.double),
+        observed=np.array([-1.0, 2.0], dtype=np.double),
         n_iterations=2,
         purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
     )
 
     assert result.outcome.status == "skipped"
     assert result.outcome.skip_reason == "fewer than two purity bins"
-    np.testing.assert_array_equal(result.weights, [1.0, 1.0])
+    assert result.reweighting is None
+    np.testing.assert_array_equal(
+        result.weights_for(np.array([0.4, 0.6], dtype=np.double)), [1.0, 1.0]
+    )
 
 
 def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
@@ -225,19 +227,76 @@ def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
 
     result = ibu._unfold_variable(
         variable_name="dim_0",
-        response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
-        response_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
-        observed_reco=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
-        test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+        mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+        mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
+        observed=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
+        n_iterations=2,
+        purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
+    )
+    weights = result.weights_for(np.array([0.2, 1.8], dtype=np.double))
+
+    assert result.outcome.status == "completed"
+    assert result.outcome.n_bins == 2
+    assert np.all(np.isfinite(weights))
+    assert np.all(weights >= 0)
+    assert weights.mean() == pytest.approx(1.0)
+
+
+def test_unfolds_in_single_precision_end_to_end() -> None:
+    """IBU runs at float32 to match the precision its published results use.
+
+    Real purity binning on a realistic number of events, so the population
+    count checks and the mean-one postcondition are exercised against float32
+    arithmetic rather than assumed to survive it.
+    """
+    rng = np.random.default_rng(0)
+    n = 20_000
+    mc_gen = rng.normal(size=n).astype(np.single)
+    mc_sim = (mc_gen + 0.3 * rng.normal(size=n)).astype(np.single)
+    observed = (0.5 + rng.normal(size=n)).astype(np.single)
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        mc_gen=mc_gen,
+        mc_sim=mc_sim,
+        observed=observed,
+        n_iterations=4,
+        purity_threshold=0.5,
+    )
+
+    assert result.outcome.status == "completed"
+    assert result.reweighting is not None
+    assert result.reweighting.bin_weights.dtype == np.single
+    assert result.reweighting.edges.dtype == np.single
+
+    weights = result.weights_for(mc_gen)
+    assert weights.dtype == np.single
+    assert weights.mean(dtype=np.double) == pytest.approx(1.0, rel=1e-5)
+
+
+def test_unfolding_applies_to_a_sample_it_was_not_fit_on(monkeypatch) -> None:
+    """The learned object is per-bin, so the sample it scores is a free choice."""
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
+    )
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+        mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
+        observed=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
         n_iterations=2,
         purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
     )
 
-    assert result.outcome.status == "completed"
-    assert result.outcome.n_bins == 2
-    assert np.all(np.isfinite(result.weights))
-    assert np.all(result.weights >= 0)
-    assert result.weights.mean() == pytest.approx(1.0)
+    assert result.reweighting is not None
+    assert result.reweighting.bin_weights.size == 2
+    # Any number of events, in any order, so long as they are the same variable.
+    for size in (2, 7, 50):
+        gen = np.linspace(0.0, 2.0, size, dtype=np.double)
+        assert result.weights_for(gen).shape == (size,)
 
 
 @pytest.mark.parametrize(
@@ -255,9 +314,7 @@ def test_unfold_variable_reports_population_count_mismatch(
     real_bin_counts = ibu._bin_counts
     call_count = 0
 
-    def dropping_bin_counts(
-        indices: NDArray[np.intp], n_bins: int
-    ) -> NDArray[np.double]:
+    def dropping_bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
         nonlocal call_count
         call_count += 1
         counts = real_bin_counts(indices, n_bins)
@@ -270,10 +327,9 @@ def test_unfold_variable_reports_population_count_mismatch(
     with pytest.raises(ValueError, match=rf"{population}.*3.*4"):
         ibu._unfold_variable(
             variable_name="dim_0",
-            response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
-            response_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),
-            observed_reco=np.array([0.1, 0.9, 1.1, 1.9], dtype=np.double),
-            test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+            mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+            mc_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),
+            observed=np.array([0.1, 0.9, 1.1, 1.9], dtype=np.double),
             n_iterations=2,
             purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
         )
@@ -314,6 +370,8 @@ def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
     assert isinstance(result, ibu.IBUResult)
     assert result.variable_names == ("dim_0",)
     assert result.weights.shape == (1, 2)
+    # Cast at IBU's boundary: the splits above are the float64 RAN trains on.
+    assert result.weights.dtype == np.single
     assert len(result.outcomes) == 1
     assert result.outcomes[0].status == "skipped"
     assert set(result.metrics) == {"detector_dim_0", "particle_dim_0"}

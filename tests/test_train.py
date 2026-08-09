@@ -8,7 +8,8 @@ import keras
 import numpy as np
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
-from ran.rantypes import ZXY, Events
+from ran.models import build_generator
+from ran.rantypes import TRUTH_SENTINEL, ZXY, Events
 from ran.train import (
     EPS,
     TrainResult,
@@ -66,6 +67,29 @@ class TestNormalizeWeights:
             np.asarray(normalize_weights(raw, y)),
             np.asarray(normalize_weights(poisoned, y)),
         )
+
+
+def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
+    """Why `TRUTH_SENTINEL` is a number: the z_true guard is arithmetic.
+
+    A sample built by `Populations.create` without truth carries the sentinel
+    in the nature rows of `z`, so g forward-passes it. Multiplying g's output
+    there by (1 - y) = 0 annihilates a number, which is what makes those rows
+    irrelevant -- but under IEEE 754 it does not annihilate a NaN, which would
+    instead reach every weight in the batch through the normalizing sum.
+    """
+    rng = np.random.default_rng(6)
+    mc_z = rng.normal(size=(6, 1))
+    y = np.array([1.0] * 4 + [0.0] * 6)
+    g = build_generator(dim=1)
+
+    def weights(nature_fill: float) -> ndarray[tuple[int, ...], dtype[float64]]:
+        z = np.concatenate([np.full((4, 1), nature_fill), mc_z], axis=0)
+        raw = np.squeeze(np.asarray(g(z)), axis=-1)
+        return np.asarray(normalize_weights(raw, y))
+
+    np.testing.assert_allclose(weights(float(TRUTH_SENTINEL)), weights(0.0))
+    assert np.all(np.isnan(weights(np.nan)))
 
 
 class TestWeightedBCE:

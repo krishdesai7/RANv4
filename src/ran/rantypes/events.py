@@ -71,57 +71,6 @@ class Events[T: np.floating = np.double]:
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class ZXY[T: np.floating = np.double]:
-    """Events labelled by provenance: y = 1 for nature, y = 0 for MC.
-
-    The transport form -- what gets shuffled, split, batched and trained on.
-    `partition` converts to the physics form, `Populations.interleave` back.
-    """
-
-    events: Events[T]
-    y: NDArray[np.ubyte]
-
-    def __post_init__(self) -> None:
-        if self.y.ndim != 1 or self.y.shape[0] != len(self.events):
-            raise ValueError(
-                f"y has shape {self.y.shape}; expected one label per event in a "
-                f"one-dimensional array of length {len(self.events)}"
-            )
-        if np.any((self.y != 0) & (self.y != 1)):
-            raise ValueError("labels must be zero (MC) or one (nature)")
-
-    def __len__(self) -> int:
-        return self.y.shape[0]
-
-    @property
-    def z(self) -> NDArray[T]:
-        return self.events.z
-
-    @property
-    def x(self) -> NDArray[T]:
-        return self.events.x
-
-    @classmethod
-    def concatenate(cls, parts: Sequence[Self]) -> Self:
-        if not parts:
-            raise ValueError("cannot concatenate an empty sequence of labelled events")
-        return cls(
-            Events[T].concatenate([part.events for part in parts]),
-            np.concatenate([part.y for part in parts], axis=0),
-        )
-
-    def partition(self) -> Populations[T]:
-        """Separate the labelled events into the four physics populations."""
-        mc: NDArray[np.bool] = self.y == 0
-        nature: NDArray[np.bool] = ~mc
-        return Populations(
-            mc=Events[T](self.events.z[mc], self.events.x[mc]),
-            data=self.events.x[nature],
-            truth=self.events.z[nature],
-        )
-
-
-@dataclass(frozen=True, eq=False, slots=True)
 class Populations[T: np.floating = np.double]:
     """The physics view of a labelled sample.
 
@@ -234,6 +183,57 @@ class Populations[T: np.floating = np.double]:
                     np.zeros(len(self.mc), dtype=np.ubyte),
                 ]
             ),
+        )
+
+
+@dataclass(frozen=True, eq=False, slots=True)
+class ZXY[T: np.floating = np.double]:
+    """Events labelled by provenance: y = 1 for nature, y = 0 for MC.
+
+    The transport form -- what gets shuffled, split, batched and trained on.
+    `partition` converts to the physics form, `Populations.interleave` back.
+    """
+
+    events: Events[T]
+    y: NDArray[np.ubyte]
+
+    def __post_init__(self) -> None:
+        if self.y.ndim != 1 or self.y.shape[0] != len(self.events):
+            raise ValueError(
+                f"y has shape {self.y.shape}; expected one label per event in a "
+                f"one-dimensional array of length {len(self.events)}"
+            )
+        if np.any((self.y != 0) & (self.y != 1)):
+            raise ValueError("labels must be zero (MC) or one (nature)")
+
+    def __len__(self) -> int:
+        return self.y.shape[0]
+
+    @property
+    def z(self) -> NDArray[T]:
+        return self.events.z
+
+    @property
+    def x(self) -> NDArray[T]:
+        return self.events.x
+
+    @classmethod
+    def concatenate(cls, parts: Sequence[Self]) -> Self:
+        if not parts:
+            raise ValueError("cannot concatenate an empty sequence of labelled events")
+        return cls(
+            Events[T].concatenate([part.events for part in parts]),
+            np.concatenate([part.y for part in parts], axis=0),
+        )
+
+    def partition(self) -> Populations[T]:
+        """Separate the labelled events into the four physics populations."""
+        mc: NDArray[np.bool] = self.y == 0
+        nature: NDArray[np.bool] = ~mc
+        return Populations(
+            mc=Events[T](self.events.z[mc], self.events.x[mc]),
+            data=self.events.x[nature],
+            truth=self.events.z[nature],
         )
 
 

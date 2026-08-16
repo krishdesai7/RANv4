@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
-    from typing import Any, Final, Literal, LiteralString
+    from typing import Any, Final, LiteralString
 
     import numpy as np
     from numpy.typing import NDArray
 
-
+    from .enums import DatasetName
 REQUIRED_KEYS: Final[frozenset[LiteralString]] = frozenset(
     (
         "mu_gen",
@@ -43,7 +43,7 @@ class GaussianConfig(NamedTuple):
 @dataclass(frozen=True)
 class RunConfig:
     source: dict[str, Any]
-    dataset: Literal["gaussian", "jets"]
+    dataset: DatasetName
     dim: int
     n_samples: int
     batch_size: int

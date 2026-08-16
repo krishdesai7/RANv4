@@ -19,7 +19,7 @@ A validated view of a run's `config.json`. `source` is the raw dict, kept becaus
 #### Fields
 
 - `source: dict[str, Any]`: The raw config.json.
-- `dataset: Literal["gaussian", "jets"]`: The dataset to use.
+- `dataset: DatasetName`: The dataset to use.
 - `dim: int`: The dimension of the Gaussian parameter set.
 - `n_samples: int`: The number of samples to use.
 - `batch_size: int`: The batch size to use.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_type
 
 import numpy as np
 import pytest
@@ -83,6 +83,24 @@ class TestGenerateGaussianDataset:
         ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(params=params, n_samples=1000)
         assert splits.train is not None
+
+    def test_dtype_controls_generated_array_runtime_type(self, tmp_path) -> None:
+        params = GaussianConfig(
+            dim=1,
+            mu_gen=np.array([0.0]),
+            mu_true=np.array([0.5]),
+            cov_gen=np.array([[1.0]]),
+            cov_true=np.array([[0.9]]),
+            cov_detector=np.array([[0.5]]),
+        )
+        ds = RANDataset(dtype=np.single, cache_dir=tmp_path)
+        assert_type(ds, RANDataset[np.float32])
+
+        splits = ds.generate_gaussian_dataset(params=params, n_samples=100)
+
+        assert ds.dtype == np.single
+        assert splits.select(Split.ALL).z.dtype == np.single
+        assert splits.select(Split.ALL).x.dtype == np.single
 
     def test_both_config_and_params_raises(self, tmp_path) -> None:
         """Providing both config_path and params should error."""

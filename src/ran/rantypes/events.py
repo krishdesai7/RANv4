@@ -260,4 +260,4 @@ class DatasetSplits[T: np.floating = np.double](NamedTuple):
         ]
         if not chosen:
             raise ValueError("select needs at least one split")
-        return ZXY[T].concatenate(chosen)
+        return ZXY[T].concatenate(parts=chosen)

@@ -19,7 +19,8 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
 
     destination = tmp_path / "sample.npz"
 
-    def fake_urlretrieve(_url, _dest, reporthook) -> None:
+    def fake_urlretrieve(_url, filename, reporthook) -> None:
+        assert filename == destination
         reporthook(1, 100, 100)
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)

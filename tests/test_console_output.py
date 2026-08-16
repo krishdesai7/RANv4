@@ -38,11 +38,11 @@ def test_download_file_updates_a_rich_progress_task(monkeypatch, tmp_path) -> No
 
     completed = []
 
-    def fake_urlretrieve(url, dest, reporthook) -> None:
+    def fake_urlretrieve(url, filename, reporthook) -> None:
         reporthook(0, 25, 100)
         reporthook(2, 25, 100)
         reporthook(4, 25, 100)
-        completed.append((url, dest))
+        completed.append((url, filename))
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)
     progress = Progress(disable=True)

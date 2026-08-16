@@ -183,7 +183,7 @@ Run IBU baseline on completed RAN runs.
 
 #### Arguments
 
-- `run_dir: str | Path` Path to a single run or directory of runs.
+- `run_dir: Path` Path to a single run or directory of runs.
 - `force: bool = False` Recompute even if metrics_ibu.json exists.
 - `n_iterations: int = 10` Number of IBU iterations.
 - `purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD` Purity threshold for automatic binning.
@@ -209,3 +209,35 @@ A process gets one Keras backend, set at first `keras` import, so invoke the <sp
 Trains <span style="font-variant: small-caps;">OmniFold</span> on in-memory arrays and return mean-normalized gen weights.
 
 Trains on (data reco = `x_data`, MC reco = `x_sim`, MC gen = `z_gen`), then reweights `z_target` (defaults to `z_gen`) through the gen-level model. Returns a 1D weight array, normalized so its mean is 1.
+
+`out_dir` is where the `omnifold` library scatters its own bookkeeping: `MultiFold` opens `log_<name>.txt` in `log_folder` and dumps a checkpoint per iteration/step into `weights_folder`, both defaulting to the process cwd. It is keyword-only and has no default on purpose -- every caller must say where those land, or concurrent callers sharing a cwd silently overwrite each other's files (the sweep runs up to 24 points at once from one working directory). Give each concurrent call its own directory.
+
+#### Arguments
+
+- `x_data: ArrayLike` The data reco.
+- `x_sim: ArrayLike` The MC reco.
+- `z_gen: ArrayLike` The MC gen.
+- `z_target: ArrayLike | None = None` The MC gen to reweight.
+- `niter: int = 3` Number of iterations.
+- `epochs: int = 50` Number of epochs.
+- `batch_size: int = 512` Batch size.
+- `out_dir: Path` The output directory.
+
+#### Returns
+
+- A `NDArray[np.single]` containing the per-event weights.
+
+### `omnifold::evaluate_runs`
+
+Run <span style="font-variant: small-caps;">OmniFold</span> baseline on completed runs.
+
+#### Arguments
+
+- `run_dir: Path` Path to a single run or directory of runs.
+- `force: bool = False` Recompute even if metrics_omnifold.json exists.
+- `niter: int = 3` Number of OmniFold iterations.
+- `epochs: int = 50` Number of epochs.
+
+#### Returns
+
+- A `dict[str, MetricRecord]` containing the metrics.

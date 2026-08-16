@@ -294,6 +294,7 @@ def render_metrics(
     metrics: dict,
     var_names: list[str],
     console: Console | None = None,
+    /,
 ) -> None:
     """Render evaluation metrics as one Rich table per available level."""
     active_console: Console = console or Console()

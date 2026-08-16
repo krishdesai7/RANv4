@@ -57,7 +57,7 @@ def sigma_to_covariance(
     else:
         raise ValueError(f"sigma must be 0D, 1D, or 2D, got {arr.ndim = }")
 
-    cholesky(cov, lower=True)
+    cholesky(a=cov, lower=True)
     return cov
 
 

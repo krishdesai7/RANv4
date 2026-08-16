@@ -169,7 +169,7 @@ class DatasetSplits[T: np.floating = np.double](NamedTuple):
     val: ArrayDataset[T]
     test: ArrayDataset[T]
 
-    def select(self, which: Split = Split.ALL) -> ZXY[T]:
+    def select(self, which: Split = Split.ALL, /) -> ZXY[T]:
         chosen: list[ZXY[T]] = [
             split.as_arrays()
             for flag, split in (

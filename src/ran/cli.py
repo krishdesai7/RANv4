@@ -8,23 +8,28 @@ import typer
 from .logging_config import configure_logging
 from .rantypes import SUBSTRUCTURE_VARIABLES, DatasetName, LogLevel
 
-app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
-app.add_typer(baseline_app, name="baseline", help="Run comparison baselines.")
-app.add_typer(sweep_app, name="sweep", help="Run cubic-response sweep steps.")
+
+app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+app.add_typer(
+    typer_instance=baseline_app, name="baseline", help="Run comparison baselines."
+)
+app.add_typer(
+    typer_instance=sweep_app, name="sweep", help="Run cubic-response sweep steps."
+)
 
 
 @app.callback()
 def configure(
     log_level: Annotated[
         LogLevel,
-        typer.Option(
-            "--log-level", case_sensitive=False, help="Application log level."
+        typer.Argument(
+            case_sensitive=False, envvar="RAN_LOG_LEVEL", help="Application log level."
         ),
     ] = LogLevel.info,
 ) -> None:
-    configure_logging(log_level.value)
+    configure_logging(level=log_level.value)
 
 
 @app.command("train")

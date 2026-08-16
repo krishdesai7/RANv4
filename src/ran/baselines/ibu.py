@@ -382,13 +382,12 @@ def _run_and_evaluate(
 
 
 def evaluate_single(
-    run_dir: str | Path,
+    run_dir: Path,
     force: bool = False,
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, MetricRecord]:
     """Run IBU on a single run's dataset and save comparison metrics."""
-    run_dir = Path(run_dir)
     out_path: Path = run_dir / "metrics_ibu.json"
 
     if out_path.exists() and not force:
@@ -396,14 +395,14 @@ def evaluate_single(
         return json.loads(out_path.read_text())
 
     raw_config: object = json.loads((run_dir / "config.json").read_text())
-    config = parse_run_config(raw_config)
+    config: RunConfig = parse_run_config(raw_config)
     logger.info(
         "%s: running IBU (niter=%d, purity=%.4f)...",
         run_dir.name,
         n_iterations,
         purity_threshold,
     )
-    result = _run_and_evaluate(
+    result: IBUResult = _run_and_evaluate(
         config,
         n_iterations=n_iterations,
         purity_threshold=purity_threshold,
@@ -428,7 +427,7 @@ def evaluate_single(
 
 
 def evaluate_runs(
-    run_dir: str | Path = "runs",
+    run_dir: Path = Path("runs"),
     force: bool = False,
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,

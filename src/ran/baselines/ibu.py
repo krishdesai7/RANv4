@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..evaluate import apply_to_runs, render_metrics
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, VariableOutcome
+from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, Populations, VariableOutcome
 from ..train import EPS
 from ._shared import (
     evaluate_dimension,
@@ -30,14 +30,6 @@ logger: Logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, eq=False, slots=True)
 class _BinnedReweighting[T: np.floating = np.double]:
-    """A per-bin correction, learned from one population and applied to another.
-
-    This is all IBU actually produces: one multiplicative factor per bin of the
-    particle-level axis. Which events it is then applied to is a separate
-    choice -- here the unfolding is fit on every split and applied to the test
-    split, so the sample it scores is not the sample it learned from.
-    """
-
     edges: NDArray[T]
     bin_weights: NDArray[T]
 
@@ -59,7 +51,7 @@ class _VariableUnfolding[T: np.floating = np.double]:
         return self.reweighting.weights_for(gen)
 
 
-def _assign_bins[T: np.floating](
+def _assign_bins[T: np.floating = np.double](
     values: NDArray[T], edges: NDArray[T]
 ) -> NDArray[np.intp]:
     if values.ndim != 1 or not np.all(np.isfinite(values)):
@@ -80,7 +72,7 @@ def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
     return np.bincount(indices, minlength=n_bins)
 
 
-def _unfolded_to_bin_weights[T: np.floating](
+def _unfolded_to_bin_weights[T: np.floating = np.double](
     unfolded: NDArray[T], prior: NDArray[T]
 ) -> NDArray[T]:
     if (
@@ -104,7 +96,7 @@ def _unfolded_to_bin_weights[T: np.floating](
     return weights
 
 
-def _normalize_weights[T: np.floating](weights: NDArray[T]) -> NDArray[T]:
+def _normalize_weights[T: np.floating = np.double](weights: NDArray[T]) -> NDArray[T]:
     if weights.ndim != 1 or weights.size == 0:
         raise ValueError("weights must be a nonempty one-dimensional vector")
     if not np.all(np.isfinite(weights)):
@@ -126,7 +118,7 @@ def _normalize_weights[T: np.floating](weights: NDArray[T]) -> NDArray[T]:
     return normalized
 
 
-def _next_pure_edge[T: np.floating](
+def _next_pure_edge[T: np.floating = np.double](
     gen_sorted: NDArray[T],
     upper_sorted: NDArray[T],
     lower_by_upper: NDArray[T],
@@ -156,8 +148,7 @@ def _next_pure_edge[T: np.floating](
         upper_sorted, candidates, side="left"
     )
 
-    # Among those elements, count the ones satisfying
-    # min(gen, reco) >= lo.
+    # Among those elements, count the ones satisfying min(gen, reco) >= lo.
     prefix: NDArray[np.ulong] = np.empty(lower_by_upper.size + 1, dtype=np.ulong)
     prefix[0] = 0
     np.cumsum(
@@ -184,7 +175,7 @@ def _next_pure_edge[T: np.floating](
     return candidates[qualifying[0]]
 
 
-def _purity_bins[T: np.floating](
+def _purity_bins[T: np.floating = np.double](
     gen: NDArray[T],
     sim: NDArray[T],
     purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
@@ -234,7 +225,7 @@ def _purity_bins[T: np.floating](
     return edges[:n_edges]
 
 
-def _build_response[T: np.floating](
+def _build_response[T: np.floating = np.double](
     gen_bins: NDArray[np.intp],
     reco_bins: NDArray[np.intp],
     n_bins: int,
@@ -249,7 +240,7 @@ def _build_response[T: np.floating](
     return response
 
 
-def _ibu[T: np.floating](
+def _ibu[T: np.floating = np.double](
     prior: NDArray[T],
     data_hist: NDArray[T],
     response: NDArray[T],
@@ -267,8 +258,7 @@ def _ibu[T: np.floating](
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
-        # `out=` is what makes the zeros the value of the skipped entries.
-        # Rebinding instead leaves them whatever the fresh allocation held.
+        # `out=` makes the value of the skipped entries zero.
         likelihood: NDArray[T] = np.zeros_like(posterior)
         np.divide(
             data_hist,
@@ -280,7 +270,7 @@ def _ibu[T: np.floating](
     return posterior
 
 
-def _unfold_variable[T: np.floating](
+def _unfold_variable[T: np.floating = np.double](
     variable_name: str,
     mc_gen: NDArray[T],
     mc_sim: NDArray[T],
@@ -288,12 +278,6 @@ def _unfold_variable[T: np.floating](
     n_iterations: int,
     purity_threshold: float,
 ) -> _VariableUnfolding[T]:
-    """Fit one variable's reweighting from a simulation and a measurement.
-
-    `mc_gen` and `mc_sim` are one column of a `Populations`' `mc.z` and `mc.x`;
-    they are row-aligned and together give the response. `observed` is the same
-    column of its `data`. No part of `truth` belongs here.
-    """
     dtype: np.dtype[T] = mc_gen.dtype
     bins: NDArray[T] = _purity_bins(mc_gen, mc_sim, purity_threshold)
     n_bins: int = bins.size - 1
@@ -354,19 +338,18 @@ def _run_and_evaluate(
     if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
         raise ValueError("purity_threshold must be finite and between zero and one")
 
-    # Single precision, at its own boundary: RAN generated these in float64 and
-    # trains in float64, but the IBU results this is compared against were
-    # produced in float32, and the binning is sharp enough that the arithmetic
-    # has to match for the comparison to mean anything.
+    # Single precision, at its own boundary.
+    full: Populations[np.single]
+    test: Populations[np.single]
     full, test = load_populations(config).astype(np.single)
-    test_truth = test.require_truth()
-    weights = np.empty((config.dim, len(test.mc)), dtype=np.single)
+    test_truth: NDArray[np.single] = test.require_truth()
+    weights: NDArray[np.single] = np.empty((config.dim, len(test.mc)), dtype=np.single)
     metrics: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(config.variable_names):
         # Fit on every split, then score the test split with the result.
-        unfolding = _unfold_variable(
+        unfolding: _VariableUnfolding[np.single] = _unfold_variable(
             variable_name=variable_name,
             mc_gen=full.mc.z[:, dimension],
             mc_sim=full.mc.x[:, dimension],
@@ -374,7 +357,9 @@ def _run_and_evaluate(
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
         )
-        test_weights = unfolding.weights_for(test.mc.z[:, dimension])
+        test_weights: NDArray[np.single] = unfolding.weights_for(
+            test.mc.z[:, dimension]
+        )
         weights[dimension] = test_weights
         outcomes.append(unfolding.outcome)
         metrics[f"detector_{variable_name}"] = evaluate_dimension(
@@ -402,7 +387,7 @@ def evaluate_single(
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, MetricRecord]:
-    """Run IBU on a single RAN run's dataset and save comparison metrics."""
+    """Run IBU on a single run's dataset and save comparison metrics."""
     run_dir = Path(run_dir)
     out_path: Path = run_dir / "metrics_ibu.json"
 
@@ -428,11 +413,8 @@ def evaluate_single(
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
-        # savez is `savez(file, *args, allow_pickle=True, **kwds)`. Our keys are
-        # built by f-string, so their type is plain `str` -- one of them *could*
-        # be "allow_pickle", which is declared bool. The complaint is therefore
-        # sound rather than a stub bug (ty reports it too); it just cannot happen
-        # here. A literal-key dict checks clean, but ours cannot be one.
+        # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. Our keys are
+        # built by f-string, so their type is plain `str`.
         **{f"weights_{i}": weights for i, weights in enumerate(result.weights)},  # pyrefly: ignore[bad-argument-type]
     )
     logger.info(
@@ -451,14 +433,6 @@ def evaluate_runs(
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> None:
-    """Run IBU baseline on completed RAN runs.
-
-    Args:
-        run_dir: Path to a single run or directory of runs.
-        force: Recompute even if metrics_ibu.json exists.
-        n_iterations: Number of IBU iterations.
-        purity_threshold: Purity threshold for automatic binning.
-    """
     apply_to_runs(
         run_dir,
         lambda d: evaluate_single(

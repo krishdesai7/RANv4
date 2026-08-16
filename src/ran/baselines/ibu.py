@@ -21,11 +21,12 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Final
 
+    from numpy._typing import _DTypeLikeFloat
     from numpy.typing import NDArray
 
     from ..rantypes import MetricRecord, RunConfig
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 
 @dataclass(frozen=True, eq=False, slots=True)
@@ -52,22 +53,22 @@ class _VariableUnfolding[T: np.floating = np.double]:
 
 
 def _assign_bins[T: np.floating = np.double](
-    values: NDArray[T], edges: NDArray[T]
+    values: NDArray[T], edges: NDArray[T], /
 ) -> NDArray[np.intp]:
-    if values.ndim != 1 or not np.all(np.isfinite(values)):
+    if values.ndim != 1 or not np.all(a=np.isfinite(values)):
         raise ValueError("bin values must be a finite one-dimensional array")
-    if edges.ndim != 1 or edges.size < 2 or not np.all(np.diff(edges) > 0):
+    if edges.ndim != 1 or edges.size < 2 or not np.all(a=np.diff(a=edges) > 0):
         raise ValueError("bin edges must be a strictly increasing 1D array")
-    n_bins = edges.size - 1
-    return (np.clip(np.digitize(values, edges), 1, n_bins) - 1).astype(
-        np.intp, copy=False
-    )
+    n_bins: int = edges.size - 1
+    return (
+        np.clip(np.digitize(x=values, bins=edges), a_min=1, a_max=n_bins) - 1
+    ).astype(dtype=np.intp, copy=False)
 
 
 def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
     if n_bins < 1 or indices.ndim != 1:
         raise ValueError("bin indices must be one-dimensional with n_bins >= 1")
-    if np.any((indices < 0) | (indices >= n_bins)):
+    if np.any(a=(indices < 0) | (indices >= n_bins)):
         raise ValueError("bin index outside configured range")
     return np.bincount(indices, minlength=n_bins)
 
@@ -84,14 +85,14 @@ def _unfolded_to_bin_weights[T: np.floating = np.double](
         raise ValueError(
             "unfolded and prior must have matching nonempty one-dimensional shapes"
         )
-    if not np.all(np.isfinite(unfolded)) or not np.all(np.isfinite(prior)):
+    if not np.all(a=np.isfinite(unfolded)) or not np.all(a=np.isfinite(prior)):
         raise ValueError("unfolded and prior must be finite")
-    if np.any(unfolded < 0) or np.any(prior < 0):
+    if np.any(a=unfolded < 0) or np.any(a=prior < 0):
         raise ValueError("unfolded and prior must be nonnegative")
-    if np.any((prior == 0) & (unfolded > EPS)):
+    if np.any(a=(prior == 0) & (unfolded > EPS)):
         raise ValueError("unfolded mass in a zero-prior bin")
 
-    weights: NDArray[T] = np.zeros_like(unfolded)
+    weights: NDArray[T] = np.zeros_like(a=unfolded)
     np.divide(unfolded, prior, out=weights, where=prior > 0)
     return weights
 
@@ -99,21 +100,21 @@ def _unfolded_to_bin_weights[T: np.floating = np.double](
 def _normalize_weights[T: np.floating = np.double](weights: NDArray[T]) -> NDArray[T]:
     if weights.ndim != 1 or weights.size == 0:
         raise ValueError("weights must be a nonempty one-dimensional vector")
-    if not np.all(np.isfinite(weights)):
+    if not np.all(a=np.isfinite(weights)):
         raise ValueError("weights must be finite")
-    if np.any(weights < 0):
+    if np.any(a=weights < 0):
         raise ValueError("weights must be nonnegative")
 
-    mean: T = np.mean(weights)
+    mean: T = np.mean(a=weights)
     if not np.isfinite(mean) or mean <= 0:
         raise ValueError("weights mean must be finite and strictly positive")
 
     normalized: NDArray[T] = np.divide(weights, mean)
-    if not np.all(np.isfinite(normalized)) or np.any(normalized < 0):
+    if not np.all(a=np.isfinite(normalized)) or np.any(a=normalized < 0):
         raise ValueError("normalized weights must be finite and nonnegative")
     # The division runs in the caller's precision; only the check that it
     # worked is accumulated wider, so a float32 resummation cannot fail it.
-    if not np.isclose(normalized.mean(dtype=np.double), 1.0):
+    if not np.isclose(a=normalized.mean(dtype=np.double), b=1.0):
         raise ValueError("normalized weights must have mean one")
     return normalized
 
@@ -131,34 +132,36 @@ def _next_pure_edge[T: np.floating = np.double](
         raise ValueError("n_candidates must be positive")
 
     candidates: NDArray[T] = np.linspace(
-        lo + 1 / n_candidates,
-        gen_max,
-        n_candidates,
+        start=lo + 1 / n_candidates,
+        stop=gen_max,
+        num=n_candidates,
         dtype=gen_sorted.dtype,
     )
 
     # Denominator = count(lo <= gen < candidate) for every candidate.
-    truth_start: np.intp = np.searchsorted(gen_sorted, lo, side="left")
-    truth_stop: NDArray[np.intp] = np.searchsorted(gen_sorted, candidates, side="left")
+    truth_start: np.intp = np.searchsorted(a=gen_sorted, v=lo, side="left")
+    truth_stop: NDArray[np.intp] = np.searchsorted(
+        a=gen_sorted, v=candidates, side="left"
+    )
     n_truth: NDArray[np.intp] = truth_stop - truth_start
 
     # Because upper_sorted is ordered, the first k elements are precisely
     # those for which max(gen, reco) < candidates[j].
     upper_stop: NDArray[np.intp] = np.searchsorted(
-        upper_sorted, candidates, side="left"
+        a=upper_sorted, v=candidates, side="left"
     )
 
     # Among those elements, count the ones satisfying min(gen, reco) >= lo.
-    prefix: NDArray[np.ulong] = np.empty(lower_by_upper.size + 1, dtype=np.ulong)
+    prefix: NDArray[np.ulong] = np.empty(shape=lower_by_upper.size + 1, dtype=np.ulong)
     prefix[0] = 0
     np.cumsum(
-        lower_by_upper >= lo,
+        a=lower_by_upper >= lo,
         dtype=np.ulong,
         out=prefix[1:],
     )
     n_both: NDArray[np.ulong] = prefix[upper_stop]
 
-    purity: NDArray[np.double] = np.zeros(n_candidates, dtype=np.double)
+    purity: NDArray[np.double] = np.zeros(shape=n_candidates, dtype=np.double)
     np.divide(
         n_both,
         n_truth,
@@ -167,7 +170,7 @@ def _next_pure_edge[T: np.floating = np.double](
     )
 
     qualifying: NDArray[np.intp] = np.flatnonzero(
-        (n_truth != 0) & (purity > purity_threshold)
+        a=(n_truth != 0) & (purity > purity_threshold)
     )
     if qualifying.size == 0:
         return None
@@ -192,17 +195,17 @@ def _purity_bins[T: np.floating = np.double](
         raise ValueError("max_bins must be positive")
 
     # One-time preprocessing.
-    gen_sorted: NDArray[T] = np.sort(gen)
+    gen_sorted: NDArray[T] = np.sort(a=gen)
 
     lower: NDArray[T] = np.minimum(gen, sim)
     upper: NDArray[T] = np.maximum(gen, sim)
 
-    upper_order: NDArray[np.intp] = np.argsort(upper)
+    upper_order: NDArray[np.intp] = np.argsort(a=upper)
     upper_sorted: NDArray[T] = upper[upper_order]
     lower_by_upper: NDArray[T] = lower[upper_order]
 
     # max_bins bins require at most max_bins + 1 edges.
-    edges: NDArray[T] = np.empty(max_bins + 1, dtype=gen.dtype)
+    edges: NDArray[T] = np.empty(shape=max_bins + 1, dtype=gen.dtype)
     edges[0] = gen.min()
     n_edges = 1
 
@@ -227,13 +230,14 @@ def _purity_bins[T: np.floating = np.double](
 
 def _build_response[T: np.floating = np.double](
     gen_bins: NDArray[np.intp],
-    reco_bins: NDArray[np.intp],
+    sim_bins: NDArray[np.intp],
     n_bins: int,
-    dtype: np.dtype[T],
+    dtype: _DTypeLikeFloat,
+    /,
 ) -> NDArray[T]:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
-    response: NDArray[T] = np.zeros((n_bins, n_bins), dtype=dtype)
-    np.add.at(response, (gen_bins, reco_bins), 1)
+    response: NDArray[T] = np.zeros(shape=(n_bins, n_bins), dtype=dtype)
+    np.add.at(response, (gen_bins, sim_bins), 1)
     row_sums: NDArray[T] = response.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1
     response /= row_sums
@@ -254,12 +258,12 @@ def _ibu[T: np.floating = np.double](
         # The NumPy-stub loses the specific floating precision
         # There is no type promotion at runtime
         marginal: NDArray[T] = response.T @ posterior  # pyrefly: ignore[bad-assignment]
-        if strict and np.any((marginal == 0) & (data_hist != 0)):
+        if strict and np.any(a=(marginal == 0) & (data_hist != 0)):
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
         # `out=` makes the value of the skipped entries zero.
-        likelihood: NDArray[T] = np.zeros_like(posterior)
+        likelihood: NDArray[T] = np.zeros_like(a=posterior)
         np.divide(
             data_hist,
             marginal,
@@ -289,7 +293,7 @@ def _unfold_variable[T: np.floating = np.double](
                 variable_name,
                 "skipped",
                 n_bins,
-                "fewer than two purity bins",
+                skip_reason="fewer than two purity bins",
             ),
         )
 

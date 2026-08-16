@@ -39,6 +39,15 @@ class JetVarInfo(NamedTuple):
     symbol: str
 
 
+# Soft drop grooms some jets down to a single prong, leaving m_sd = 0 and
+# ln(rho) = ln(m_sd^2 / pT^2) = -inf. Those jets take this value instead, which
+# is both the bottom of the plotted range below and the reason it can be: no
+# jet with a groomed mass to speak of reaches it, and unlike -inf (or the
+# 1e-100 the upstream OmniFold observable adds inside the log, which floors at
+# -230) it does not swamp the mean and variance the features are standardized
+# by. Degenerate jets land in the underflow bin, where they belong.
+LOG_RHO_FLOOR: Final[float] = -14.0
+
 JET_OBS: Final[dict[str, JetVarInfo]] = {
     "m": JetVarInfo((0, 75), "Jet Mass", r"$m$ [GeV]"),
     "M": JetVarInfo((0, 80), "Jet Constituent Multiplicity", r"$M$"),
@@ -47,7 +56,7 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
         (0, 1.2), r"$N$-subjettiness Ratio", r"$\tau_{21}^{(\beta=1)}$"
     ),
     "zg": JetVarInfo((0, 0.5), "Groomed Jet Momentum Fraction", r"$z_g$"),
-    "sdm": JetVarInfo((-14, -2), "Soft Drop Jet Mass", r"$\ln\rho$"),
+    "sdm": JetVarInfo((LOG_RHO_FLOOR, -2), "Soft Drop Jet Mass", r"$\ln\rho$"),
 }
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)

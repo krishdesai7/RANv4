@@ -1,11 +1,3 @@
-"""Load jet substructure data for RAN training.
-
-Checks .cache/ for per-variable .npz files. If missing, invokes
-download_jet_data to fetch from Zenodo. Loads, subsamples, z-score
-standardizes (using MC gen-level statistics only), and builds the
-train/val/test splits via RANDataset.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -17,6 +9,7 @@ from ..rantypes import (
     CACHE_DIR,
     CACHE_FILENAMES,
     SUBSTRUCTURE_VARIABLES,
+    ZXY,
     Events,
     Populations,
 )
@@ -28,7 +21,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 
 def load_jet_dataset(
@@ -38,26 +31,6 @@ def load_jet_dataset(
     variables: frozenset[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
 ) -> tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]:
-    """Load jet substructure data and return DatasetSplits.
-
-    Each selected substructure variable is z-score standardized using
-    the MC gen-level (z_gen) mean and std. The same parameters are applied
-    to all four arrays (z_true, x_data, z_gen, x_sim) to avoid information
-    leakage and preserve correlations.
-
-    Args:
-        n_samples: Number of events to use per class (data and MC).
-        batch_size: Batch size for the returned splits.
-        cache_dir: Directory containing per-variable .npz files.
-        variables: Which substructure variables to use.
-        seed: Dataset seed, controlling the shuffle, the train/val/test split
-            and the per-epoch batch order. Independent of the weight-init seed
-            passed to `train`.
-
-    Returns:
-        (splits, dim, std_params): DatasetSplits, feature dimensionality,
-            and standardization parameters {var_name: (mu, sigma)}.
-    """
     # Check cache, download if needed
     missing: list[str] = [
         v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
@@ -65,35 +38,39 @@ def load_jet_dataset(
     if missing:
         from ran.data.download import download_jet_data
 
-        logger.info("Cached jet data not found. Downloading from Zenodo...")
+        logger.info(msg="Jet data not found in cache; downloading from Zenodo.")
         download_jet_data(cache_dir)
 
     n_features: int = len(variables)
 
     # Check available samples
-    with np.load(cache_dir / f"{CACHE_FILENAMES[next(iter(variables))]}.npz") as f:
+    with np.load(file=cache_dir / f"{CACHE_FILENAMES[next(iter(variables))]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
     # Initialize arrays
-    z_true: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    x_data: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    z_gen: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
-    x_sim: NDArray[np.double] = np.empty((n_samples, n_features), dtype=np.double)
+    z_true: NDArray[np.double] = np.empty(
+        shape=(n_samples, n_features), dtype=np.double
+    )
+    x_data: NDArray[np.double] = np.empty(
+        shape=(n_samples, n_features), dtype=np.double
+    )
+    z_gen: NDArray[np.double] = np.empty(shape=(n_samples, n_features), dtype=np.double)
+    x_sim: NDArray[np.double] = np.empty(shape=(n_samples, n_features), dtype=np.double)
 
     # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[np.double, np.double]] = {}
-    for i, var in enumerate(variables):
-        with np.load(cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:
+    for i, var in enumerate(iterable=variables):
+        with np.load(file=cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:
             z_true[:, i] = f["z_true"][:n_samples]
             x_data[:, i] = f["x_data"][:n_samples]
             z_gen[:, i] = f["z_gen"][:n_samples]
             x_sim[:, i] = f["x_sim"][:n_samples]
 
         # Standardize using MC gen-level statistics only
-        mu: np.double = np.mean(z_gen[:, i], dtype=np.double)
-        sigma: np.double = np.std(z_gen[:, i], dtype=np.double)
+        mu: np.double = z_gen[:, i].mean(dtype=np.double)
+        sigma: np.double = z_gen[:, i].std(dtype=np.double)
         std_params[var] = (mu, sigma)
 
         z_true[:, i] = (z_true[:, i] - mu) / sigma
@@ -101,7 +78,11 @@ def load_jet_dataset(
         z_gen[:, i] = (z_gen[:, i] - mu) / sigma
         x_sim[:, i] = (x_sim[:, i] - mu) / sigma
 
-    data = Populations(mc=Events(z_gen, x_sim), data=x_data, truth=z_true).interleave()
+    data: ZXY[np.double] = Populations(
+        mc=Events(z_gen, x_sim), data=x_data, truth=z_true
+    ).interleave()
 
-    splits = RANDataset(batch_size=batch_size, seed=seed).splits_from_data(data)
+    splits: DatasetSplits[np.double] = RANDataset(
+        batch_size=batch_size, seed=seed
+    ).splits_from_data(data)
     return splits, n_features, std_params

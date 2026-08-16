@@ -35,7 +35,7 @@ Parse a Gaussian YAML config file and return a dictionary with the following key
 
 ### `ran.data.config::gaussian_config_from_run_config`
 
-Rebuild a `GaussianConfig` from the `gaussian_params` block of a run's `config.json`, across every format runs/ has ever held - two depracated formats and one current format. Two share their key names:
+Rebuild a `GaussianConfig` from the `gaussian_params` block of a run's `config.json`, across every format runs/ has ever held - two deprecated formats and one current format. Two share their key names:
 
 - `cov_gen` covariance matrices, written since the type refactor.
 - `sigma_gen` (list) covariance matrices under the old name -- master's
@@ -137,7 +137,7 @@ Interleave the nature and MC halves with one fixed-seed permutation.
 
 Cut the shuffled arrays into contiguous train/val/test splits.
 
-Test is taken off the end, validation off the end of what remains, so train occupies the front -- matching the nested `split_dataset` calls this replaced. Only the training split reshuffles between epochs.
+Test is taken off the end, validation off the end of what remains, so train occupies the front. Only the training split reshuffles between epochs.
 
 ##### `generate_gaussian_dataset`
 
@@ -153,7 +153,7 @@ Test is taken off the end, validation off the end of what remains, so train occu
 
 **Description**:
 
-Parse the config file or inline params, generate the dataset, and split it into train/val/test splits Exactly one of config_path or params must be provided.
+Parse the config file or inline params, generate the dataset, and split it into train/val/test splits. Exactly one of config_path or params must be provided.
 
 ##### `splits_from_data`
 
@@ -170,3 +170,78 @@ Parse the config file or inline params, generate the dataset, and split it into 
 Shuffle one labelled sample and cut it into train/val/test.
 
 `ZXY` has already checked that the particle- and detector-level arrays are row-aligned and that every label is zero or one, so this does no validation of its own.
+
+## Download
+
+One-time download of jet substructure data from Zenodo (record 3548091).
+
+Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to .cache/, and deletes the raw downloads.
+
+### Degenerate jets
+
+Two of the six observables are undefined for a small number of jets. A jet of one constituent has no width, and for $\beta = 1$ the width is $\tau_1$, so $\tau_{21} = \frac{\tau_2}{\tau_1} = \frac00$. This is the case for around $100-300$ jets per array. A jet that soft drop grooms down to a single prong has $m_{\text{sd}} = 0$, so $\ln \rho = \ln \left( \frac{m_{\text{sd}}^2}{p_T^2} \right) = -\infty$. This is the case for a few hundred more jets per array.
+
+`_get_var` computes each observable only where it is defined and fills the rest with a stated value: `_ONE_PRONG_TAU21` (zero, matching <span style="font-variant: small-caps;">OmniFold</span>) and `LOG_RHO_FLOOR` ($-14$, the bottom of the range `JET_OBS` plots $\ln\rho$ over).
+
+The usual alternative is to nudge the denominator or the log argument by an epsilon, and it is worse in three ways.
+
+1. It hides the convention inside a number that reads like a rounding allowance.
+2. It depends on the dtype the raw arrays happen to arrive in. For example $10^{-50}$ (used in <span style="font-variant: small-caps;">OmniFold</span>) is below the smallest `float32` denormal, so if arrays were stored as `float32`, it would round away and hand back `NaN` for exactly the jets it was meant to protect.
+3. An epsilon scaled to the data, such as $10^{-12} \times \text{mean}(p_T^2)$ (used in <span style="font-variant: small-caps;">OmniFold</span>), is a _different_ epsilon for each of the four arrays, which puts the floor of $\ln\rho$ in a different place for nature than for MC. Several hundred jets per array sit on that floor and thousands more are compressed against it, so the discriminator gets handed a spike whose position differs between the classes for reasons that have nothing to do with physics. The four arrays are two samples that get compared to each other; an observable that means something slightly different in each is not a comparison.
+
+For $\beta = 1$ the jet width is $\tau_1$, so $\tau_{21} = \frac{\tau_2}{\tau_1}$. A jet of one constituent has neither: both vanish and the ratio is 0/0. Zero is what <span style="font-variant: small-caps;">OmniFold</span>'s published results assign it and so is what this code reproduces, but it is a convention rather than a measurement. Zero is also the limit a cleanly two-pronged jet approaches, which a one-constituent jet is obviously not.
+
+### `ran.data.download::_get_var`
+
+Extract a substructure variable from raw arrays.
+
+Two of the six are undefined for a jet the detector or the groomer has left with nothing to measure: $\tau_{21}$ is $\frac00$ when the jet has one constituent, and $\ln\rho = -\infty$ when soft drop leaves no groomed mass. Both are handled by computing the observable only where it exists and filling the rest with a declared value, `_ONE_PRONG_TAU21` and `LOG_RHO_FLOOR`.
+
+**Arguments**:
+
+- `data: dict[str, NDArray]` Raw arrays.
+- `var: str` Substructure variable.
+- `ptype: str` Particle type.
+
+**Returns**:
+
+- `NDArray[np.double]` Substructure variable array.
+
+### `ran.data.download::_fetch_generator`
+
+Fetch every shard for one generator and concatenate the keys needed. Appends each shard path to `all_raw_paths` so the caller can delete the raw downloads once the per-variable caches have been written.
+
+**Arguments**:
+
+- `gen: str` Generator.
+- `cache_dir: Path` Cache directory.
+- `progress: Progress` Progress object.
+- `all_raw_paths: list[Path]` List of raw paths.
+
+**Returns**:
+
+- `dict[str, NDArray]` Raw arrays.
+
+## Jets
+
+Load jet substructure data for RAN training.
+
+Checks `.cache/` for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `RANDataset`.
+
+### `ran.data.jets::load_jet_dataset`
+
+Load jet substructure data and return DatasetSplits.
+
+Each selected substructure variable is z-score standardized using the MC gen-level (`z_gen`) mean and std. The same parameters are applied to all four arrays (`z_true`, `x_data`, `z_gen`, `x_sim`) to avoid information leakage and preserve correlations.
+
+**Arguments**:
+
+- `n_samples: int = 500_000` Number of events to use per class (data and MC).
+- `batch_size: int = 1024` Batch size for the returned splits.
+- `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files.
+- `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
+- `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
+
+**Returns**:
+
+- `tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]` DatasetSplits, feature dimensionality, and standardization parameters {var_name: (mu, sigma)}.

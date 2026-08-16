@@ -21,23 +21,23 @@ def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     val: np.double = arr.ravel()[0]
     if val < 0:
         raise ValueError(f"sigma scalar must be non-negative, got {val}")
-    return val**2 * np.identity(dim, dtype=np.double)
+    return val**2 * np.identity(n=dim, dtype=np.double)
 
 
 def _diagonal_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """diag(σ²) from a per-dimension sigma vector."""
     if arr.shape[0] != dim:
         raise ValueError(f"sigma vector has length {arr.shape[0]}, expected {dim = }")
-    if np.any(arr < 0):
+    if np.any(a=arr < 0):
         raise ValueError("sigma vector elements must be non-negative")
-    return np.diag(arr**2).astype(np.double)
+    return np.diag(v=arr**2).astype(np.double)
 
 
-def _full_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
+def _full_covariance(arr: NDArray[np.double], dim: int, /) -> NDArray[np.double]:
     """An already-formed covariance matrix, checked for shape and symmetry."""
     if arr.shape != (dim, dim):
         raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
-    if not np.allclose(arr, arr.T):
+    if not np.allclose(a=arr, b=arr.T):
         raise ValueError("sigma matrix must be symmetric")
     return arr
 
@@ -45,12 +45,11 @@ def _full_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
 def sigma_to_covariance(
     sigma: ArrayLike,
     dim: int,
+    /,
 ) -> NDArray[np.double]:
-    arr: NDArray[np.double] = np.atleast_1d(np.asarray(sigma, dtype=np.double))
-
-    cov: NDArray[np.double]
+    arr: NDArray[np.double] = np.atleast_1d(np.asarray(a=sigma, dtype=np.double))
     if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
-        cov = _scalar_covariance(arr, dim)
+        cov: NDArray[np.double] = _scalar_covariance(arr, dim)
     elif arr.ndim == 1:
         cov = _diagonal_covariance(arr, dim)
     elif arr.ndim == 2:
@@ -69,10 +68,10 @@ def gaussian_config_from_run_config(
     if missing:
         raise ValueError(f"gaussian_params missing required keys: {missing}")
 
-    def _covariance(name: str) -> NDArray[np.double]:
+    def _covariance(name: str, /) -> NDArray[np.double]:
         if f"cov_{name}" in params:
             return _full_covariance(
-                np.asarray(params[f"cov_{name}"], dtype=np.double), dim
+                np.asarray(a=params[f"cov_{name}"], dtype=np.double), dim
             )
         if f"sigma_{name}" in params:
             return sigma_to_covariance(params[f"sigma_{name}"], dim)
@@ -80,24 +79,24 @@ def gaussian_config_from_run_config(
 
     return GaussianConfig(
         dim,
-        np.asarray(params["mu_gen"], dtype=np.double).ravel(),
-        np.asarray(params["mu_true"], dtype=np.double).ravel(),
-        _covariance("gen"),
-        _covariance("true"),
-        _covariance("detector"),
+        mu_gen=np.asarray(a=params["mu_gen"], dtype=np.double).ravel(),
+        mu_true=np.asarray(a=params["mu_true"], dtype=np.double).ravel(),
+        cov_gen=_covariance("gen"),
+        cov_true=_covariance("true"),
+        cov_detector=_covariance("detector"),
     )
 
 
 def parse_gaussian_config(config_path: Path) -> GaussianConfig:
     with config_path.open() as f:
-        raw: dict[str, Any] = yaml.safe_load(f)
+        raw: dict[str, Any] = yaml.safe_load(stream=f)
 
     missing: frozenset[str] = REQUIRED_KEYS - raw.keys()
     if missing:
         raise ValueError(f"Config missing required keys: {missing}")
 
-    mu_gen: NDArray[np.double] = np.asarray(raw["mu_gen"], dtype=np.double).ravel()
-    mu_true: NDArray[np.double] = np.asarray(raw["mu_true"], dtype=np.double).ravel()
+    mu_gen: NDArray[np.double] = np.asarray(a=raw["mu_gen"], dtype=np.double).ravel()
+    mu_true: NDArray[np.double] = np.asarray(a=raw["mu_true"], dtype=np.double).ravel()
 
     dim: int = mu_gen.shape[0]
     if mu_true.shape[0] != dim:

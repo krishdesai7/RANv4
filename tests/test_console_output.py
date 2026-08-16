@@ -23,7 +23,7 @@ def test_render_metrics_outputs_named_columns_and_values() -> None:
         }
     }
 
-    render_metrics("sample-run", metrics, ["dim_0"], console=console)
+    render_metrics("sample-run", metrics, ["dim_0"], console)
 
     rendered = output.getvalue()
     assert "sample-run" in rendered

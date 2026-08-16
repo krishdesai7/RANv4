@@ -18,6 +18,7 @@ fix-unsafe:
 infer:
     uv sync
     uv run pyrefly infer --return-types --parameter-types --imports --containers
+    uv check --fix
     just fix
 
 # Check formatting without modifying files.
@@ -26,27 +27,28 @@ format-check *args:
 
 # Run Ruff lint checks.
 lint:
-    uv run --frozen ruff check
+    uv run --locked ruff check
 
 # Run Pyrefly type checks.
 typecheck:
-    uv run --frozen pyrefly check --min-severity info
+    uv run --locked pyrefly check --min-severity info
+    uv check --locked
 
 # Run complexity checks.
 complexity:
-    uv run --frozen complexipy --suggest-refactors
+    uv run --locked complexipy --suggest-refactors
 
 # Run tests, optionally forwarding arguments to pytest.
 test *args:
-    uv run --frozen pytest -q {{ args }}
+    uv run --locked pytest -q {{ args }}
 
 # Audit locked dependencies for known vulnerabilities.
 audit:
-    uv audit
+    uv audit --locked
 
 # Run all local, read-only validation.
 check:
-    uv sync --frozen
+    uv sync --locked
     just format-check
     just lint
     just typecheck

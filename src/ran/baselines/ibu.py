@@ -65,7 +65,7 @@ def _assign_bins[T: np.floating = np.double](
     ).astype(dtype=np.intp, copy=False)
 
 
-def _bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
+def _bin_counts(indices: NDArray[np.intp], n_bins: int, /) -> NDArray[np.intp]:
     if n_bins < 1 or indices.ndim != 1:
         raise ValueError("bin indices must be one-dimensional with n_bins >= 1")
     if np.any(a=(indices < 0) | (indices >= n_bins)):
@@ -347,11 +347,13 @@ def _run_and_evaluate(
     test: Populations[np.single]
     full, test = load_populations(config).astype(np.single)
     test_truth: NDArray[np.single] = test.require_truth()
-    weights: NDArray[np.single] = np.empty((config.dim, len(test.mc)), dtype=np.single)
+    weights: NDArray[np.single] = np.empty(
+        shape=(config.dim, len(test.mc)), dtype=np.single
+    )
     metrics: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
-    for dimension, variable_name in enumerate(config.variable_names):
+    for dimension, variable_name in enumerate(iterable=config.variable_names):
         # Fit on every split, then score the test split with the result.
         unfolding: _VariableUnfolding[np.single] = _unfold_variable(
             variable_name=variable_name,
@@ -362,19 +364,19 @@ def _run_and_evaluate(
             purity_threshold=purity_threshold,
         )
         test_weights: NDArray[np.single] = unfolding.weights_for(
-            test.mc.z[:, dimension]
+            gen=test.mc.z[:, dimension]
         )
         weights[dimension] = test_weights
         outcomes.append(unfolding.outcome)
         metrics[f"detector_{variable_name}"] = evaluate_dimension(
-            test.data[:, dimension],
-            test.mc.x[:, dimension],
-            test_weights,
+            reference=test.data[:, dimension],
+            comparison=test.mc.x[:, dimension],
+            weights=test_weights,
         )
         metrics[f"particle_{variable_name}"] = evaluate_dimension(
-            test_truth[:, dimension],
-            test.mc.z[:, dimension],
-            test_weights,
+            reference=test_truth[:, dimension],
+            comparison=test.mc.z[:, dimension],
+            weights=test_weights,
         )
 
     return IBUResult(
@@ -396,9 +398,9 @@ def evaluate_single(
 
     if out_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
-        return json.loads(out_path.read_text())
+        return json.loads(s=out_path.read_text())
 
-    raw_config: object = json.loads((run_dir / "config.json").read_text())
+    raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
     config: RunConfig = parse_run_config(raw_config)
     logger.info(
         "%s: running IBU (niter=%d, purity=%.4f)...",
@@ -412,13 +414,15 @@ def evaluate_single(
         purity_threshold=purity_threshold,
     )
 
-    json.dump(result.metrics, out_path.open("w"), indent=2)
+    json.dump(obj=result.metrics, fp=out_path.open(mode="w"), indent=2)
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
         # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. Our keys are
         # built by f-string, so their type is plain `str`.
-        **{f"weights_{i}": weights for i, weights in enumerate(result.weights)},  # pyrefly: ignore[bad-argument-type]
+        **{
+            f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
+        },  # pyrefly: ignore[bad-argument-type]
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",
@@ -438,12 +442,12 @@ def evaluate_runs(
 ) -> None:
     apply_to_runs(
         run_dir,
-        lambda d: evaluate_single(
-            d,
-            force=force,
-            n_iterations=n_iterations,
-            purity_threshold=purity_threshold,
+        evaluate_one=lambda run_dir: evaluate_single(
+            run_dir,
+            force,
+            n_iterations,
+            purity_threshold,
         ),
-        "evaluate with IBU",
-        logger,
+        description="evaluate with IBU",
+        log=logger,
     )

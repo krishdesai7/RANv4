@@ -1,19 +1,16 @@
-"""Validated views of the two things a run is configured by: a Gaussian
-parameter set and a run's own `config.json`."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
-    from typing import Any, Final, Literal
+    from typing import Any, Final, Literal, LiteralString
 
     import numpy as np
     from numpy.typing import NDArray
 
 
-REQUIRED_KEYS: Final[frozenset[str]] = frozenset(
+REQUIRED_KEYS: Final[frozenset[LiteralString]] = frozenset(
     (
         "mu_gen",
         "mu_true",
@@ -45,12 +42,6 @@ class GaussianConfig(NamedTuple):
 
 @dataclass(frozen=True)
 class RunConfig:
-    """A validated view of a run's config.json.
-
-    `source` is the raw dict, kept because `_load_splits` reconstructs the
-    dataset from it and must see exactly what the run recorded.
-    """
-
     source: dict[str, Any]
     dataset: Literal["gaussian", "jets"]
     dim: int

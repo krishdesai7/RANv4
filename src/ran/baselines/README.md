@@ -92,6 +92,12 @@ uv run -m ran baseline ibu --run-dir runs # all runs
 
 IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN and <span style="font-variant: small-caps;">OmniFold</span>.
 
+## `class _BinnedReweighting`
+
+A per-bin correction, learned from one population and applied to another.
+
+IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on every split and applied to the test split, so the sample it scores is not the sample it learned from.
+
 ### `ibu::_assign_bins`
 
 Assign every value to a saturated bin. Underflow enters the first bin; overflow and values equal to the upper edge enter the last bin, so every finite input value receives an assignment.
@@ -152,15 +158,11 @@ Iterative Bayesian Unfolding.
 
 - A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
 
-### `ibu::_BinnedReweighting`
-
-What IBU actually produces: one multiplicative factor per bin of the particle-level axis, held with the edges that define those bins. `weights_for(gen)` looks up a factor for each particle-level value and renormalizes to mean one, so a reweighting can be applied to any number of events of the same variable.
-
-Fitting and applying are separate because the two use different samples. The reweighting is fit on `full` — every split, for the largest response and measurement available — and applied to `test.mc.z`, so that the sample it scores is not the sample it learned from.
-
 ### `ibu::_unfold_variable`
 
 Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `_VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
+
+`mc_gen` and `mc_sim` are one column of a `Populations`' `mc.z` and `mc.x`; they are row-aligned and together give the response. `observed` is the same column of its `data`. No part of `truth` belongs here.
 
 #### Arguments
 
@@ -174,6 +176,17 @@ Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`
 #### Returns
 
 - A `_VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
+
+### `ibu::evaluate_runs`
+
+Run IBU baseline on completed RAN runs.
+
+#### Arguments
+
+- `run_dir: str | Path` Path to a single run or directory of runs.
+- `force: bool = False` Recompute even if metrics_ibu.json exists.
+- `n_iterations: int = 10` Number of IBU iterations.
+- `purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD` Purity threshold for automatic binning.
 
 ## <span style="font-variant: small-caps;">OmniFold</span>
 

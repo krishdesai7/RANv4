@@ -21,6 +21,9 @@ dependencies = [
     "typer>=0.27.1",
 ]
 
+[project.scripts]
+ran = "ran.cli:app"
+
 [project.urls]
 repository = "https://github.com/krishdesai7/RANv4"
 Changelog = "https://github.com/krishdesai7/RANv4/blob/main/CHANGELOG.md"

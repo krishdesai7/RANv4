@@ -88,8 +88,8 @@ The reco-level `x_data` is generated _before_ poisoning, so the data that the di
 **To run:**
 
 ```bash
-uv run -m ran leakage-check --clean    # clean baseline
-uv run -m ran leakage-check --poison   # poisoned — should match
+ran leakage-check --clean    # clean baseline
+ran leakage-check --poison   # poisoned — should match
 ```
 
 Both arms must share `--seed`, or initialization variance swamps the effect and
@@ -272,7 +272,7 @@ All three plots overlay OmniFold and IBU curves if their weights are present in 
 ## 11. Run Lifecycle
 
 ```shell
-uv run -m ran --config params/1d_default.yaml
+ran train --config params/1d_default.yaml
   └─ parse YAML → generate/load dataset → train (adversarial) → save to runs/<timestamp>/
        ├── generator.keras, discriminator.keras
        ├── history.npz
@@ -282,9 +282,9 @@ uv run -m ran --config params/1d_default.yaml
        ├── losses.pdf
        └── metrics.json
 
-uv run -m ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
-uv run -m ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
-uv run -m ran train --load-run runs/...             → reload + re-plot with baseline overlays
+ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
+ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
+ran train --load-run runs/...             → reload + re-plot with baseline overlays
 ```
 
 `config.json` stores full covariance matrices (not just the original YAML scalars) so runs are self-contained and exactly reproducible without the original config file.

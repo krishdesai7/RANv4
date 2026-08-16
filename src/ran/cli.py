@@ -24,21 +24,25 @@ app.add_typer(
 def configure(
     log_level: Annotated[
         LogLevel,
-        typer.Argument(
-            case_sensitive=False, envvar="RAN_LOG_LEVEL", help="Application log level."
+        typer.Option(
+            "--log-level",
+            "-l",
+            case_sensitive=False,
+            envvar="RAN_LOG_LEVEL",
+            help="Application log level.",
         ),
     ] = LogLevel.info,
 ) -> None:
     configure_logging(level=log_level.value)
 
 
-@app.command("train")
+@app.command(name="train")
 def train_command(
-    batch_size: Annotated[int, typer.Option(min=1)] = 1024,
-    n_samples: Annotated[int, typer.Option(min=1)] = 500_000,
+    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
+    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
     config: Path | None = None,
     dataset: DatasetName = DatasetName.gaussian,
-    variable: Annotated[list[str] | None, typer.Option("--variable")] = None,
+    variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
     load_run: Annotated[Path | None, typer.Option()] = None,
     hidden_units: Annotated[int, typer.Option(min=1)] = 64,
     n_layers: Annotated[int, typer.Option(min=1)] = 2,

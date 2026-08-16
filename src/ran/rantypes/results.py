@@ -1,5 +1,3 @@
-"""What the baselines take in and hand back."""
-
 from __future__ import annotations
 
 from dataclasses import KW_ONLY, dataclass
@@ -17,19 +15,13 @@ if TYPE_CHECKING:
 
 
 class UnfoldingPopulations[T: np.floating = np.double](NamedTuple):
-    """What every baseline needs: a sample to unfold with, a sample to score on.
-
-    `full` spans every split and supplies the response (`full.mc`) and the
-    measurement (`full.data`). `test` is the held-out split alone, which is
-    where the metrics are computed.
-    """
-
     full: Populations[T]
     test: Populations[T]
 
     def astype[U: np.floating](self, dtype: type[U]) -> UnfoldingPopulations[U]:
-        """Both samples at another precision; see `Populations.astype`."""
-        return UnfoldingPopulations[U](self.full.astype(dtype), self.test.astype(dtype))
+        return UnfoldingPopulations[U](
+            full=self.full.astype(dtype), test=self.test.astype(dtype)
+        )
 
 
 @dataclass(frozen=True)
@@ -45,6 +37,5 @@ class VariableOutcome:
 class IBUResult:
     metrics: dict[str, MetricRecord]
     variable_names: tuple[str, ...]
-    # Single precision, matching the published IBU results -- see `ibu`.
     weights: NDArray[np.single]
     outcomes: tuple[VariableOutcome, ...]

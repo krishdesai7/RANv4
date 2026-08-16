@@ -14,7 +14,7 @@ dependencies = [
     "jax[cuda13]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
     "keras>=3.15.1",
     "matplotlib>=3.11.1",
-    "numpy>=2.5.1",
+    "numpy>=2.5.2",
     "omnifold>=0.1.36",
     "pyyaml>=6.0.3",
     "scipy>=1.18.0",
@@ -33,14 +33,14 @@ email = "krish@desai.ml"
 
 [dependency-groups]
 dev = [
-    "complexipy>=6.2.0",
+    "complexipy>=7.0.1",
     "ipykernel>=7.3.0",
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
     "pyrefly>=1.2.0",
     "pytest>=9.1.1",
-    "ruff>=0.16.2",
+    "ruff>=0.16.3",
     "rust-just>=1.58.0",
-    "types-pyyaml>=6.0.12.20260724",
+    "types-pyyaml>=6.0.12.20260815",
 ]
 release = [
     "rooster>=0.1.1",

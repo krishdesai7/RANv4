@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from ran.evaluate import (
     _js_per_dim,
     _normalized_histograms,
@@ -17,6 +18,15 @@ def test_normalized_histograms_treats_1d_samples_as_one_feature() -> None:
     assert q.shape == (1, 2)
     np.testing.assert_allclose(p, [[0.5, 0.5]])
     np.testing.assert_allclose(q, [[0.25, 0.75]])
+
+
+def test_normalized_histograms_rejects_mixed_rank_inputs() -> None:
+    with pytest.raises(IndexError):
+        _normalized_histograms(
+            np.array([0.0, 1.0]),
+            np.array([[0.0, 1.0], [1.0, 0.0]]),
+            n_bins=2,
+        )
 
 
 def test_normalized_histograms_weights_only_comparison_samples() -> None:

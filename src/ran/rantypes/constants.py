@@ -37,7 +37,7 @@ class JetVarInfo(NamedTuple):
 
 
 LOG_RHO_FLOOR: Final[float] = -14.0
-JET_OBS: Final[dict[LiteralString, JetVarInfo]] = {
+JET_OBS: Final[dict[str, JetVarInfo]] = {
     "m": JetVarInfo(xlim=(0, 75), xlabel="Jet Mass", symbol=r"$m$ [GeV]"),
     "M": JetVarInfo(xlim=(0, 80), xlabel="Jet Constituent Multiplicity", symbol=r"$M$"),
     "w": JetVarInfo(xlim=(0, 0.6), xlabel="Jet Width", symbol=r"$w$"),

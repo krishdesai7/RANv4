@@ -174,7 +174,11 @@ def _js_per_dim[T: np.floating = np.double](
 ) -> NDArray[np.double]:
     p, q = _normalized_histograms(ref, comp, weights, n_bins)
     return np.square(
-        jensenshannon(p, q, axis=1)  # pyrefly: ignore[unexpected-keyword]
+        jensenshannon(
+            p,
+            q,
+            axis=1,  # pyrefly: ignore[unexpected-keyword]  # ty: ignore[unknown-argument]
+        )
     )
 
 

@@ -84,3 +84,35 @@ Returns JS divergence (squared JS distance) per dimension.
 **Returns:**
 
 - `NDArray[np.double]` The JS divergence per dimension.
+
+### `_triangular_per_dim(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> NDArray[np.double]`
+
+Triangular discriminator (Vincze-LeCam divergence) per dimension.
+
+$$\Delta(p,q) = \sum_{i=1}^{n} \frac{(p_i - q_i)^2}{p_i + q_i} \times 10^3$$
+
+where $p_i, q_i$ are histogram probability masses. The bin-width factor cancels analytically, so this works directly on normalized histograms.
+
+**Arguments:**
+
+- `ref: NDArray[T]` The reference data.
+- `comp: NDArray[T]` The comparison data.
+- `weights: NDArray[T] | None` The weights to use for the comparison data.
+- `n_bins: int` The number of bins to use for the histograms.
+
+**Returns:**
+
+- `NDArray[np.double]` The triangular discriminator per dimension.
+
+### `evaluate_run(run_dir: Path = RUN_DIR, force: bool = False) -> None`
+
+Compute distance metrics for completed runs.
+
+**Arguments:**
+
+- `run_dir: Path` Path to a single run or a directory containing multiple runs.
+- `force: bool` Recompute even if metrics.json already exists.
+
+**Returns:**
+
+- `None`

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -22,8 +21,9 @@ from .data import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
     from logging import Logger
+    from pathlib import Path
 
     import keras
     from numpy.typing import NDArray
@@ -115,8 +115,7 @@ def _get_weights(
     return raw / raw.mean()
 
 
-def _dim(x: NDArray) -> int:
-    return x.shape[1] if x.ndim > 1 else 1
+_dim: Callable[[NDArray], int] = lambda x: x.shape[1] if x.ndim > 1 else 1
 
 
 def _wd_per_dim[T: np.floating = np.double](
@@ -142,28 +141,20 @@ def _normalized_histograms[T: np.floating = np.double](
     comp: NDArray[T],
     weights: NDArray[T] | None = None,
     n_bins: int = 100,
-) -> tuple[NDArray[np.double], NDArray[np.double]]:
-    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
-    comp_2d: NDArray[T] = (
-        comp.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else comp
-    )
-    dim: int = _dim(ref_2d)
-    p: NDArray[np.double] = np.empty(shape=(dim, n_bins), dtype=np.double)
-    q: NDArray[np.double] = np.empty(shape=(dim, n_bins), dtype=np.double)
-
+) -> Iterator[tuple[NDArray[np.double], NDArray[np.double]]]:
+    dim: int = _dim(ref)
     for i in range(dim):
-        r: NDArray[T] = ref_2d[:, i]
-        c: NDArray[T] = comp_2d[:, i]
+        r: NDArray[T] = ref[:, i]
+        c: NDArray[T] = comp[:, i]
 
         bins: NDArray[np.double] = np.linspace(
             start=min(r.min(), c.min()), stop=max(r.max(), c.max()), num=n_bins + 1
         )
+        # weights=None is np.histogram's own default, so the unweighted and
+        # weighted cases need no branch here.
         h_ref: NDArray[np.intp] = np.histogram(a=r, bins=bins)[0]
         h_comp: NDArray[np.intp | T] = np.histogram(a=c, bins=bins, weights=weights)[0]
-        p[i] = h_ref / (h_ref.sum() or 1.0)
-        q[i] = h_comp / (h_comp.sum() or 1.0)
-
-    return p, q
+        yield h_ref / (h_ref.sum() or 1.0), np.divide(h_comp, h_comp.sum() or 1.0)
 
 
 def _js_per_dim[T: np.floating = np.double](
@@ -172,22 +163,20 @@ def _js_per_dim[T: np.floating = np.double](
     weights: NDArray[T] | None = None,
     n_bins: int = 100,
 ) -> NDArray[np.double]:
-    p, q = _normalized_histograms(ref, comp, weights, n_bins)
-    return np.square(
-        jensenshannon(
-            p,
-            q,
-            axis=1,  # pyrefly: ignore[unexpected-keyword]  # ty: ignore[unknown-argument]
-        )
+    return np.array(
+        [
+            jensenshannon(p, q) ** 2
+            for p, q in _normalized_histograms(ref, comp, weights, n_bins)
+        ]
     )
 
 
-def _triangular_per_dim[T: np.floating = np.double](
-    ref: NDArray[T],
-    comp: NDArray[T],
-    weights: NDArray[T] | None = None,
+def _triangular_per_dim(
+    ref: npt.NDArray,
+    comp: npt.NDArray,
+    weights: npt.NDArray | None = None,
     n_bins: int = 100,
-) -> NDArray[np.double]:
+) -> list[float]:
     """Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
     Δ(p,q) = Σ (p_i - q_i)² / (p_i + q_i)  ×  1e3
@@ -195,16 +184,13 @@ def _triangular_per_dim[T: np.floating = np.double](
     where p_i, q_i are histogram probability masses. The bin-width factor
     cancels analytically, so this works directly on normalized histograms.
     """
-    p, q = _normalized_histograms(ref, comp, weights, n_bins)
-    denominator: NDArray[np.double] = p + q
-    difference: NDArray[np.double] = p - q
-    terms: NDArray[np.double] = np.divide(
-        difference**2,
-        denominator,
-        out=np.zeros_like(denominator),
-        where=denominator > 0,
-    )
-    return np.sum(terms, axis=1) * 1e3
+    result: list[float] = []
+    for p, q in _normalized_histograms(ref, comp, weights, n_bins):
+        denom = p + q
+        mask = denom > 0
+        diff = p - q
+        result.append(float(np.sum(diff[mask] ** 2 / denom[mask]) * 1e3))
+    return result
 
 
 def _improvement(before: float, after: float) -> float:
@@ -247,12 +233,12 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
         ("detector", test.data, test.mc.x),
         ("particle", test.require_truth(), test.mc.z),
     ]:
-        wd_before: NDArray[np.double] = _wd_per_dim(data, mc)
-        wd_after: NDArray[np.double] = _wd_per_dim(data, mc, weights=w)
-        js_before: NDArray[np.double] = _js_per_dim(data, mc)
-        js_after: NDArray[np.double] = _js_per_dim(data, mc, weights=w)
-        td_before: NDArray[np.double] = _triangular_per_dim(data, mc)
-        td_after: NDArray[np.double] = _triangular_per_dim(data, mc, weights=w)
+        wd_before: list[float] = _wd_per_dim(data, mc)
+        wd_after: list[float] = _wd_per_dim(data, mc, weights=w)
+        js_before: list[float] = _js_per_dim(data, mc)
+        js_after: list[float] = _js_per_dim(data, mc, weights=w)
+        td_before: list[float] = _triangular_per_dim(data, mc)
+        td_after: list[float] = _triangular_per_dim(data, mc, weights=w)
 
         for i, var in enumerate(var_names):
             key: str = f"{level}_{var}"
@@ -331,6 +317,4 @@ def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
         run_dir: Path to a single run or a directory containing multiple runs.
         force: Recompute even if metrics.json already exists.
     """
-    apply_to_runs(
-        Path(run_dir), lambda d: evaluate_run(d, force=force), "evaluate", logger
-    )
+    apply_to_runs(run_dir, lambda d: evaluate_run(d, force=force), "evaluate", logger)

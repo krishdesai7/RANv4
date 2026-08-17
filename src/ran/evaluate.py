@@ -143,8 +143,10 @@ def _normalized_histograms[T: np.floating = np.double](
     weights: NDArray[T] | None = None,
     n_bins: int = 100,
 ) -> tuple[NDArray[np.double], NDArray[np.double]]:
-    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 else ref
-    comp_2d: NDArray[T] = comp.reshape(-1, 1) if comp.ndim == 1 else comp
+    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
+    comp_2d: NDArray[T] = (
+        comp.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else comp
+    )
     dim: int = _dim(ref_2d)
     p: NDArray[np.double] = np.empty(shape=(dim, n_bins), dtype=np.double)
     q: NDArray[np.double] = np.empty(shape=(dim, n_bins), dtype=np.double)

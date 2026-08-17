@@ -85,7 +85,7 @@ def test_parse_config_reports_missing_required_field() -> None:
 
 
 def test_parse_config_rejects_non_integer_data_seed() -> None:
-    with pytest.raises(ValueError, match="data_seed"):
+    with pytest.raises(TypeError, match="data_seed"):
         shared.parse_run_config(_config(data_seed="seven"))
 
 
@@ -357,7 +357,7 @@ def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
 
 
 def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
-    monkeypatch.setattr(shared, "_load_splits", lambda _config: _splits())
+    monkeypatch.setattr(shared, "_load_splits", lambda **_kwargs: _splits())
     monkeypatch.setattr(
         ibu,
         "_purity_bins",
@@ -400,7 +400,7 @@ def test_run_and_evaluate_validates_controls_before_loading_data(
     monkeypatch.setattr(
         shared,
         "_load_splits",
-        lambda _config: pytest.fail("loaded data before validating controls"),
+        lambda **_kwargs: pytest.fail("loaded data before validating controls"),
     )
     config = shared.parse_run_config(_config())
 

@@ -8,6 +8,7 @@ from .constants import GENERATORS as GENERATORS
 from .constants import JET_OBS as JET_OBS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
+from .constants import RUN_DIR as RUN_DIR
 from .constants import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
 from .constants import TRUTH_SENTINEL as TRUTH_SENTINEL
 from .constants import ZENODO_RECORD as ZENODO_RECORD

@@ -62,7 +62,7 @@ def sigma_to_covariance(
 
 
 def gaussian_config_from_run_config(
-    params: Mapping[str, Any], dim: int
+    params: Mapping[str, Any], dim: int, /
 ) -> GaussianConfig:
     missing: set[str] = {"mu_gen", "mu_true"} - params.keys()
     if missing:

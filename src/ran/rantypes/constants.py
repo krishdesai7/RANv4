@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 CACHE_DIR: Final[Path] = Path(".cache")
+RUN_DIR: Final[Path] = Path("runs")
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17
@@ -19,7 +20,7 @@ SUBSTRUCTURE_VARIABLES: Final[frozenset[LiteralString]] = frozenset(
 
 # Cache-safe filenames: avoid case collisions on case-insensitive filesystems
 # (macOS APFS default), where "m.npz" and "M.npz" resolve to the same path.
-CACHE_FILENAMES: Final[dict[LiteralString, LiteralString]] = {
+CACHE_FILENAMES: Final[dict[str, str]] = {
     "m": "mass",
     "M": "mult",
     "w": "w",

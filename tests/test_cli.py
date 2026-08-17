@@ -73,7 +73,9 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     fake_workflow = ModuleType("ran.workflow")
     fake_workflow.__dict__["run"] = lambda **kwargs: calls.append(kwargs)
     monkeypatch.setitem(sys.modules, "ran.workflow", fake_workflow)
-    monkeypatch.setattr(cli, "configure_logging", configured_levels.append)
+    monkeypatch.setattr(
+        cli, "configure_logging", lambda level: configured_levels.append(level)
+    )
 
     result = runner.invoke(
         app,
@@ -83,9 +85,9 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
             "train",
             "--dataset",
             "jets",
-            "--variable",
+            "--var",
             "m",
-            "--variable",
+            "--var",
             "w",
             "--load-run",
             str(tmp_path),
@@ -99,7 +101,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     assert calls[0]["variables"] == frozenset(("m", "w"))
     # Paths stay Paths: `workflow.run` is typed `load_run: Path | None` and
     # opens them directly. Only typer's own wrappers get converted -- the
-    # DatasetName enum to its str value, the repeated --variable to a frozenset.
+    # DatasetName enum to its str value, the repeated --var to a frozenset.
     assert calls[0]["load_run"] == tmp_path
     assert calls[0]["seed"] == 7
     # LogLevel is a StrEnum of auto() members, so its values are the lowercase

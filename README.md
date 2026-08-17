@@ -106,7 +106,7 @@ Sigma values are promoted to covariance matrices:
 ran train --dataset jets
 
 # Specific variables
-ran train --dataset jets --variable m --variable w
+ran train --dataset jets --var m --var w
 ```
 
 ### Other Options
@@ -132,10 +132,13 @@ sbatch scripts/submit.sh --dataset jets
 | `--hidden-units` | `64`           | Units per hidden layer                                |
 | `--n-layers`     | `2`            | Number of hidden layers                               |
 | `--patience`     | `5`            | Early stopping patience (epochs)                      |
-| `--variable`     | all 6          | Repeat once for each jet substructure variable to use |
+| `--var`          | all 6          | Repeat once for each jet substructure variable to use |
 | `--load-run`     | `None`         | Path to an existing run directory to reload           |
 | `--seed`         | system entropy | Weight-initialization seed (see [Seeding](#seeding))  |
 | `--data-seed`    | `42`           | Data generation, shuffle, split and batch order       |
+
+`--n-samples`, `--batch-size` and `--var` also accept the short forms `-n`, `-b`
+and `-v`; the global `--log-level` accepts `-l`.
 
 The pipeline will:
 

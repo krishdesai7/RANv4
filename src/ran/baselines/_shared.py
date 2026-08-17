@@ -28,7 +28,14 @@ def _positive_int(value: object, key: str) -> int:
 
 
 def _parse_dataset(raw: dict[str, Any]) -> DatasetName:
-    return DatasetName(value=raw.get("dataset", DatasetName.gaussian.value))
+    value: object = raw.get("dataset", DatasetName.gaussian.value)
+    try:
+        return DatasetName(value=value)
+    except ValueError as error:
+        known: str = ", ".join(name.value for name in DatasetName)
+        raise ValueError(
+            f"Unknown dataset {value!r}, expected one of {known}"
+        ) from error
 
 
 def _parse_variable_names(

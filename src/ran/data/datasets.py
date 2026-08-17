@@ -203,6 +203,7 @@ class RANDataset[T: np.floating = np.double]:
     def generate_gaussian_dataset(
         self,
         config_path: Path | None = None,
+        *,
         params: GaussianConfig | None = None,
         n_samples: int = 10**6,
     ) -> DatasetSplits[T]:

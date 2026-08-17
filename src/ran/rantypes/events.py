@@ -51,7 +51,7 @@ class Events[T: np.floating = np.double]:
         )
 
     def astype[U: np.floating](self, dtype: type[U]) -> Events[U]:
-        return Events[U](self.z.astype(dtype), self.x.astype(dtype))
+        return Events[U](z=self.z.astype(dtype), x=self.x.astype(dtype))
 
 
 @dataclass(frozen=True, eq=False, slots=True)

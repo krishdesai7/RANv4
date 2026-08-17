@@ -32,7 +32,7 @@ def load_jet_dataset[T: np.floating = np.double](
     cache_dir: Path = CACHE_DIR,
     variables: frozenset[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
-    dtype: _DTypeLike[T] = np.double,
+    dtype: _DTypeLike[T] = np.double,  # ty: ignore[invalid-parameter-default]
 ) -> tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]:
     # Check cache, download if needed
     missing: list[str] = [
@@ -79,7 +79,7 @@ def load_jet_dataset[T: np.floating = np.double](
         mc=Events(z_gen, x_sim), data=x_data, truth=z_true
     ).interleave()
 
-    splits: DatasetSplits[T] = RANDataset(
+    splits: DatasetSplits[T] = RANDataset(  # ty: ignore[invalid-assignment, no-matching-overload]
         batch_size, seed, dtype=dtype
     ).splits_from_data(data)
     return splits, n_features, std_params

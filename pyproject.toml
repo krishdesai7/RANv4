@@ -79,7 +79,7 @@ filterwarnings = [
 
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python"
-search-path = ["."]
+search-path = ["src"]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"

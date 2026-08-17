@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path  # ruff: ignore[typing-only-standard-library-import]
+from typing import Annotated
 
 import numpy as np
 import typer
@@ -13,10 +14,6 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
-    from typing import Annotated
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -101,7 +98,7 @@ def ibu_command(
     run_dir: Path = RUN_DIR,
     force: bool = False,
     n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 10,
-    purity_threshold: float | np.double = DEFAULT_PURITY_THRESHOLD,
+    purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
 ) -> None:
     from .baselines.ibu import evaluate_runs
 

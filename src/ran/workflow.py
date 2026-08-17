@@ -18,7 +18,7 @@ from .data import (
 )
 from .evaluate import evaluate_run
 from .plotting import plot_detector_level, plot_losses, plot_particle_level
-from .rantypes import JET_OBS, GaussianConfig, VarInfo
+from .rantypes import JET_OBS, DatasetName, GaussianConfig, VarInfo
 from .train import train
 
 if TYPE_CHECKING:
@@ -186,7 +186,7 @@ def run(
     batch_size: int = 1024,
     n_samples: int = 500_000,
     config: Path | None = None,
-    dataset: str = "gaussian",
+    dataset: DatasetName = DatasetName.gaussian,
     variables: frozenset[str] = frozenset(("m", "M", "w", "tau21", "zg", "sdm")),
     load_run: Path | None = None,
     hidden_units: int = 64,

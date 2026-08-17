@@ -71,7 +71,37 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     calls = []
     configured_levels = []
     fake_workflow = ModuleType("ran.workflow")
-    fake_workflow.__dict__["run"] = lambda **kwargs: calls.append(kwargs)
+
+    def fake_run(
+        batch_size,
+        n_samples,
+        config,
+        dataset,
+        variables,
+        load_run,
+        hidden_units,
+        n_layers,
+        patience,
+        seed,
+        data_seed,
+    ) -> None:
+        calls.append(
+            {
+                "batch_size": batch_size,
+                "n_samples": n_samples,
+                "config": config,
+                "dataset": dataset,
+                "variables": variables,
+                "load_run": load_run,
+                "hidden_units": hidden_units,
+                "n_layers": n_layers,
+                "patience": patience,
+                "seed": seed,
+                "data_seed": data_seed,
+            }
+        )
+
+    fake_workflow.__dict__["run"] = fake_run
     monkeypatch.setitem(sys.modules, "ran.workflow", fake_workflow)
     monkeypatch.setattr(
         cli, "configure_logging", lambda level: configured_levels.append(level)
@@ -97,7 +127,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     )
 
     assert result.exit_code == 0
-    assert calls[0]["dataset"] == "jets"
+    assert calls[0]["dataset"] is cli.DatasetName.jets
     assert calls[0]["variables"] == frozenset(("m", "w"))
     # Paths stay Paths: `workflow.run` is typed `load_run: Path | None` and
     # opens them directly. Only typer's own wrappers get converted -- the

@@ -33,3 +33,6 @@ sandbox.ipynb
 # LLM docs
 docs/
 CLAUDE.md
+
+# Local task worktrees
+.worktrees/

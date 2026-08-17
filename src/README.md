@@ -55,9 +55,9 @@ Load the dataset splits from the config.
 
 - `DatasetSplits` The loaded dataset splits.
 
-### `_normalized_histograms(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> Iterator[tuple[NDArray[np.double], NDArray[np.double]]]`
+### `_normalized_histograms(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
 
-Yields the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence-metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
+Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence-metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
 
 **Arguments:**
 
@@ -68,9 +68,9 @@ Yields the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. B
 
 **Returns:**
 
-- `Iterator[tuple[NDArray[np.double], NDArray[np.double]]]` The $(p, q)$ probability histograms for each dimension of `ref`/`comp`
+- `tuple[NDArray[np.double], NDArray[np.double]]` The $(p, q)$ probability histograms for each dimension of `ref`/`comp`
 
-### `_js_per_dim(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> list[float]`
+### `_js_per_dim(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
 Returns JS divergence (squared JS distance) per dimension.
 

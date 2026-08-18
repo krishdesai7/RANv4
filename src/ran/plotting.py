@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import Populations, VarInfo
+    from .rantypes import Populations, RANModel, VarInfo
 
 logger: Logger = logging.getLogger(name=__name__)
 

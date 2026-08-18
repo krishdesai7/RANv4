@@ -10,25 +10,22 @@ from rich.table import Table
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
 
-from ran.rantypes import DatasetName
-from ran.rantypes.configs import GaussianConfig
-
 from .data import (
     ArrayDataset,
     RANDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
 )
+from .rantypes import RUN_DIR, DatasetName
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from logging import Logger
     from pathlib import Path
 
-    import keras
     from numpy.typing import NDArray
 
-    from .rantypes import ZXY, DatasetSplits, GaussianConfig, Populations
+    from .rantypes import ZXY, DatasetSplits, GaussianConfig, Populations, RANModel
 
 
 logger: Logger = logging.getLogger(name=__name__)
@@ -104,7 +101,7 @@ def _collect_test_data[T: np.floating = np.double](test_ds: ArrayDataset[T]) -> 
 
 
 def _get_weights(
-    g: keras.Model, z_gen: NDArray, chunk_size: int = 10_000
+    g: RANModel, z_gen: NDArray, chunk_size: int = 10_000
 ) -> NDArray[np.double]:
     """Compute normalized generator weights in chunks to limit peak memory."""
     n: int = len(z_gen)
@@ -115,7 +112,8 @@ def _get_weights(
     return raw / raw.mean()
 
 
-_dim: Callable[[NDArray], int] = lambda x: x.shape[1] if x.ndim > 1 else 1
+def _dim(x: NDArray, /) -> int:
+    return x.shape[1] if x.ndim > 1 else 1
 
 
 def _wd_per_dim[T: np.floating = np.double](
@@ -171,12 +169,12 @@ def _js_per_dim[T: np.floating = np.double](
     )
 
 
-def _triangular_per_dim(
-    ref: npt.NDArray,
-    comp: npt.NDArray,
-    weights: npt.NDArray | None = None,
+def _triangular_per_dim[T: np.floating = np.double](
+    ref: NDArray[T],
+    comp: NDArray[T],
+    weights: NDArray[T] | None = None,
     n_bins: int = 100,
-) -> list[float]:
+) -> NDArray[np.double]:
     """Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
     Δ(p,q) = Σ (p_i - q_i)² / (p_i + q_i)  ×  1e3
@@ -184,16 +182,17 @@ def _triangular_per_dim(
     where p_i, q_i are histogram probability masses. The bin-width factor
     cancels analytically, so this works directly on normalized histograms.
     """
-    result: list[float] = []
-    for p, q in _normalized_histograms(ref, comp, weights, n_bins):
-        denom = p + q
-        mask = denom > 0
-        diff = p - q
-        result.append(float(np.sum(diff[mask] ** 2 / denom[mask]) * 1e3))
+    dim: int = _dim(ref)
+    result: NDArray[np.double] = np.empty(shape=dim, dtype=np.double)
+    for i, (p, q) in enumerate(_normalized_histograms(ref, comp, weights, n_bins)):
+        denom: NDArray[np.double] = p + q
+        mask: NDArray[np.bool] = denom > 0
+        diff: NDArray[np.double] = p - q
+        result[i] = np.sum(a=diff[mask] ** 2 / denom[mask]) * 1e3
     return result
 
 
-def _improvement(before: float, after: float) -> float:
+def _improvement(before: np.double, after: np.double) -> float:
     return (1 - after / before) * 100 if before > 0 else 0.0
 
 
@@ -233,12 +232,12 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
         ("detector", test.data, test.mc.x),
         ("particle", test.require_truth(), test.mc.z),
     ]:
-        wd_before: list[float] = _wd_per_dim(data, mc)
-        wd_after: list[float] = _wd_per_dim(data, mc, weights=w)
-        js_before: list[float] = _js_per_dim(data, mc)
-        js_after: list[float] = _js_per_dim(data, mc, weights=w)
-        td_before: list[float] = _triangular_per_dim(data, mc)
-        td_after: list[float] = _triangular_per_dim(data, mc, weights=w)
+        wd_before: NDArray[np.double] = _wd_per_dim(ref=data, comp=mc)
+        wd_after: NDArray[np.double] = _wd_per_dim(ref=data, comp=mc, weights=w)
+        js_before: NDArray[np.double] = _js_per_dim(ref=data, comp=mc)
+        js_after: NDArray[np.double] = _js_per_dim(ref=data, comp=mc, weights=w)
+        td_before: NDArray[np.double] = _triangular_per_dim(ref=data, comp=mc)
+        td_after: NDArray[np.double] = _triangular_per_dim(ref=data, comp=mc, weights=w)
 
         for i, var in enumerate(var_names):
             key: str = f"{level}_{var}"
@@ -256,7 +255,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
                 "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
             }
 
-    json.dump(metrics, out_path.open("w"), indent=2)
+    json.dump(obj=metrics, fp=out_path.open("w"), indent=2)
     logger.info("%s: saved metrics to %s", run_dir.name, out_path)
     render_metrics(run_dir.name, metrics, var_names)
     return metrics
@@ -280,11 +279,11 @@ def render_metrics(
         if not level_metrics:
             continue
         table = Table(title=f"{run_name} — {level.title()} level")
-        table.add_column("Variable")
-        table.add_column("Metric")
-        table.add_column("Before", justify="right")
-        table.add_column("After", justify="right")
-        table.add_column("Improvement", justify="right")
+        table.add_column(header="Variable")
+        table.add_column(header="Metric")
+        table.add_column(header="Before", justify="right")
+        table.add_column(header="After", justify="right")
+        table.add_column(header="Improvement", justify="right")
         for var, m in level_metrics:
             table.add_row(
                 var,
@@ -310,11 +309,16 @@ def render_metrics(
         active_console.print(table)
 
 
-def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
+def evaluate_runs(run_dir: Path = RUN_DIR, force: bool = False) -> None:
     """Compute distance metrics for completed runs.
 
     Args:
         run_dir: Path to a single run or a directory containing multiple runs.
         force: Recompute even if metrics.json already exists.
     """
-    apply_to_runs(run_dir, lambda d: evaluate_run(d, force=force), "evaluate", logger)
+    apply_to_runs(
+        run_dir,
+        evaluate_one=lambda d: evaluate_run(run_dir=d, force=force),
+        description="evaluate",
+        log=logger,
+    )

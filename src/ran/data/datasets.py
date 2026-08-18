@@ -50,6 +50,10 @@ class ArrayDataset[T: np.floating = np.double]:
     def size(self) -> int:
         return len(self.data)
 
+    @property
+    def dtype(self) -> np.dtype[T]:
+        return self.data.dtype
+
     def reset(self) -> None:
         """Rewind to the first pass, so iteration repeats from the start."""
         self._pass = 0

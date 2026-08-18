@@ -38,6 +38,10 @@ class Events[T: np.floating = np.double]:
                 "particle and detector level arrays must be row-aligned"
             )
 
+    @property
+    def dtype(self) -> np.dtype[T]:
+        return self.z.dtype
+
     def __len__(self) -> int:
         return self.z.shape[0]
 
@@ -143,6 +147,10 @@ class ZXY[T: np.floating = np.double]:
     @property
     def x(self) -> NDArray[T]:
         return self.events.x
+
+    @property
+    def dtype(self) -> np.dtype[T]:
+        return self.events.dtype
 
     @classmethod
     def concatenate(cls, parts: Sequence[Self]) -> Self:

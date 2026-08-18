@@ -98,7 +98,7 @@ def _load_splits(config: dict, dtype=np.double) -> DatasetSplits[np.double]:
     raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data[T: np.floating](test_ds: ArrayDataset[T]) -> ZXY[T]:
+def _collect_test_data[T: np.floating = np.double](test_ds: ArrayDataset[T]) -> ZXY[T]:
     """Return the test split as one flat labelled sample."""
     return test_ds.as_arrays()
 

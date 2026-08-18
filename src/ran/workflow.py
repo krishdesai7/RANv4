@@ -70,12 +70,12 @@ def _prepare_jets[T: np.floating = np.double](
 ) -> tuple[DatasetSplits[T], int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
     std_params: dict[str, tuple[T, T]]
-    splits, dim, std_params = load_jet_dataset(
+    splits, dim, std_params = load_jet_dataset(  # ty: ignore[invalid-assignment]
         n_samples=n_samples,
         batch_size=batch_size,
         variables=variables,
         seed=data_seed,
-        dtype=dtype,
+        dtype=dtype,  # ty: ignore[invalid-argument-type]
     )
     var_info: list[VarInfo] = [
         VarInfo(
@@ -87,7 +87,7 @@ def _prepare_jets[T: np.floating = np.double](
         )
         for v in variables
     ]
-    return splits, dim, var_info
+    return splits, dim, var_info  # ty: ignore[invalid-return-type]
 
 
 def _save_run(
@@ -177,6 +177,10 @@ def run(
     seed: int | None,
     data_seed: int,
 ) -> None:
+    # Each dataset fills in only its own metadata, but the plots and the saved
+    # config are handed both, so the other one has to exist as None.
+    gaussian_params: GaussianConfig | None = None
+    var_info: list[VarInfo] | None = None
 
     # When loading a saved run, read config from that run and rebuild the
     # Gaussian params it recorded, so a reload never re-parses --config (which

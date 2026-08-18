@@ -162,7 +162,9 @@ class TestTrainSteps:
         rng = np.random.default_rng(6)
         z = rng.normal(size=(n, dim))
         x = rng.normal(size=(n, dim))
-        y = (rng.random(n) < 0.5).astype(np.double)
+        y = (rng.random(n) < 0.5).astype(np.ubyte)
+        # The steps take loose arrays, not the ZXY the loop carries: jit has no
+        # pytree for the dataclass. `_as_batch` is what bridges the two.
         return _make_steps(g, d, opt_g, opt_d), state, (z, x, y)
 
     def test_disc_step_updates_only_the_discriminator(self) -> None:
@@ -209,13 +211,16 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     splits = RANDataset(batch_size=128, seed=0).splits_from_data(ZXY(Events(z, x), y))
 
     g, _d, history, seed = train(
-        splits, dim=1, n_epochs=3, patience=99, hidden_units=8, n_layers=1
+        splits, dim=1, n_epochs=3, patience=99, hidden_units=8, n_layers=1, seed=None
     )
 
     assert isinstance(seed, int)
     assert set(history) == {"train_d", "train_g", "val_d", "val_g"}
-    assert all(len(v) == 3 for v in history.values())
-    assert all(np.isfinite(v).all() for v in history.values())
+    # History values are only SupportsFloat, as the rest of the pipeline reads
+    # them: `plot_losses` and `_save_run` both name a dtype to convert them.
+    curves = {k: np.array(v, dtype=np.double) for k, v in history.items()}
+    assert all(len(v) == 3 for v in curves.values())
+    assert all(np.isfinite(v).all() for v in curves.values())
 
     w = np.asarray(g(z_gen))
     assert w.shape == (n, 1)
@@ -239,7 +244,7 @@ def test_train_restores_best_weights_on_early_stop() -> None:
     # z carries no information about y here, so val D cannot keep improving and
     # patience=1 trips quickly.
     history = train(
-        splits, dim=1, n_epochs=25, patience=1, hidden_units=8, n_layers=1
+        splits, dim=1, n_epochs=25, patience=1, hidden_units=8, n_layers=1, seed=None
     ).history
     assert len(history["val_d"]) < 25, "expected early stopping to fire"
 
@@ -273,7 +278,11 @@ class TestSeeding:
         a, b = self._run(splits, 123), self._run(splits, 123)
         assert a.seed == b.seed == 123
         np.testing.assert_array_equal(np.asarray(a.g(probe)), np.asarray(b.g(probe)))
-        np.testing.assert_allclose(a.history["train_d"], b.history["train_d"], rtol=0)
+        np.testing.assert_allclose(
+            np.array(a.history["train_d"], dtype=np.double),
+            np.array(b.history["train_d"], dtype=np.double),
+            rtol=0,
+        )
 
     def test_different_seeds_give_different_models(self) -> None:
         """The ensemble spread the HEP error estimate relies on."""

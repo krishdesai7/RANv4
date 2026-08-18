@@ -8,24 +8,27 @@ from ran.evaluate import (
 
 
 def test_normalized_histograms_treats_1d_samples_as_one_feature() -> None:
-    p, q = _normalized_histograms(
+    ((p, q),) = _normalized_histograms(
         np.array([0.0, 0.0, 1.0, 1.0]),
         np.array([0.0, 1.0, 1.0, 1.0]),
         n_bins=2,
     )
 
-    assert p.shape == (1, 2)
-    assert q.shape == (1, 2)
-    np.testing.assert_allclose(p, [[0.5, 0.5]])
-    np.testing.assert_allclose(q, [[0.25, 0.75]])
+    assert p.shape == (2,)
+    assert q.shape == (2,)
+    np.testing.assert_allclose(p, [0.5, 0.5])
+    np.testing.assert_allclose(q, [0.25, 0.75])
 
 
 def test_normalized_histograms_rejects_mixed_rank_inputs() -> None:
+    # A generator: the body, and the error it raises, only run once consumed.
     with pytest.raises(IndexError):
-        _normalized_histograms(
-            np.array([0.0, 1.0]),
-            np.array([[0.0, 1.0], [1.0, 0.0]]),
-            n_bins=2,
+        list(
+            _normalized_histograms(
+                np.array([0.0, 1.0]),
+                np.array([[0.0, 1.0], [1.0, 0.0]]),
+                n_bins=2,
+            )
         )
 
 
@@ -46,12 +49,17 @@ def test_normalized_histograms_weights_only_comparison_samples() -> None:
         ]
     )
 
-    p, q = _normalized_histograms(
-        ref,
-        comp,
-        weights=np.array([1.0, 1.0, 2.0]),
-        n_bins=2,
+    # One (p, q) pair per dimension; stack them into the matrices below.
+    per_dim = list(
+        _normalized_histograms(
+            ref,
+            comp,
+            weights=np.array([1.0, 1.0, 2.0]),
+            n_bins=2,
+        )
     )
+    p = np.array([pair[0] for pair in per_dim])
+    q = np.array([pair[1] for pair in per_dim])
 
     np.testing.assert_allclose(p, [[0.5, 0.5], [0.5, 0.5]])
     np.testing.assert_allclose(q, [[0.25, 0.75], [0.5, 0.5]])

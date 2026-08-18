@@ -140,10 +140,17 @@ def _normalized_histograms[T: np.floating = np.double](
     weights: NDArray[T] | None = None,
     n_bins: int = 100,
 ) -> Iterator[tuple[NDArray[np.double], NDArray[np.double]]]:
-    dim: int = _dim(ref)
+    # A flat 1D sample is one feature, not `dim` scalar features, so it is
+    # treated as a single column -- but only when both sides agree on that;
+    # a 1D/2D mismatch stays an error rather than silently reshaping one side.
+    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
+    comp_2d: NDArray[T] = (
+        comp.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else comp
+    )
+    dim: int = _dim(ref_2d)
     for i in range(dim):
-        r: NDArray[T] = ref[:, i]
-        c: NDArray[T] = comp[:, i]
+        r: NDArray[T] = ref_2d[:, i]
+        c: NDArray[T] = comp_2d[:, i]
 
         bins: NDArray[np.double] = np.linspace(
             start=min(r.min(), c.min()), stop=max(r.max(), c.max()), num=n_bins + 1
@@ -192,7 +199,7 @@ def _triangular_per_dim[T: np.floating = np.double](
     return result
 
 
-def _improvement(before: np.double, after: np.double) -> float:
+def _improvement(before: float, after: float) -> float:
     return (1 - after / before) * 100 if before > 0 else 0.0
 
 

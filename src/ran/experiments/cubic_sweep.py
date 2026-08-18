@@ -110,7 +110,17 @@ def run_ran(
     splits: DatasetSplits[np.double] = RANDataset(
         batch_size=batch_size, seed=seed
     ).splits_from_data(pops.interleave())
-    result: TrainResult = train(splits, dim=1, n_epochs=ran_epochs, seed=init_seed)
+    # Only s varies across the sweep, so the architecture and the stopping rule
+    # are pinned here at what `ran train` uses rather than exposed as flags.
+    result: TrainResult = train(
+        splits,
+        dim=1,
+        hidden_units=64,
+        n_layers=2,
+        patience=5,
+        n_epochs=ran_epochs,
+        seed=init_seed,
+    )
 
     raw: NDArray[np.double] = np.asarray(a=result.g(pops.mc.z)).ravel()
     w_ran: NDArray[np.double] = _finite(w=raw * len(raw) / raw.sum())

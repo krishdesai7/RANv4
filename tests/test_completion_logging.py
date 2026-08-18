@@ -62,8 +62,18 @@ def test_evaluation_records_metrics_artifact_completion(
     monkeypatch.setattr(
         evaluate, "_load_splits", lambda _config: SimpleNamespace(test=object())
     )
-    monkeypatch.setattr(evaluate, "_collect_test_data", lambda _test: test_data)
-    monkeypatch.setattr(evaluate, "_get_weights", lambda _model, _values: np.ones(2))
+
+    # Both are called by keyword, so the stubs have to name their parameters.
+    def fake_collect_test_data(test_ds):
+        del test_ds
+        return test_data
+
+    def fake_get_weights(model, z_gen):
+        del model, z_gen
+        return np.ones(2)
+
+    monkeypatch.setattr(evaluate, "_collect_test_data", fake_collect_test_data)
+    monkeypatch.setattr(evaluate, "_get_weights", fake_get_weights)
     monkeypatch.setattr(evaluate, "_wd_per_dim", lambda *_args, **_kwargs: [1.0])
     monkeypatch.setattr(evaluate, "_js_per_dim", lambda *_args, **_kwargs: [0.5])
     monkeypatch.setattr(

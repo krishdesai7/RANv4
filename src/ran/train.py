@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
@@ -80,30 +81,31 @@ def _make_steps(
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
 ) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
+    # Every step below takes the batch as loose arrays rather than the `ZXY` the
+    # loop carries: a dataclass is not a registered pytree, so jit would trace it
+    # as a single leaf and the first attribute access inside would fail.
 
-    def _weights[T: np.floating = np.double](
-        g_trainable: Variables, g_non_trainable: Variables, zxy: ZXY[T], training: bool
+    def _weights(
+        g_trainable: Variables, g_non_trainable: Variables, z, y, training: bool
     ) -> tuple:
         raw_w, g_non_trainable = g.stateless_call(
-            g_trainable, g_non_trainable, zxy.z, training=training
+            g_trainable, g_non_trainable, z, training=training
         )
-        return normalize_weights(ops.squeeze(raw_w, axis=-1), zxy.y), g_non_trainable
+        return normalize_weights(ops.squeeze(raw_w, axis=-1), y), g_non_trainable
 
-    def _disc_loss[T: np.floating = np.double](
-        d_trainable, d_non_trainable, zxy: ZXY[T], w
-    ) -> tuple:
+    def _disc_loss(d_trainable, d_non_trainable, x, y, w) -> tuple:
         d_out, d_non_trainable = d.stateless_call(
-            d_trainable, d_non_trainable, zxy.x, training=True
+            d_trainable, d_non_trainable, x, training=True
         )
-        return weighted_bce(ops.squeeze(d_out, axis=-1), zxy.y, w), d_non_trainable
+        return weighted_bce(ops.squeeze(d_out, axis=-1), y, w), d_non_trainable
 
-    def _gen_loss[T: np.floating = np.double](
-        g_trainable, g_non_trainable, d_trainable, d_non_trainable, zxy: ZXY[T]
+    def _gen_loss(
+        g_trainable, g_non_trainable, d_trainable, d_non_trainable, z, x, y
     ) -> tuple:
-        w, g_non_trainable = _weights(g_trainable, g_non_trainable, zxy, training=True)
-        d_out, _ = d.stateless_call(d_trainable, d_non_trainable, zxy.x, training=False)
+        w, g_non_trainable = _weights(g_trainable, g_non_trainable, z, y, training=True)
+        d_out, _ = d.stateless_call(d_trainable, d_non_trainable, x, training=False)
         # g maximizes the BCE that d minimizes, so its loss is the negation.
-        return -weighted_bce(ops.squeeze(d_out, axis=-1), zxy.y, w), g_non_trainable
+        return -weighted_bce(ops.squeeze(d_out, axis=-1), y, w), g_non_trainable
 
     disc_grad_fn: Callable[..., tuple] = jax.value_and_grad(
         fun=_disc_loss, has_aux=True
@@ -111,14 +113,12 @@ def _make_steps(
     gen_grad_fn: Callable[..., tuple] = jax.value_and_grad(fun=_gen_loss, has_aux=True)
 
     @jax.jit
-    def disc_step[T: np.floating = np.double](
-        state: TrainState, zxy: ZXY[T]
-    ) -> tuple[TrainState, jax.Array]:
+    def disc_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
         """One discriminator update; g is frozen."""
         # Computed outside differentiated function, so the weights are constants
-        w, _ = _weights(state.g_trainable, state.g_non_trainable, zxy, training=False)
+        w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         (loss, d_non_trainable), grads = disc_grad_fn(
-            state.d_trainable, state.d_non_trainable, zxy, w
+            state.d_trainable, state.d_non_trainable, x, y, w
         )
         d_trainable, opt_d_vars = opt_d.stateless_apply(
             state.opt_d, grads, state.d_trainable
@@ -133,16 +133,16 @@ def _make_steps(
         )
 
     @jax.jit
-    def gen_step[T: np.floating = np.double](
-        state: TrainState, zxy: ZXY[T]
-    ) -> tuple[TrainState, jax.Array]:
+    def gen_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
         """One generator update; d is frozen (it enters only as a constant)."""
         (loss, g_non_trainable), grads = gen_grad_fn(
             state.g_trainable,
             state.g_non_trainable,
             state.d_trainable,
             state.d_non_trainable,
-            zxy,
+            z,
+            x,
+            y,
         )
         g_trainable, opt_g_vars = opt_g.stateless_apply(
             state.opt_g, grads, state.g_trainable
@@ -157,15 +157,13 @@ def _make_steps(
         )
 
     @jax.jit
-    def eval_step[T: np.floating = np.double](
-        state: TrainState, zxy: ZXY[T]
-    ) -> jax.Array:
+    def eval_step(state: TrainState, z, x, y) -> jax.Array:
         """Weighted BCE with no updates, both models in inference mode."""
-        w, _ = _weights(state.g_trainable, state.g_non_trainable, zxy, training=False)
+        w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         d_out, _ = d.stateless_call(
-            state.d_trainable, state.d_non_trainable, zxy, training=False
+            state.d_trainable, state.d_non_trainable, x, training=False
         )
-        return weighted_bce(ops.squeeze(d_out, axis=-1), zxy.y, w)
+        return weighted_bce(ops.squeeze(d_out, axis=-1), y, w)
 
     return disc_step, gen_step, eval_step
 
@@ -189,17 +187,22 @@ def _run_epoch[T: np.floating = np.double](
     gen_step: JitWrapped,
     n_disc_steps: int,
 ) -> tuple[TrainState, T, T]:
-    d_losses: NDArray[T] = np.empty(shape=len(train_ds), dtype=train_ds.dtype)
-    g_losses: NDArray[T] = np.empty(shape=len(train_ds), dtype=train_ds.dtype)
+    n_batches: int = len(train_ds)
+    d_losses: NDArray[T] = np.empty(shape=n_batches, dtype=train_ds.dtype)
+    # g updates on every n_disc_steps-th batch, so its curve has fewer points.
+    # Sized to exactly those, or the unwritten slots would enter the mean.
+    g_losses: NDArray[T] = np.empty(
+        shape=math.ceil(n_batches / n_disc_steps), dtype=train_ds.dtype
+    )
     for step, (features, y) in enumerate(train_ds):
         zxy: ZXY[T] = _as_batch(features, y)
 
-        state, d_loss = disc_step(state, zxy)
+        state, d_loss = disc_step(state, zxy.z, zxy.x, zxy.y)
         d_losses[step] = d_loss
 
         if step % n_disc_steps == 0:
-            state, g_loss = gen_step(state, zxy)
-            g_losses[step] = -g_loss
+            state, g_loss = gen_step(state, zxy.z, zxy.x, zxy.y)
+            g_losses[step // n_disc_steps] = -g_loss
 
     return state, d_losses.mean(), g_losses.mean()
 
@@ -210,8 +213,8 @@ def _eval_dataset[T: np.floating = np.double](
     """Mean weighted BCE over a split, as (d_loss, g_loss)."""
     total: float = 0.0
     for features, y in dataset:
-        loss = eval_step(state, _as_batch(features, y))
-        total += loss
+        zxy: ZXY[T] = _as_batch(features, y)
+        total += float(eval_step(state, zxy.z, zxy.x, zxy.y))
     mean: T = np.divide(total, len(dataset), dtype=dataset.dtype)
     return mean, mean
 

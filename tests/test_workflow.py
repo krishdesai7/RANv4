@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 from ran import workflow
 from ran.data import parse_gaussian_config
+from ran.rantypes import DatasetName
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,6 +74,30 @@ def stub_heavy(monkeypatch) -> Recorded:
     return recorded
 
 
+def _reload(run_dir: Path) -> None:
+    """Drive `run()` down the --load-run path.
+
+    `run()` keeps no defaults of its own -- the CLI owns them -- so every
+    argument has to be named. The values below are placeholders a reload is
+    meant to replace with what config.json recorded, deliberately unlike the
+    ones `_write_run` writes so that
+    `test_load_run_forwards_recorded_seed_and_size` fails if it stops doing so.
+    """
+    workflow.run(
+        batch_size=8,
+        n_samples=32,
+        config=None,
+        dataset=DatasetName.gaussian,
+        variables=frozenset(),
+        load_run=run_dir,
+        hidden_units=4,
+        n_layers=1,
+        patience=1,
+        seed=None,
+        data_seed=0,
+    )
+
+
 def _write_run(tmp_path, gaussian_params: dict, **overrides):
     run_dir = tmp_path / "runs" / "2026-08-06T000000Z"
     run_dir.mkdir(parents=True)
@@ -99,7 +124,7 @@ def test_load_run_reads_a_config_written_by_save_run(
     params = parse_gaussian_config(tmp_path / "cfg.yaml")
     run_dir = _write_run(tmp_path, params.model_dump())
 
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert len(stub_heavy.plots) == 3
     assert stub_heavy.evaluated == (run_dir, False)
@@ -122,7 +147,7 @@ def test_load_run_reads_master_era_sigma_keys(
         },
     )
 
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert len(stub_heavy.plots) == 3
 
@@ -152,6 +177,6 @@ def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch) -> None
             return super().generate_gaussian_dataset(*args, **kwargs)
 
     monkeypatch.setattr(workflow, "RANDataset", Recording)
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert seen == {"seed": 7, "n_samples": 600}

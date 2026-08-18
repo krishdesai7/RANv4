@@ -11,6 +11,7 @@ from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
     RUN_DIR,
     SUBSTRUCTURE_VARIABLES,
+    TRUTH_SENTINEL,
     DatasetName,
     LogLevel,
 )
@@ -176,9 +177,10 @@ def sweep_collect_command(
 @app.command(name="leakage-check")
 def leakage_check_command(
     poison: Annotated[bool, typer.Option("--poison/--clean", "-X/")] = False,
+    sentinel: Annotated[float, typer.Option("--sentinel", "-S")] = TRUTH_SENTINEL,
     seed: int = 42,
     init_seed: int = 0,
 ) -> None:
     from .leakage import run_leakage_check
 
-    run_leakage_check(poison, seed, init_seed)
+    run_leakage_check(poison, sentinel, seed, init_seed)

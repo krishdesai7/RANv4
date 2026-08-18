@@ -5,23 +5,29 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import axes, figure, font_manager, gridspec
+from matplotlib.backends.backend_pdf import FigureCanvasPdf
+from matplotlib.figure import Figure
+from matplotlib.font_manager import fontManager
+
+from .evaluate import _get_weights
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from logging import Logger
+    from typing import SupportsFloat
 
+    from matplotlib.axes import Axes
+    from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import Populations, VarInfo
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 mpl.rcParams["font.family"] = "serif"
-available_fonts: set[str] = {f.name for f in font_manager.fontManager.ttflist}
+available_fonts: set[str] = {f.name for f in fontManager.ttflist}
 if "Cochineal" in available_fonts:
     mpl.rcParams["font.serif"] = ["Cochineal"]
 mpl.rcParams["font.size"] = 18
@@ -56,19 +62,14 @@ class _LevelStyle(NamedTuple):
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
-def _collect_data(dataset: ArrayDataset) -> Populations:
+def _collect_data(dataset: ArrayDataset[np.double]) -> Populations[np.double]:
     """Return the split as the four physics populations, each (n, dim)."""
     return dataset.as_arrays().partition()
 
 
-def _get_weights(g: RANModel, z_gen: NDArray[np.double]) -> NDArray[np.double]:
-    raw_w: NDArray[np.double] = np.asarray(g(z_gen)).flatten()
-    return raw_w / raw_w.mean()
-
-
 def _hist_ratio_panel(
-    ax: axes.Axes,
-    ax_r: axes.Axes,
+    ax: Axes,
+    ax_r: Axes,
     x_nature: NDArray[np.double],
     x_mc: NDArray[np.double],
     w_ran: NDArray[np.double],
@@ -110,13 +111,13 @@ def _hist_ratio_panel(
     centres: NDArray[np.double] = (bin_edges[:-1] + bin_edges[1:]) / 2
     safe: NDArray[np.bool] = h_nature[0] > 0
     ratio_mc: NDArray[np.double] = np.full_like(
-        h_nature[0],
-        np.nan,
+        a=h_nature[0],
+        fill_value=np.nan,
         dtype=np.double,
     )
     ratio_ran: NDArray[np.double] = np.full_like(
-        h_ran[0],
-        np.nan,
+        a=h_ran[0],
+        fill_value=np.nan,
         dtype=np.double,
     )
     ratio_mc[safe] = h_mc[0][safe] / h_nature[0][safe]
@@ -151,7 +152,9 @@ def _hist_ratio_panel(
             alpha=0.35,
             label="OmniFold",
         )
-        ratio_of: NDArray[np.double] = np.full_like(h_of[0], np.nan, dtype=np.double)
+        ratio_of: NDArray[np.double] = np.full_like(
+            a=h_of[0], fill_value=np.nan, dtype=np.double
+        )
         ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
         ax_r.plot(
             centres,
@@ -174,10 +177,12 @@ def _hist_ratio_panel(
             alpha=0.35,
             label="IBU",
         )
-        ax.set_ylabel("Events")
+        ax.set_ylabel(ylabel="Events")
         ax.legend()
-        ax.set_title(title)
-        ratio_ibu: NDArray[np.double] = np.full_like(h_ibu[0], np.nan, dtype=np.double)
+        ax.set_title(label=title)
+        ratio_ibu: NDArray[np.double] = np.full_like(
+            a=h_ibu[0], fill_value=np.nan, dtype=np.double
+        )
         ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
         ax_r.plot(
             centres,
@@ -187,22 +192,37 @@ def _hist_ratio_panel(
             linestyle="--",
             alpha=0.75,
         )
-    ax_r.axhline(1, color="gray", linewidth=0.5, alpha=0.75)
+    ax_r.axhline(y=1, color="gray", linewidth=0.5, alpha=0.75)
     width: float = 0.5
-    ax_r.set_ylim(1 - width, 1 + width)
-    ax_r.set_ylabel(f"Ratio to\n{nature_label}")
+    ax_r.set_ylim(bottom=1 - width, top=1 + width)
+    ax_r.set_ylabel(ylabel=f"Ratio to\n{nature_label}")
     ax_r.set_xlabel(xlabel)
 
 
-def _save_fig(fig: figure.Figure, save_path: Path) -> None:
+def _save_fig(figure: Figure, save_path: Path) -> None:
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, bbox_inches="tight")
-    plt.close(fig)
+    figure.savefig(fname=save_path, bbox_inches="tight")
     logger.info("Saved %s", save_path)
 
 
-_DETECTOR = _LevelStyle("detector", "x", "Detector Level", "Data", "Sim", 6, False)
-_PARTICLE = _LevelStyle("particle", "z", "Particle Level", "Truth", "Gen.", 10, True)
+_DETECTOR = _LevelStyle(
+    level="detector",
+    symbol="x",
+    title_prefix="Detector Level",
+    nature_label="Data",
+    mc_label="Sim",
+    height_per_dim=6,
+    bins_span_both=False,
+)
+_PARTICLE = _LevelStyle(
+    level="particle",
+    symbol="z",
+    title_prefix="Particle Level",
+    nature_label="Truth",
+    mc_label="Gen.",
+    height_per_dim=10,
+    bins_span_both=True,
+)
 
 
 def _panel_spec(
@@ -221,19 +241,23 @@ def _panel_spec(
         return _PanelSpec(
             nature=nature[:, i] * sigma + mu,
             mc=mc[:, i] * sigma + mu,
-            bins=np.linspace(cfg["xlim"][0], cfg["xlim"][1], 21),
+            bins=np.linspace(start=cfg["xlim"][0], stop=cfg["xlim"][1], num=21),
             xlabel=cfg["symbol"],
             title=f"{cfg['xlabel']} ({style.level} level)",
         )
 
-    nature_i = nature[:, i]
-    mc_i = mc[:, i]
-    lo = min(nature_i.min(), mc_i.min()) if style.bins_span_both else nature_i.min()
-    hi = max(nature_i.max(), mc_i.max()) if style.bins_span_both else nature_i.max()
+    nature_i: NDArray[np.double] = nature[:, i]
+    mc_i: NDArray[np.double] = mc[:, i]
+    lo: np.double = (
+        min(nature_i.min(), mc_i.min()) if style.bins_span_both else nature_i.min()
+    )
+    hi: np.double = (
+        max(nature_i.max(), mc_i.max()) if style.bins_span_both else nature_i.max()
+    )
     return _PanelSpec(
         nature=nature_i,
         mc=mc_i,
-        bins=np.linspace(lo, hi, 51),
+        bins=np.linspace(start=lo, stop=hi, num=51),
         xlabel=(
             f"${style.symbol}_{{{i}}}$ ({style.level} level)"
             if dim > 1
@@ -253,23 +277,20 @@ def _plot_level(
     omnifold_weights: NDArray[np.double] | None,
     ibu_weights: list[NDArray[np.double]] | None,
 ) -> None:
-    """Draw one stacked hist+ratio panel per dimension and save the figure.
-
-    The detector-level and particle-level figures differ only in their data and
-    their `style`, so both entry points below funnel through here.
-    """
+    """Draw one stacked hist+ratio panel per dimension and save the figure."""
     dim: int = nature.shape[1]
-    fig: figure.Figure = plt.figure(figsize=(8, style.height_per_dim * dim))
-    outer_grid: gridspec.GridSpec = fig.add_gridspec(dim, 1, hspace=0.35)
+    figure = Figure(figsize=(8, style.height_per_dim * dim))
+    figure.canvas = FigureCanvasPdf(figure)
+    outer_grid: GridSpec = figure.add_gridspec(nrows=dim, ncols=1, hspace=0.35)
     for i in range(dim):
-        inner_grid: gridspec.GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
-            2, 1, height_ratios=[3, 1], hspace=0.0
+        inner_grid: GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
+            nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.0
         )
-        ax: axes.Axes = fig.add_subplot(inner_grid[0])
-        ax_r: axes.Axes = fig.add_subplot(inner_grid[1], sharex=ax)
+        ax: Axes = figure.add_subplot(ax=inner_grid[0])
+        ax_r: Axes = figure.add_subplot(ax=inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
-        panel = _panel_spec(i, dim, nature, mc, var_info, style)
+        panel: _PanelSpec = _panel_spec(i, dim, nature, mc, var_info, style)
         _hist_ratio_panel(
             ax,
             ax_r,
@@ -284,32 +305,23 @@ def _plot_level(
             w_omnifold=omnifold_weights,
             w_ibu=ibu_weights[i] if ibu_weights is not None else None,
         )
-    _save_fig(fig, Path(save_path))
+    _save_fig(figure, save_path=Path(save_path))
 
 
 def plot_detector_level(
-    test_dataset: ArrayDataset,
+    test_dataset: ArrayDataset[np.double],
     g: RANModel,
-    save_path: str | Path = "plots/detector_level.pdf",
+    save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
     omnifold_weights: NDArray[np.double] | None = None,
     ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
-    """Generate detector level plots.
-    Arguments:
-        test_dataset (ArrayDataset)
-        g (keras.Model): Generator model.
-        save_path (str | Path)
-        var_info: Per-variable plot config.
-        omnifold_weights: Per-event OmniFold weights for MC events.
-        ibu_weights: Per-variable list of per-event IBU weights for MC events.
-    """
-    test: Populations = _collect_data(test_dataset)
+    test: Populations[np.double] = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.data,
         mc=test.mc.x,
-        w=_get_weights(g, test.mc.z),
+        w=_get_weights(g, z_gen=test.mc.z),
         style=_DETECTOR,
         save_path=save_path,
         var_info=var_info,
@@ -319,28 +331,19 @@ def plot_detector_level(
 
 
 def plot_particle_level(
-    test_dataset: ArrayDataset,
+    test_dataset: ArrayDataset[np.double],
     g: RANModel,
-    save_path: str | Path = "plots/particle_level.pdf",
+    save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
     omnifold_weights: NDArray[np.double] | None = None,
     ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
-    """Generate particle level plots.
-    Arguments:
-        test_dataset (ArrayDataset): Test dataset.
-        g (keras.Model): Generator model.
-        save_path (str | Path): Save path.
-        var_info: Per-variable plot config.
-        omnifold_weights: Per-event OmniFold weights for MC events.
-        ibu_weights: Per-variable list of per-event IBU weights for MC events.
-    """
-    test: Populations = _collect_data(test_dataset)
+    test: Populations[np.double] = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.require_truth(),
         mc=test.mc.z,
-        w=_get_weights(g, test.mc.z),
+        w=_get_weights(g, z_gen=test.mc.z),
         style=_PARTICLE,
         save_path=save_path,
         var_info=var_info,
@@ -350,47 +353,38 @@ def plot_particle_level(
 
 
 def plot_losses(
-    history: dict[str, list[float]],
-    save_path: str | Path = "plots/losses.pdf",
+    history: dict[str, list[SupportsFloat]],
+    save_path: Path = Path("plots/losses.pdf"),
 ) -> None:
-    """Generate loss curves.
-    Arguments:
-        history (dict[str, list[float]]): Training history.
-        save_path (str | Path)
-    """
-    if isinstance(save_path, str):
-        save_path = Path(save_path)
-    epochs: NDArray[np.ushort] = np.arange(len(history["train_d"]), dtype=np.ushort)
+    epochs: NDArray[np.uintc] = np.arange(len(history["train_d"]), dtype=np.uintc)
 
-    fig: figure.Figure
-    ax: axes.Axes
-    fig, ax = plt.subplots(figsize=(8, 5))
+    figure: Figure = Figure(figsize=(8, 5))
+    figure.canvas = FigureCanvasPdf(figure)
+    ax: Axes = figure.add_subplot(ax=111)
     train_d: NDArray[np.double] = np.array(
-        history["train_d"],
+        object=history["train_d"],
         dtype=np.double,
     )
-    val_d: NDArray[np.double] = np.array(history["val_d"], dtype=np.double)
-    train_g: NDArray[np.double] = np.array(history["train_g"], dtype=np.double)
-    val_g: NDArray[np.double] = np.array(history["val_g"], dtype=np.double)
+    val_d: NDArray[np.double] = np.array(object=history["val_d"], dtype=np.double)
+    train_g: NDArray[np.double] = np.array(object=history["train_g"], dtype=np.double)
+    val_g: NDArray[np.double] = np.array(object=history["val_g"], dtype=np.double)
     ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
     ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
     ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw=3, alpha=0.5)
     ax.axhline(
-        np.log(2),
+        y=np.log(2),
         color="gray",
         linestyle="-",
         linewidth=2,
         zorder=10,
         label=r"$\log(2)$",
     )
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel("WeightedBCE")
-    ax.set_title("Training History")
+    ax.set_xlabel(xlabel="Epoch")
+    ax.set_ylabel(ylabel="WeightedBCE")
+    ax.set_title(label="Training History")
     ax.legend()
 
-    fig.tight_layout()
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path)
-    plt.close(fig)
+    figure.tight_layout()
+    figure.savefig(fname=save_path, bbox_inches="tight")
     logger.info("Saved %s", save_path)

@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, SupportsFloat, cast
+from typing import TYPE_CHECKING
 
 import keras
 import numpy as np
@@ -95,7 +95,7 @@ def _prepare_jets[T: np.floating](
 def _save_run(
     g: RANModel,
     d: RANModel,
-    history: dict[str, list[SupportsFloat]],
+    history: dict[str, list[float]],
     *,
     batch_size: int,
     n_samples: int,
@@ -137,14 +137,14 @@ def _save_run(
     return run_dir
 
 
-def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[SupportsFloat]]]:
+def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
     g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
     history: dict[str, list[float]] = {
         k: v.tolist() for k, v in np.load(file=run_dir / "history.npz").items()
     }
     logger.info("Loaded run from %s", run_dir)
-    return g, cast(typ=dict[str, list[SupportsFloat]], val=history)
+    return g, history
 
 
 def _load_baseline_weights[T: np.floating = np.double](
@@ -225,7 +225,7 @@ def run(
         raise ValueError(f"Unknown dataset: {dataset!r}")
 
     g: RANModel
-    history: dict[str, list[SupportsFloat]]
+    history: dict[str, list[float]]
     if load_run is not None:
         run_dir = Path(load_run)
         g, history = _load_artifacts(run_dir)

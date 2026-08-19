@@ -7,25 +7,28 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 import jax
 import keras
 import numpy as np
+from beartype import beartype
+from jaxtyping import Array, Float, Real, jaxtyped
 from keras import ops
 
 from .models import build_discriminator, build_generator
 from .rantypes import ZXY, Events, Variables
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
     from logging import Logger
-    from typing import SupportsFloat
 
-    from jax._src.pjit import JitWrapped
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import (
         DatasetSplits,
+        DiscGradFn,
+        EvalStep,
+        GenGradFn,
         KerasVariable,
         RANModel,
         StatelessOptimizer,
+        TrainStep,
     )
 
 logger: Logger = logging.getLogger(name=__name__)
@@ -47,7 +50,7 @@ class TrainResult(NamedTuple):
 
     g: RANModel
     d: RANModel
-    history: dict[str, list[SupportsFloat]]
+    history: dict[str, list[float]]
     seed: int
 
 
@@ -60,14 +63,25 @@ class TrainState(NamedTuple):
     opt_d: Variables
 
 
-def normalize_weights(raw_w, y, /):
+@jaxtyped(typechecker=beartype)
+def normalize_weights(
+    raw_w: Float[Array | np.ndarray, " n"],
+    y: Real[Array | np.ndarray, " n"],
+    /,
+) -> Float[Array, " n"]:
     one = ops.ones_like(y)
     n_mc = ops.sum(one - y)
     w_mc_norm = raw_w * n_mc / (ops.sum(raw_w * (one - y)) + EPS)
     return y + (one - y) * w_mc_norm
 
 
-def weighted_bce(d_out, y, w, /):
+@jaxtyped(typechecker=beartype)
+def weighted_bce(
+    d_out: Float[Array | np.ndarray, " n"],
+    y: Real[Array | np.ndarray, " n"],
+    w: Float[Array | np.ndarray, " n"],
+    /,
+) -> Float[Array, ""]:
     one = ops.ones_like(d_out)
     terms = w * y * ops.log(d_out + EPS) + w * (one - y) * ops.log(one - d_out + EPS)
     return -ops.sum(terms) / ops.shape(terms)[0]
@@ -78,16 +92,28 @@ def _make_steps(
     d: RANModel,
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
-) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
+) -> tuple[TrainStep, TrainStep, EvalStep]:
+    @jaxtyped(typechecker=beartype)
     def _weights(
-        g_trainable: Variables, g_non_trainable: Variables, z, y, training: bool
-    ) -> tuple:
+        g_trainable: Variables,
+        g_non_trainable: Variables,
+        z: Float[Array, " n d"],
+        y: Real[Array, " n"],
+        training: bool,
+    ) -> tuple[Float[Array, " n"], Variables]:
         raw_w, g_non_trainable = g.stateless_call(
             g_trainable, g_non_trainable, z, training=training
         )
         return normalize_weights(ops.squeeze(raw_w, axis=-1), y), g_non_trainable
 
-    def _disc_loss(d_trainable, d_non_trainable, x, y, w) -> tuple:
+    @jaxtyped(typechecker=beartype)
+    def _disc_loss(
+        d_trainable: Variables,
+        d_non_trainable: Variables,
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+        w: Float[Array, " n"],
+    ) -> tuple[Float[Array, ""], Variables]:
         d_out, d_non_trainable = d.stateless_call(
             trainable_variables=d_trainable,
             non_trainable_variables=d_non_trainable,
@@ -96,9 +122,16 @@ def _make_steps(
         )
         return weighted_bce(ops.squeeze(d_out, axis=-1), y, w), d_non_trainable
 
+    @jaxtyped(typechecker=beartype)
     def _gen_loss(
-        g_trainable, g_non_trainable, d_trainable, d_non_trainable, z, x, y
-    ) -> tuple:
+        g_trainable: Variables,
+        g_non_trainable: Variables,
+        d_trainable: Variables,
+        d_non_trainable: Variables,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[Float[Array, ""], Variables]:
         w, g_non_trainable = _weights(g_trainable, g_non_trainable, z, y, training=True)
         d_out, _ = d.stateless_call(
             trainable_variables=d_trainable,
@@ -109,13 +142,17 @@ def _make_steps(
         # g maximizes the BCE that d minimizes, so its loss is the negation.
         return -weighted_bce(ops.squeeze(d_out, axis=-1), y, w), g_non_trainable
 
-    disc_grad_fn: Callable[..., tuple] = jax.value_and_grad(
-        fun=_disc_loss, has_aux=True
-    )
-    gen_grad_fn: Callable[..., tuple] = jax.value_and_grad(fun=_gen_loss, has_aux=True)
+    disc_grad_fn: DiscGradFn = jax.value_and_grad(fun=_disc_loss, has_aux=True)
+    gen_grad_fn: GenGradFn = jax.value_and_grad(fun=_gen_loss, has_aux=True)
 
     @jax.jit
-    def disc_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
+    @jaxtyped(typechecker=beartype)
+    def disc_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[TrainState, Float[Array, ""]]:
         """One discriminator update; g is frozen."""
         # Computed outside differentiated function, so the weights are constants
         w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
@@ -123,7 +160,9 @@ def _make_steps(
             state.d_trainable, state.d_non_trainable, x, y, w
         )
         d_trainable, opt_d_vars = opt_d.stateless_apply(
-            state.opt_d, grads, state.d_trainable
+            optimizer_variables=state.opt_d,
+            grads=grads,
+            trainable_variables=state.d_trainable,
         )
         return (
             state._replace(
@@ -135,7 +174,13 @@ def _make_steps(
         )
 
     @jax.jit
-    def gen_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
+    @jaxtyped(typechecker=beartype)
+    def gen_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[TrainState, Float[Array, ""]]:
         """One generator update; d is frozen (it enters only as a constant)."""
         (loss, g_non_trainable), grads = gen_grad_fn(
             state.g_trainable,
@@ -161,7 +206,13 @@ def _make_steps(
         )
 
     @jax.jit
-    def eval_step(state: TrainState, z, x, y) -> jax.Array:
+    @jaxtyped(typechecker=beartype)
+    def eval_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> Float[Array, ""]:
         """Weighted BCE with no updates, both models in inference mode."""
         w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         d_out, _ = d.stateless_call(
@@ -190,8 +241,8 @@ def _as_batch[T: np.floating = np.double](
 def _run_epoch[T: np.floating = np.double](
     state: TrainState,
     train_ds: ArrayDataset[T],
-    disc_step: JitWrapped,
-    gen_step: JitWrapped,
+    disc_step: TrainStep,
+    gen_step: TrainStep,
     n_disc_steps: int,
 ) -> tuple[TrainState, T, T]:
     n_batches: int = len(train_ds)
@@ -215,7 +266,7 @@ def _run_epoch[T: np.floating = np.double](
 
 
 def _eval_dataset[T: np.floating = np.double](
-    eval_step: JitWrapped, state: TrainState, dataset: ArrayDataset[T]
+    eval_step: EvalStep, state: TrainState, dataset: ArrayDataset[T]
 ) -> tuple[T, T]:
     """Mean weighted BCE over a split, as (d_loss, g_loss)."""
     total: float = 0.0
@@ -272,13 +323,13 @@ def train[T: np.floating = np.double](
     )
     disc_step, gen_step, eval_step = _make_steps(g, d, opt_g, opt_d)
 
-    history: dict[str, list[SupportsFloat]] = {
+    history: dict[str, list[float]] = {
         "train_d": [],
         "train_g": [],
         "val_d": [],
         "val_g": [],
     }
-    best_val_d: T = cast(typ=T, val=-np.inf)
+    best_val_d: float = -math.inf
     best_state: TrainState | None = None
     wait: int = 0
 
@@ -288,14 +339,14 @@ def train[T: np.floating = np.double](
         )
         mean_val: tuple[T, T] = _eval_dataset(eval_step, state, dataset=splits.val)
 
-        history["train_d"].append(mean_td)
-        history["train_g"].append(mean_tg)
-        history["val_d"].append(mean_val[0])
-        history["val_g"].append(mean_val[1])
+        history["train_d"].append(float(mean_td))
+        history["train_g"].append(float(mean_tg))
+        history["val_d"].append(float(mean_val[0]))
+        history["val_g"].append(float(mean_val[1]))
 
         # Early stopping: higher val D = better convergence toward log(2)
         if mean_val[0] > best_val_d + min_delta:
-            best_val_d = mean_val[0]
+            best_val_d = float(mean_val[0])
             best_state = state
             wait = 0
         else:

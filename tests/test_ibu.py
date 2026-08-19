@@ -7,7 +7,7 @@ import pytest
 from ran.baselines import _shared as shared
 from ran.baselines import ibu
 from ran.data import ArrayDataset
-from ran.rantypes import DatasetSplits
+from ran.rantypes import ZXY, DatasetSplits, Events
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -15,9 +15,10 @@ if TYPE_CHECKING:
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
     return ArrayDataset(
-        np.asarray(z, dtype=np.double),
-        np.asarray(x, dtype=np.double),
-        np.asarray(y, dtype=np.ubyte),
+        ZXY(
+            Events(np.asarray(z, dtype=np.double), np.asarray(x, dtype=np.double)),
+            np.asarray(y, dtype=np.ubyte),
+        ),
         batch_size=8,
     )
 
@@ -84,7 +85,7 @@ def test_parse_config_reports_missing_required_field() -> None:
 
 
 def test_parse_config_rejects_non_integer_data_seed() -> None:
-    with pytest.raises(ValueError, match="data_seed"):
+    with pytest.raises(TypeError, match="data_seed"):
         shared.parse_run_config(_config(data_seed="seven"))
 
 
@@ -119,13 +120,13 @@ def test_saturating_counts_conserve_observed_population() -> None:
 
 
 def test_prepare_data_names_response_and_test_populations() -> None:
-    data = shared.prepare_populations(_splits(), expected_dim=1)
+    full, test = shared.prepare_populations(_splits(), expected_dim=1)
 
-    assert data.response_gen.shape == (5, 1)
-    assert data.response_sim.shape == (5, 1)
-    assert data.observed_reco.shape == (5, 1)
-    assert data.test_mc_gen.shape == (2, 1)
-    assert data.test_data_reco.shape == (2, 1)
+    assert full.mc.z.shape == (5, 1)
+    assert full.mc.x.shape == (5, 1)
+    assert full.data.shape == (5, 1)
+    assert test.mc.z.shape == (2, 1)
+    assert test.data.shape == (2, 1)
 
 
 def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
@@ -135,7 +136,7 @@ def test_prepare_data_rejects_configured_dimension_mismatch() -> None:
 
 def test_prepare_data_rejects_nonfinite_values() -> None:
     splits = _splits()
-    splits.train.x[0, 0] = np.nan
+    splits.train.data.x[0, 0] = np.nan
 
     with pytest.raises(ValueError, match="finite"):
         shared.prepare_populations(splits, expected_dim=1)
@@ -149,7 +150,7 @@ def test_prepare_data_rejects_empty_test_data_population() -> None:
         test=_split([[0.8], [1.8]], [[0.9], [2.5]], [0, 0]),
     )
 
-    with pytest.raises(ValueError, match="test data"):
+    with pytest.raises(ValueError, match="test split: populations must be nonempty"):
         shared.prepare_populations(without_test_data, expected_dim=1)
 
 
@@ -202,17 +203,19 @@ def test_unfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
 
     result = ibu._unfold_variable(
         variable_name="dim_0",
-        response_gen=np.array([0.2, 0.8], dtype=np.double),
-        response_sim=np.array([0.3, 0.7], dtype=np.double),
-        observed_reco=np.array([-1.0, 2.0], dtype=np.double),
-        test_mc_gen=np.array([0.4, 0.6], dtype=np.double),
+        mc_gen=np.array([0.2, 0.8], dtype=np.double),
+        mc_sim=np.array([0.3, 0.7], dtype=np.double),
+        observed=np.array([-1.0, 2.0], dtype=np.double),
         n_iterations=2,
         purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
     )
 
     assert result.outcome.status == "skipped"
     assert result.outcome.skip_reason == "fewer than two purity bins"
-    np.testing.assert_array_equal(result.weights, [1.0, 1.0])
+    assert result.reweighting is None
+    np.testing.assert_array_equal(
+        result.weights_for(np.array([0.4, 0.6], dtype=np.double)), [1.0, 1.0]
+    )
 
 
 def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
@@ -224,19 +227,76 @@ def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
 
     result = ibu._unfold_variable(
         variable_name="dim_0",
-        response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
-        response_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
-        observed_reco=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
-        test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+        mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+        mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
+        observed=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
+        n_iterations=2,
+        purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
+    )
+    weights = result.weights_for(np.array([0.2, 1.8], dtype=np.double))
+
+    assert result.outcome.status == "completed"
+    assert result.outcome.n_bins == 2
+    assert np.all(np.isfinite(weights))
+    assert np.all(weights >= 0)
+    assert weights.mean() == pytest.approx(1.0)
+
+
+def test_unfolds_in_single_precision_end_to_end() -> None:
+    """IBU runs at float32 to match the precision its published results use.
+
+    Real purity binning on a realistic number of events, so the population
+    count checks and the mean-one postcondition are exercised against float32
+    arithmetic rather than assumed to survive it.
+    """
+    rng = np.random.default_rng(0)
+    n = 20_000
+    mc_gen = rng.normal(size=n).astype(np.single)
+    mc_sim = (mc_gen + 0.3 * rng.normal(size=n)).astype(np.single)
+    observed = (0.5 + rng.normal(size=n)).astype(np.single)
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        mc_gen=mc_gen,
+        mc_sim=mc_sim,
+        observed=observed,
+        n_iterations=4,
+        purity_threshold=0.5,
+    )
+
+    assert result.outcome.status == "completed"
+    assert result.reweighting is not None
+    assert result.reweighting.bin_weights.dtype == np.single
+    assert result.reweighting.edges.dtype == np.single
+
+    weights = result.weights_for(mc_gen)
+    assert weights.dtype == np.single
+    assert weights.mean(dtype=np.double) == pytest.approx(1.0, rel=1e-5)
+
+
+def test_unfolding_applies_to_a_sample_it_was_not_fit_on(monkeypatch) -> None:
+    """The learned object is per-bin, so the sample it scores is a free choice."""
+    monkeypatch.setattr(
+        ibu,
+        "_purity_bins",
+        lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
+    )
+
+    result = ibu._unfold_variable(
+        variable_name="dim_0",
+        mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+        mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
+        observed=np.array([-2.0, 0.4, 1.4, 4.0], dtype=np.double),
         n_iterations=2,
         purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
     )
 
-    assert result.outcome.status == "completed"
-    assert result.outcome.n_bins == 2
-    assert np.all(np.isfinite(result.weights))
-    assert np.all(result.weights >= 0)
-    assert result.weights.mean() == pytest.approx(1.0)
+    assert result.reweighting is not None
+    assert result.reweighting.bin_weights.size == 2
+    # Any number of events, in any order, so long as they are the same variable.
+    for size in (2, 7, 50):
+        gen = np.linspace(0.0, 2.0, size, dtype=np.double)
+        assert result.weights_for(gen).shape == (size,)
 
 
 @pytest.mark.parametrize(
@@ -254,9 +314,7 @@ def test_unfold_variable_reports_population_count_mismatch(
     real_bin_counts = ibu._bin_counts
     call_count = 0
 
-    def dropping_bin_counts(
-        indices: NDArray[np.intp], n_bins: int
-    ) -> NDArray[np.double]:
+    def dropping_bin_counts(indices: NDArray[np.intp], n_bins: int) -> NDArray[np.intp]:
         nonlocal call_count
         call_count += 1
         counts = real_bin_counts(indices, n_bins)
@@ -269,10 +327,9 @@ def test_unfold_variable_reports_population_count_mismatch(
     with pytest.raises(ValueError, match=rf"{population}.*3.*4"):
         ibu._unfold_variable(
             variable_name="dim_0",
-            response_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
-            response_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),
-            observed_reco=np.array([0.1, 0.9, 1.1, 1.9], dtype=np.double),
-            test_mc_gen=np.array([0.2, 1.8], dtype=np.double),
+            mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
+            mc_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),
+            observed=np.array([0.1, 0.9, 1.1, 1.9], dtype=np.double),
             n_iterations=2,
             purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
         )
@@ -300,7 +357,7 @@ def test_evaluate_dimension_accepts_one_dimensional_arrays() -> None:
 
 
 def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
-    monkeypatch.setattr(shared, "_load_splits", lambda _config: _splits())
+    monkeypatch.setattr(shared, "_load_splits", lambda **_kwargs: _splits())
     monkeypatch.setattr(
         ibu,
         "_purity_bins",
@@ -313,6 +370,8 @@ def test_run_and_evaluate_returns_named_aligned_result(monkeypatch) -> None:
     assert isinstance(result, ibu.IBUResult)
     assert result.variable_names == ("dim_0",)
     assert result.weights.shape == (1, 2)
+    # Cast at IBU's boundary: the splits above are the float64 RAN trains on.
+    assert result.weights.dtype == np.single
     assert len(result.outcomes) == 1
     assert result.outcomes[0].status == "skipped"
     assert set(result.metrics) == {"detector_dim_0", "particle_dim_0"}
@@ -341,7 +400,7 @@ def test_run_and_evaluate_validates_controls_before_loading_data(
     monkeypatch.setattr(
         shared,
         "_load_splits",
-        lambda _config: pytest.fail("loaded data before validating controls"),
+        lambda **_kwargs: pytest.fail("loaded data before validating controls"),
     )
     config = shared.parse_run_config(_config())
 

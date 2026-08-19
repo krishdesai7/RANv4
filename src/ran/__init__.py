@@ -1,35 +1,9 @@
-"""RAN: Reweighting Adversarial Networks.
-
-Importing anything under ``ran`` first pins the Keras 3 backend to JAX and
-enables JAX's 64-bit mode. Both settings are read once, when ``jax``/``keras``
-are first imported, so they have to be in place before any submodule pulls
-those in -- putting them here means every entry point gets them for free.
-
-RAN is float64 end to end (see :mod:`ran.models`), which JAX silently downcasts
-to float32 unless x64 mode is on. To trade that precision for GPU throughput,
-set ``JAX_ENABLE_X64=0`` in the environment and switch the ``dtype=`` arguments
-in :mod:`ran.models` to ``"float32"``.
-
-``setdefault`` throughout, so an explicit environment override still wins --
-that is how :mod:`ran.baselines.omnifold` pins itself back to TensorFlow.
-
-Nothing heavy is re-exported here. Importing this package must not import
-``keras``: :mod:`ran.baselines.omnifold` hard-sets the backend to TensorFlow at
-import, and :mod:`ran.train` refuses to load on anything but JAX, so a package
-``__init__`` that pulled in both would make the two mutually unimportable --
-and would leak ``KERAS_BACKEND=tensorflow`` into every subprocess besides.
-Import the submodule you need (``from ran.workflow import run``); the CLI
-re-exports below are the one exception, and they defer their own imports into
-the command bodies.
-"""
-
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "jax")
-os.environ.setdefault("JAX_ENABLE_X64", "1")
-# Only relevant to ran.baselines.omnifold, the one module that still runs on
-# TensorFlow; harmless everywhere else.
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+os.environ.setdefault(key="KERAS_BACKEND", value="jax")
+os.environ.setdefault(key="JAX_ENABLE_X64", value="1")
+# .baselines.omnifold is the sole module that runs TensorFlow
+os.environ.setdefault(key="TF_CPP_MIN_LOG_LEVEL", value="2")
 
 from .cli import app as app
 from .cli import configure as configure

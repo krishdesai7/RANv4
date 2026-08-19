@@ -23,9 +23,12 @@ import numpy as np
 import pytest
 from ran import workflow
 from ran.data import parse_gaussian_config
+from ran.rantypes import DatasetName
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from ran.rantypes import DatasetSplits
 
 CONFIG_2D = """
 mu_gen: [0.0, 1.0]
@@ -71,6 +74,30 @@ def stub_heavy(monkeypatch) -> Recorded:
     return recorded
 
 
+def _reload(run_dir: Path) -> None:
+    """Drive `run()` down the --load-run path.
+
+    `run()` keeps no defaults of its own -- the CLI owns them -- so every
+    argument has to be named. The values below are placeholders a reload is
+    meant to replace with what config.json recorded, deliberately unlike the
+    ones `_write_run` writes so that
+    `test_load_run_forwards_recorded_seed_and_size` fails if it stops doing so.
+    """
+    workflow.run(
+        batch_size=8,
+        n_samples=32,
+        config=None,
+        dataset=DatasetName.gaussian,
+        variables=frozenset(),
+        load_run=run_dir,
+        hidden_units=4,
+        n_layers=1,
+        patience=1,
+        seed=None,
+        data_seed=0,
+    )
+
+
 def _write_run(tmp_path, gaussian_params: dict, **overrides):
     run_dir = tmp_path / "runs" / "2026-08-06T000000Z"
     run_dir.mkdir(parents=True)
@@ -88,20 +115,24 @@ def _write_run(tmp_path, gaussian_params: dict, **overrides):
     return run_dir
 
 
-def test_load_run_reads_a_config_written_by_save_run(tmp_path, monkeypatch, stub_heavy):
+def test_load_run_reads_a_config_written_by_save_run(
+    tmp_path, monkeypatch, stub_heavy
+) -> None:
     """The round trip that matters: what _save_run writes, run() must read."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "cfg.yaml").write_text(CONFIG_2D)
     params = parse_gaussian_config(tmp_path / "cfg.yaml")
     run_dir = _write_run(tmp_path, params.model_dump())
 
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert len(stub_heavy.plots) == 3
     assert stub_heavy.evaluated == (run_dir, False)
 
 
-def test_load_run_reads_master_era_sigma_keys(tmp_path, monkeypatch, stub_heavy):
+def test_load_run_reads_master_era_sigma_keys(
+    tmp_path, monkeypatch, stub_heavy
+) -> None:
     """Runs written before the type refactor stored covariances as sigma_*."""
     monkeypatch.chdir(tmp_path)
     run_dir = _write_run(
@@ -116,13 +147,13 @@ def test_load_run_reads_master_era_sigma_keys(tmp_path, monkeypatch, stub_heavy)
         },
     )
 
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert len(stub_heavy.plots) == 3
 
 
 @pytest.mark.usefixtures("stub_heavy")
-def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch):
+def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch) -> None:
     """A reload must rebuild the split the run trained on, not a fresh one.
 
     `data_seed` and `n_samples` come from config.json, so the events the plots
@@ -136,16 +167,16 @@ def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch):
     seen: dict[str, object] = {}
     real = workflow.RANDataset
 
-    class Recording(real):  # ty:ignore[invalid-base]
-        def __init__(self, *args, **kwargs):
+    class Recording(real):
+        def __init__(self, *args, **kwargs) -> None:
             seen["seed"] = kwargs.get("seed")
             super().__init__(*args, **kwargs)
 
-        def generate_gaussian_dataset(self, *args, **kwargs):
+        def generate_gaussian_dataset(self, *args, **kwargs) -> DatasetSplits:
             seen["n_samples"] = kwargs.get("n_samples")
             return super().generate_gaussian_dataset(*args, **kwargs)
 
     monkeypatch.setattr(workflow, "RANDataset", Recording)
-    workflow.run(load_run=run_dir)
+    _reload(run_dir)
 
     assert seen == {"seed": 7, "n_samples": 600}

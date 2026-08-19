@@ -1,26 +1,10 @@
-"""Compute distance metrics on test sets for completed runs.
-
-Computes per-dimension 1D Wasserstein distances and Jensen-Shannon
-divergences, both before and after reweighting. Uses only memory-efficient
-algorithms: sorted-CDF Wasserstein (O(n log n)) and histogram-based JS
-divergence.
-
-Usage:
-    uv run -m ran evaluate                          # all runs in runs/
-    uv run -m ran evaluate --run-dir runs/2026-...  # single run
-    uv run -m ran evaluate --force                  # recompute existing
-"""
-
 from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-import numpy.typing as npt
-from numpy import ndarray
 from rich.console import Console
 from rich.table import Table
 from scipy.spatial.distance import jensenshannon
@@ -32,31 +16,27 @@ from .data import (
     gaussian_config_from_run_config,
     load_jet_dataset,
 )
+from .rantypes import RUN_DIR, DatasetName
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from logging import Logger
+    from pathlib import Path
 
-    from .rantypes import DatasetSplits, RANModel
+    from numpy.typing import NDArray
+
+    from .rantypes import ZXY, DatasetSplits, GaussianConfig, Populations, RANModel
 
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 
 def apply_to_runs(
-    run_dir: str | Path,
+    run_dir: Path,
     evaluate_one: Callable[[Path], object],
     description: str,
     log: logging.Logger,
 ) -> None:
-    """Apply `evaluate_one` to a single run directory, or to every run inside one.
-
-    A directory is a run if it holds a config.json; otherwise it is treated as a
-    parent of runs. In the multi-run case one failure is logged and skipped
-    rather than abandoning the remaining runs -- the baselines are long jobs and
-    a partial sweep is more useful than none.
-    """
-    run_dir = Path(run_dir)
     if (run_dir / "config.json").exists():
         evaluate_one(run_dir)
         return
@@ -72,26 +52,25 @@ def apply_to_runs(
             log.warning("%s: failed", d.name, exc_info=True)
 
 
-def _load_splits(config: dict) -> DatasetSplits:
-    """Reconstruct dataset splits from a run config.
-
-    Must reproduce the split the run trained on, so the dataset seed comes from
-    the config. Runs predating seed recording used the then-hardcoded 42.
-    """
-    dataset = config.get("dataset", "gaussian")
-    n_samples = config["n_samples"]
-    batch_size = config["batch_size"]
-    dim = config["dim"]
-    data_seed = config.get("data_seed", 42)
+def _load_splits(config: dict, dtype=np.double) -> DatasetSplits[np.double]:
+    dataset: DatasetName = DatasetName(
+        value=config.get("dataset", DatasetName.gaussian.value)
+    )
+    n_samples: int = config["n_samples"]
+    batch_size: int = config["batch_size"]
+    dim: int = config["dim"]
+    data_seed: int = config.get("data_seed", 42)
 
     logger.info("Loading dataset: %s", dataset)
-    if dataset == "gaussian":
+    if dataset == DatasetName.gaussian:
         if "gaussian_params" in config:
-            params = gaussian_config_from_run_config(config["gaussian_params"], dim)
+            params: GaussianConfig = gaussian_config_from_run_config(
+                config["gaussian_params"], dim
+            )
         else:
             # Legacy config format: hardcoded mu/sigma, only smearing varied.
             # Raw sigmas, so they go through the same promotion.
-            params = gaussian_config_from_run_config(
+            params: GaussianConfig = gaussian_config_from_run_config(
                 {
                     "mu_gen": [0.5] * dim,
                     "mu_true": [0.0] * dim,
@@ -101,16 +80,14 @@ def _load_splits(config: dict) -> DatasetSplits:
                 },
                 dim,
             )
-        return RANDataset(
-            batch_size=batch_size, seed=data_seed
-        ).generate_gaussian_dataset(
+        return RANDataset(batch_size, data_seed, dtype=dtype).generate_gaussian_dataset(
             params=params,
             n_samples=n_samples,
         )
-    if dataset == "jets":
+    if dataset == DatasetName.jets:
         splits, _, _ = load_jet_dataset(
-            n_samples=n_samples,
-            batch_size=batch_size,
+            n_samples,
+            batch_size,
             variables=frozenset(config["variables"]),
             seed=data_seed,
         )
@@ -118,93 +95,93 @@ def _load_splits(config: dict) -> DatasetSplits:
     raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data(test_ds: ArrayDataset) -> tuple[ndarray, ndarray, ndarray]:
-    """Return the test split as flat (z, x, y) arrays."""
+def _collect_test_data[T: np.floating = np.double](test_ds: ArrayDataset[T]) -> ZXY[T]:
+    """Return the test split as one flat labelled sample."""
     return test_ds.as_arrays()
 
 
 def _get_weights(
-    g: RANModel, z_gen: npt.NDArray, chunk_size: int = 10_000
-) -> npt.NDArray:
+    g: RANModel, z_gen: NDArray, chunk_size: int = 10_000
+) -> NDArray[np.double]:
     """Compute normalized generator weights in chunks to limit peak memory."""
-    n = len(z_gen)
-    raw = np.empty(n, dtype=np.float64)
+    n: int = len(z_gen)
+    raw: NDArray[np.double] = np.empty(shape=n, dtype=np.double)
     for start in range(0, n, chunk_size):
-        end = min(start + chunk_size, n)
-        raw[start:end] = np.asarray(g(z_gen[start:end])).flatten()
+        end: int = min(start + chunk_size, n)
+        raw[start:end] = np.asarray(a=g(z_gen[start:end])).flatten()
     return raw / raw.mean()
 
 
-def _wd_per_dim(
-    ref: npt.NDArray,
-    comp: npt.NDArray,
-    weights: npt.NDArray | None = None,
-) -> list[float]:
+def _dim(x: NDArray, /) -> int:
+    return x.shape[1] if x.ndim > 1 else 1
+
+
+def _wd_per_dim[T: np.floating = np.double](
+    ref: NDArray[T],
+    comp: NDArray[T],
+    weights: NDArray[T] | None = None,
+) -> NDArray[np.double]:
     """1D Wasserstein distance per dimension using sorted-CDF fast path."""
-    dim = ref.shape[1] if ref.ndim > 1 else 1
-    result: list[float] = []
-    for i in range(dim):
-        r = ref[:, i] if dim > 1 else ref.ravel()
-        c = comp[:, i] if dim > 1 else comp.ravel()
-        result.append(float(wasserstein_distance(r, c, v_weights=weights)))
+    dim: int = _dim(ref)
+    result: NDArray[np.double] = np.empty(shape=dim, dtype=np.double)
+    if dim > 1:
+        for i in range(dim):
+            r: NDArray[T] = ref[:, i]
+            c: NDArray[T] = comp[:, i]
+            result[i] = wasserstein_distance(r, c, v_weights=weights)
+    else:
+        result[0] = wasserstein_distance(ref.ravel(), comp.ravel(), v_weights=weights)
     return result
 
 
-def _normalized_histograms(
-    ref: npt.NDArray,
-    comp: npt.NDArray,
-    weights: npt.NDArray | None = None,
+def _normalized_histograms[T: np.floating = np.double](
+    ref: NDArray[T],
+    comp: NDArray[T],
+    weights: NDArray[T] | None = None,
     n_bins: int = 100,
-) -> Iterator[tuple[npt.NDArray[np.double], npt.NDArray[np.double]]]:
-    """Yield the (p, q) probability histograms for each dimension of ref/comp.
-
-    Both histograms share one binning per dimension -- `n_bins` uniform bins
-    over the combined range -- which is what makes the divergences below
-    comparable across dimensions. `weights` reweights `comp` only, and an
-    all-zero histogram is left unnormalized rather than divided by zero.
-    """
-    dim = ref.shape[1] if ref.ndim > 1 else 1
+) -> Iterator[tuple[NDArray[np.double], NDArray[np.double]]]:
+    # A flat 1D sample is one feature, not `dim` scalar features, so it is
+    # treated as a single column -- but only when both sides agree on that;
+    # a 1D/2D mismatch stays an error rather than silently reshaping one side.
+    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
+    comp_2d: NDArray[T] = (
+        comp.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else comp
+    )
+    dim: int = _dim(ref_2d)
     for i in range(dim):
-        r = ref[:, i] if dim > 1 else ref.ravel()
-        c = comp[:, i] if dim > 1 else comp.ravel()
+        r: NDArray[T] = ref_2d[:, i]
+        c: NDArray[T] = comp_2d[:, i]
 
-        bins = np.linspace(min(r.min(), c.min()), max(r.max(), c.max()), n_bins + 1)
+        bins: NDArray[np.double] = np.linspace(
+            start=min(r.min(), c.min()), stop=max(r.max(), c.max()), num=n_bins + 1
+        )
         # weights=None is np.histogram's own default, so the unweighted and
         # weighted cases need no branch here.
-        h_ref = np.histogram(r, bins=bins)[0].astype(np.double)
-        h_comp = np.histogram(c, bins=bins, weights=weights)[0].astype(np.double)
-
-        s_ref = h_ref.sum()
-        s_comp = h_comp.sum()
-        if s_ref > 0:
-            h_ref /= s_ref
-        if s_comp > 0:
-            h_comp /= s_comp
-        yield h_ref, h_comp
+        h_ref: NDArray[np.intp] = np.histogram(a=r, bins=bins)[0]
+        h_comp: NDArray[np.intp | T] = np.histogram(a=c, bins=bins, weights=weights)[0]
+        yield h_ref / (h_ref.sum() or 1.0), np.divide(h_comp, h_comp.sum() or 1.0)
 
 
-def _js_per_dim(
-    ref: npt.NDArray,
-    comp: npt.NDArray,
-    weights: npt.NDArray | None = None,
+def _js_per_dim[T: np.floating = np.double](
+    ref: NDArray[T],
+    comp: NDArray[T],
+    weights: NDArray[T] | None = None,
     n_bins: int = 100,
-) -> list[float]:
-    """Jensen-Shannon divergence per dimension via histogramming.
-
-    Returns JS divergence (squared JS distance) per dimension.
-    """
-    return [
-        float(jensenshannon(p, q) ** 2)
-        for p, q in _normalized_histograms(ref, comp, weights, n_bins)
-    ]
+) -> NDArray[np.double]:
+    return np.array(
+        [
+            jensenshannon(p, q) ** 2
+            for p, q in _normalized_histograms(ref, comp, weights, n_bins)
+        ]
+    )
 
 
-def _triangular_per_dim(
-    ref: npt.NDArray,
-    comp: npt.NDArray,
-    weights: npt.NDArray | None = None,
+def _triangular_per_dim[T: np.floating = np.double](
+    ref: NDArray[T],
+    comp: NDArray[T],
+    weights: NDArray[T] | None = None,
     n_bins: int = 100,
-) -> list[float]:
+) -> NDArray[np.double]:
     """Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
     Δ(p,q) = Σ (p_i - q_i)² / (p_i + q_i)  ×  1e3
@@ -212,12 +189,13 @@ def _triangular_per_dim(
     where p_i, q_i are histogram probability masses. The bin-width factor
     cancels analytically, so this works directly on normalized histograms.
     """
-    result: list[float] = []
-    for p, q in _normalized_histograms(ref, comp, weights, n_bins):
-        denom = p + q
-        mask = denom > 0
-        diff = p - q
-        result.append(float(np.sum(diff[mask] ** 2 / denom[mask]) * 1e3))
+    dim: int = _dim(ref)
+    result: NDArray[np.double] = np.empty(shape=dim, dtype=np.double)
+    for i, (p, q) in enumerate(_normalized_histograms(ref, comp, weights, n_bins)):
+        denom: NDArray[np.double] = p + q
+        mask: NDArray[np.bool] = denom > 0
+        diff: NDArray[np.double] = p - q
+        result[i] = np.sum(a=diff[mask] ** 2 / denom[mask]) * 1e3
     return result
 
 
@@ -244,11 +222,8 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
     g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
 
     splits: DatasetSplits = _load_splits(config)
-    z, x, y = _collect_test_data(splits.test)
-
-    z_data, z_mc = z[y == 1], z[y == 0]
-    x_data, x_mc = x[y == 1], x[y == 0]
-    w = _get_weights(g, z_mc)
+    test: Populations = _collect_test_data(splits.test).partition()
+    w = _get_weights(g, test.mc.z)
 
     # Variable names for labeling
     dataset = config.get("dataset", "gaussian")
@@ -260,13 +235,16 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
 
     metrics: dict = {}
 
-    for level, data, mc in [("detector", x_data, x_mc), ("particle", z_data, z_mc)]:
-        wd_before: list[float] = _wd_per_dim(data, mc)
-        wd_after: list[float] = _wd_per_dim(data, mc, weights=w)
-        js_before: list[float] = _js_per_dim(data, mc)
-        js_after: list[float] = _js_per_dim(data, mc, weights=w)
-        td_before: list[float] = _triangular_per_dim(data, mc)
-        td_after: list[float] = _triangular_per_dim(data, mc, weights=w)
+    for level, data, mc in [
+        ("detector", test.data, test.mc.x),
+        ("particle", test.require_truth(), test.mc.z),
+    ]:
+        wd_before: NDArray[np.double] = _wd_per_dim(ref=data, comp=mc)
+        wd_after: NDArray[np.double] = _wd_per_dim(ref=data, comp=mc, weights=w)
+        js_before: NDArray[np.double] = _js_per_dim(ref=data, comp=mc)
+        js_after: NDArray[np.double] = _js_per_dim(ref=data, comp=mc, weights=w)
+        td_before: NDArray[np.double] = _triangular_per_dim(ref=data, comp=mc)
+        td_after: NDArray[np.double] = _triangular_per_dim(ref=data, comp=mc, weights=w)
 
         for i, var in enumerate(var_names):
             key: str = f"{level}_{var}"
@@ -284,7 +262,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
                 "triangular_improvement_pct": _improvement(td_before[i], td_after[i]),
             }
 
-    json.dump(metrics, out_path.open("w"), indent=2)
+    json.dump(obj=metrics, fp=out_path.open("w"), indent=2)
     logger.info("%s: saved metrics to %s", run_dir.name, out_path)
     render_metrics(run_dir.name, metrics, var_names)
     return metrics
@@ -295,6 +273,7 @@ def render_metrics(
     metrics: dict,
     var_names: list[str],
     console: Console | None = None,
+    /,
 ) -> None:
     """Render evaluation metrics as one Rich table per available level."""
     active_console: Console = console or Console()
@@ -307,11 +286,11 @@ def render_metrics(
         if not level_metrics:
             continue
         table = Table(title=f"{run_name} — {level.title()} level")
-        table.add_column("Variable")
-        table.add_column("Metric")
-        table.add_column("Before", justify="right")
-        table.add_column("After", justify="right")
-        table.add_column("Improvement", justify="right")
+        table.add_column(header="Variable")
+        table.add_column(header="Metric")
+        table.add_column(header="Before", justify="right")
+        table.add_column(header="After", justify="right")
+        table.add_column(header="Improvement", justify="right")
         for var, m in level_metrics:
             table.add_row(
                 var,
@@ -337,11 +316,16 @@ def render_metrics(
         active_console.print(table)
 
 
-def evaluate_runs(run_dir: str | Path = "runs", force: bool = False) -> None:
+def evaluate_runs(run_dir: Path = RUN_DIR, force: bool = False) -> None:
     """Compute distance metrics for completed runs.
 
     Args:
         run_dir: Path to a single run or a directory containing multiple runs.
         force: Recompute even if metrics.json already exists.
     """
-    apply_to_runs(run_dir, lambda d: evaluate_run(d, force=force), "evaluate", logger)
+    apply_to_runs(
+        run_dir,
+        evaluate_one=lambda d: evaluate_run(run_dir=d, force=force),
+        description="evaluate",
+        log=logger,
+    )

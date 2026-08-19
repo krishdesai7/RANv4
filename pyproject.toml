@@ -10,16 +10,21 @@ description = "Reweighting Adversarial Networks"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "beartype>=0.22.9",
     "jax>=0.11.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "jax[cuda13]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "jaxtyping>=0.3.11",
     "keras>=3.15.1",
     "matplotlib>=3.11.1",
-    "numpy>=2.5.1",
+    "numpy>=2.5.2",
     "omnifold>=0.1.36",
     "pyyaml>=6.0.3",
     "scipy>=1.18.0",
     "typer>=0.27.1",
 ]
+
+[project.scripts]
+ran = "ran.cli:app"
 
 [project.urls]
 repository = "https://github.com/krishdesai7/RANv4"
@@ -33,14 +38,15 @@ email = "krish@desai.ml"
 
 [dependency-groups]
 dev = [
-    "complexipy>=6.2.0",
+    "complexipy>=7.0.1",
     "ipykernel>=7.3.0",
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
     "pyrefly>=1.2.0",
     "pytest>=9.1.1",
-    "ruff>=0.16.1",
+    "ruff>=0.16.3",
     "rust-just>=1.58.0",
-    "types-pyyaml>=6.0.12.20260724",
+    "ty>=0.0.72",
+    "types-pyyaml>=6.0.12.20260815",
 ]
 release = [
     "rooster>=0.1.1",
@@ -75,10 +81,13 @@ filterwarnings = [
 
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python"
-search-path = ["."]
+search-path = ["src"]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
+
+
+[tool.ty]
 
 
 [tool.ruff]
@@ -118,12 +127,18 @@ extend-select = [
     "LOG",  # (flake8-logging): Flags logging anti-patterns (such as string formatting inside logger calls instead of passing lazy arguments).
     "TC",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
 ]
+ignore = [
+    "runtime-cast-value",
+    # jaxtyping puts the shape spec in a string subscript, e.g.
+    # `Float[Array, " n d"]`, which F722 reads as a broken forward annotation.
+    # Silencing it is what jaxtyping documents; pyrefly and ty parse these fine.
+    "forward-annotation-syntax-error",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
-# The package __init__ is the backend bootstrap: it must set KERAS_BACKEND and
-# JAX_ENABLE_X64 before anything imports jax or keras, which is exactly the
-# import-time side effect RUF067 exists to prevent. See the module docstring.
+# package __init__ is the backend bootstrap: must set KERAS_BACKEND and
+# JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]
 
 [tool.ruff.format]
@@ -150,13 +165,6 @@ ignore-labels = ["internal", "ci", "testing", "automations"]
 "Other changes" = ["__unknown__"]
 
 
-[tool.pyright]
-venvPath = "."
-venv = ".venv"
-stubPath = ""
-extraPaths = []
-
-
 [tool.complexipy]
 paths = ["."]
 max-complexity-allowed = 10
@@ -165,3 +173,19 @@ check-script = true
 no-ignore = true
 ignore-complexity = true
 failed = true
+
+
+[tool.tombi]
+toml-version = "v1.1.0"
+
+[tool.tombi.format.rules]
+group-blank-lines-limit = 2
+indent-sub-tables = true
+indent-table-key-value-pairs = true
+key-value-equals-sign-alignment = true
+table-blank-lines = 2
+trailing-comment-alignment = true
+
+
+[tool.tombi.extensions."tombi-toml/pyproject"]
+lsp.document-link.pypi-org.enabled = true

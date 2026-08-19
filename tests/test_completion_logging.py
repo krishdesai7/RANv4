@@ -19,7 +19,8 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
 
     destination = tmp_path / "sample.npz"
 
-    def fake_urlretrieve(_url, _dest, reporthook) -> None:
+    def fake_urlretrieve(_url, filename, reporthook) -> None:
+        assert filename == destination
         reporthook(1, 100, 100)
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)
@@ -46,14 +47,14 @@ def test_evaluation_records_metrics_artifact_completion(
     import keras
     import numpy as np
     from ran import evaluate
+    from ran.rantypes import ZXY, Events
 
     run_dir = tmp_path / "sample-run"
     run_dir.mkdir()
     (run_dir / "config.json").write_text('{"dataset": "gaussian", "dim": 1}')
     (run_dir / "generator.keras").touch()
     z = np.array([[0.0], [1.0], [2.0], [3.0]])
-    x = z.copy()
-    y = np.array([1, 1, 0, 0])
+    test_data = ZXY(Events(z, z.copy()), np.array([1, 1, 0, 0], dtype=np.ubyte))
 
     # evaluate_run imports keras inside the function (so ran.evaluate stays
     # keras-free for the OmniFold backend pin), so patch the real module.
@@ -61,8 +62,18 @@ def test_evaluation_records_metrics_artifact_completion(
     monkeypatch.setattr(
         evaluate, "_load_splits", lambda _config: SimpleNamespace(test=object())
     )
-    monkeypatch.setattr(evaluate, "_collect_test_data", lambda _test: (z, x, y))
-    monkeypatch.setattr(evaluate, "_get_weights", lambda _model, _values: np.ones(2))
+
+    # Both are called by keyword, so the stubs have to name their parameters.
+    def fake_collect_test_data(test_ds):
+        del test_ds
+        return test_data
+
+    def fake_get_weights(model, z_gen):
+        del model, z_gen
+        return np.ones(2)
+
+    monkeypatch.setattr(evaluate, "_collect_test_data", fake_collect_test_data)
+    monkeypatch.setattr(evaluate, "_get_weights", fake_get_weights)
     monkeypatch.setattr(evaluate, "_wd_per_dim", lambda *_args, **_kwargs: [1.0])
     monkeypatch.setattr(evaluate, "_js_per_dim", lambda *_args, **_kwargs: [0.5])
     monkeypatch.setattr(
@@ -150,7 +161,7 @@ def test_ibu_records_metric_and_weight_artifact_completion(
         return ibu.IBUResult(
             metrics={"detector_mass": metric_record},
             variable_names=("mass", "momentum"),
-            weights=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.double),
+            weights=np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.single),
             outcomes=(
                 ibu.VariableOutcome(
                     variable_name="mass",

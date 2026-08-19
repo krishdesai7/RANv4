@@ -39,6 +39,15 @@ cd RANv4
 uv sync
 ```
 
+This installs the `ran` console script into `.venv/bin`. Commands below are
+written as `ran ...`; from a checkout without an activated virtualenv, prefix
+them with `uv run` (`uv run ran train --config params/1d_default.yaml`).
+Tab completion for subcommands, flags and enum values is available with:
+
+```shell
+ran --install-completion
+```
+
 ### GPU Support
 
 The JAX dependency is platform-resolved:
@@ -61,17 +70,17 @@ Gaussian datasets are configured via YAML files. Examples are provided in `param
 
 ```shell
 # 1D uncorrelated Gaussian
-uv run -m ran train --config params/1d_default.yaml
+ran train --config params/1d_default.yaml
 
 # 2D with correlated covariance
-uv run -m ran train --config params/2d_correlated.yaml
+ran train --config params/2d_correlated.yaml
 
 # 4D and 6D correlated
-uv run -m ran train --config params/4d_correlated.yaml
-uv run -m ran train --config params/6d_correlated.yaml
+ran train --config params/4d_correlated.yaml
+ran train --config params/6d_correlated.yaml
 
 # Customize network and training
-uv run -m ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --patience 10
+ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --patience 10
 ```
 
 YAML config format (see `params/` for examples):
@@ -94,20 +103,20 @@ Sigma values are promoted to covariance matrices:
 
 ```shell
 # All 6 jet variables
-uv run -m ran train --dataset jets
+ran train --dataset jets
 
 # Specific variables
-uv run -m ran train --dataset jets --variable m --variable w
+ran train --dataset jets --var m --var w
 ```
 
 ### Other Options
 
 ```shell
 # Reload an existing run (regenerate plots/metrics)
-uv run -m ran train --load-run runs/2026-03-14T061023Z
+ran train --load-run runs/2026-03-14T061023Z
 
 # Enable debug logging for any command
-uv run -m ran --log-level DEBUG train --config params/1d_default.yaml
+ran --log-level DEBUG train --config params/1d_default.yaml
 
 # SLURM submission
 sbatch scripts/submit.sh --config params/2d_correlated.yaml
@@ -123,10 +132,13 @@ sbatch scripts/submit.sh --dataset jets
 | `--hidden-units` | `64`           | Units per hidden layer                                |
 | `--n-layers`     | `2`            | Number of hidden layers                               |
 | `--patience`     | `5`            | Early stopping patience (epochs)                      |
-| `--variable`     | all 6          | Repeat once for each jet substructure variable to use |
+| `--var`          | all 6          | Repeat once for each jet substructure variable to use |
 | `--load-run`     | `None`         | Path to an existing run directory to reload           |
 | `--seed`         | system entropy | Weight-initialization seed (see [Seeding](#seeding))  |
 | `--data-seed`    | `42`           | Data generation, shuffle, split and batch order       |
+
+`--n-samples`, `--batch-size` and `--var` also accept the short forms `-n`, `-b`
+and `-v`; the global `--log-level` accepts `-l`.
 
 The pipeline will:
 
@@ -142,13 +154,13 @@ Distance metrics can be computed independently on existing runs:
 
 ```bash
 # Evaluate all runs
-uv run -m ran evaluate
+ran evaluate
 
 # Evaluate a single run
-uv run -m ran evaluate --run-dir runs/2026-03-14T061023Z
+ran evaluate --run-dir runs/2026-03-14T061023Z
 
 # Recompute even if metrics.json exists
-uv run -m ran evaluate --force
+ran evaluate --force
 ```
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
@@ -159,19 +171,19 @@ Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) or IBU (Iterative Bay
 
 ```bash
 # OmniFold — single run
-uv run -m ran baseline omnifold --run-dir runs/2026-03-14T061023Z
+ran baseline omnifold --run-dir runs/2026-03-14T061023Z
 
 # OmniFold — all runs
-uv run -m ran baseline omnifold
+ran baseline omnifold
 
 # Customize OmniFold iterations/epochs
-uv run -m ran baseline omnifold --run-dir runs/2026-03-14T061023Z --niter 5 --epochs 100
+ran baseline omnifold --run-dir runs/2026-03-14T061023Z --niter 5 --epochs 100
 
 # IBU — single run
-uv run -m ran baseline ibu --run-dir runs/2026-03-14T061023Z
+ran baseline ibu --run-dir runs/2026-03-14T061023Z
 
 # IBU — all runs
-uv run -m ran baseline ibu
+ran baseline ibu
 ```
 
 Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
@@ -181,9 +193,9 @@ Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run di
 Run each step as its own process so RAN's JAX backend and OmniFold's TensorFlow backend never share an interpreter:
 
 ```bash
-uv run -m ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
-uv run -m ran sweep omnifold --s-index 0 --sweep-dir runs/cubic-sweep
-uv run -m ran sweep collect --sweep-dir runs/cubic-sweep
+ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
+ran sweep omnifold --s-index 0 --sweep-dir runs/cubic-sweep
+ran sweep collect --sweep-dir runs/cubic-sweep
 ```
 
 ### Leakage Verification
@@ -192,10 +204,10 @@ A core correctness requirement is that the generator $g(z)$ never receives $z_\t
 
 ```bash
 # Clean run — z_true drawn from N(0, 1) as normal
-uv run -m ran leakage-check --clean
+ran leakage-check --clean
 
 # Poisoned run — z_true overwritten with -999 after x_data is generated
-uv run -m ran leakage-check --poison
+ran leakage-check --poison
 ```
 
 The poisoned run corrupts every data particle-level value to a nonsense sentinel (-999) while leaving $x_\text{data}$ (the reco-level observations the discriminator actually sees) unchanged. If $g$ had any access to $z_\text{true}$, the poisoned run would produce degraded weights. Both runs should report statistically identical Wasserstein and triangular discriminator improvements. Matching results confirm that no leakage path exists.
@@ -257,14 +269,18 @@ Force bitwise reproducibility with `XLA_FLAGS=--xla_gpu_deterministic_ops=true`.
 RANv4/
 ├── src/ran/                      Python package
 │   ├── __init__.py               Pins KERAS_BACKEND=jax and JAX_ENABLE_X64=1
-│   ├── __main__.py               Entry point (uv run -m ran)
-│   ├── cli.py                    Unified Typer command tree
+│   ├── __main__.py               Fallback entry point (python -m ran)
+│   ├── cli.py                    Unified Typer command tree; target of the `ran` script
 │   ├── workflow.py               Training and reload workflow
 │   ├── logging_config.py         Structured application logging
 │   ├── leakage.py                Data-poisoning leakage check
 │   ├── py.typed                  PEP 561 typing marker
 │   ├── rantypes/
-│   │   ├── schema.py             Dataclasses and enums (RunConfig, TrainState, ...)
+│   │   ├── events.py             Split, Events, ZXY, Populations, DatasetSplits
+│   │   ├── configs.py            GaussianConfig, RunConfig
+│   │   ├── results.py            UnfoldingPopulations, VariableOutcome, IBUResult
+│   │   ├── constants.py          Zenodo record, cache layout, jet plot metadata
+│   │   ├── enums.py              CLI choice enums
 │   │   └── types.py              TypedDicts and array aliases
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion

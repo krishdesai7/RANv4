@@ -53,9 +53,9 @@ for i in $(seq 0 $((N_POINTS - 1))); do
   # one GPU step. Capture the log so a crash in one point is easy to find and
   # never sinks the others (collect tolerates missing point files).
   $step bash -c "
-      uv run -m ran sweep ran \
+      uv run ran sweep ran \
           --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
-      uv run -m ran sweep omnifold \
+      uv run ran sweep omnifold \
           --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
     " > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
 
@@ -72,7 +72,7 @@ wait || true  # let the final wave of points finish (ignore individual failures)
 
 # Join the per-method point files into results.npz + wasserstein_vs_s.pdf (runs
 # on the head node of the allocation; resilience to gaps is built into collect).
-uv run -m ran sweep collect --sweep-dir="${SWEEP_DIR}" --n-points="${N_POINTS}"
+uv run ran sweep collect --sweep-dir="${SWEEP_DIR}" --n-points="${N_POINTS}"
 EOF
 )
 

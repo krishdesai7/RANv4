@@ -1,86 +1,87 @@
-"""Adversarial training loop for RAN, on Keras 3 with the JAX backend.
-
-The min-max game needs two optimizers driven at different cadences against a
-shared loss, which does not fit `Model.fit`, so this is a hand-rolled loop. It
-follows the standard Keras 3 + JAX pattern: model state lives in plain JAX
-pytrees (never in the `keras.Variable`s) for the duration of training, updates
-go through `stateless_call`/`stateless_apply`, and each step is a single jitted
-function. Values are written back into the Keras models at the end so the
-returned objects are ordinary, saveable `keras.Model`s.
-
-The loss math below is written in backend-agnostic `keras.ops`; only the
-gradient transform and jit are native JAX.
-"""
-
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+import math
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
 import keras
 import numpy as np
+from beartype import beartype
+from jaxtyping import Array, Float, Real, jaxtyped
 from keras import ops
 
 from .models import build_discriminator, build_generator
-from .rantypes import TrainResult, TrainState
+from .rantypes import ZXY, Events, Variables
 
 if TYPE_CHECKING:
     from logging import Logger
 
-    from jax._src.pjit import JitWrapped
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import (
         DatasetSplits,
+        DiscGradFn,
+        EvalStep,
+        GenGradFn,
         KerasVariable,
         RANModel,
         StatelessOptimizer,
-        Variables,
+        TrainStep,
     )
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
-    # jitted steps below would then fail deep inside a trace. Say so up front.
+    # jitted steps below fail deep inside a trace.
     raise RuntimeError(
         f"ran.train requires the JAX backend, got {keras.backend.backend()!r}. "
         "Import `ran` (or any ran.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )
 
-# Floor for logs and divisions. Lives here rather than in `ran.rantypes`, which
-# has to stay importable without committing a Keras backend.
 EPS: float = keras.config.epsilon()
 
 
-def normalize_weights(raw_w, y):
-    """Per-event weights: 1 for data, mean-preserving g(z) for MC.
+class TrainResult(NamedTuple):
+    """Return package of a model training. Unpacks as ``(g, d, history, seed)``."""
 
-    `raw_w` is the raw generator output for every event in the batch. Data
-    events (y=1) are pinned to weight 1; MC events (y=0) are rescaled so their
-    weights sum to the MC event count, preserving the per-class normalization.
+    g: RANModel
+    d: RANModel
+    history: dict[str, list[float]]
+    seed: int
 
-    The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and
-    the result, so g's output on data rows -- which are z_true -- cannot reach
-    the loss or its gradient. That is what keeps z_true out of the model.
-    """
+
+class TrainState(NamedTuple):
+    g_trainable: Variables
+    g_non_trainable: Variables
+    d_trainable: Variables
+    d_non_trainable: Variables
+    opt_g: Variables
+    opt_d: Variables
+
+
+@jaxtyped(typechecker=beartype)
+def normalize_weights(
+    raw_w: Float[Array | np.ndarray, " n"],
+    y: Real[Array | np.ndarray, " n"],
+    /,
+) -> Float[Array, " n"]:
     one = ops.ones_like(y)
     n_mc = ops.sum(one - y)
     w_mc_norm = raw_w * n_mc / (ops.sum(raw_w * (one - y)) + EPS)
     return y + (one - y) * w_mc_norm
 
 
-def weighted_bce(d_out, y, w):
-    """Weighted binary cross-entropy.
-
-    Reduced with `ops.sum(...) / n` rather than `ops.mean`: for float64 input
-    `keras.ops.mean` picks a float32 compute dtype internally and returns a
-    float64 result carrying ~1e-8 relative error, which would silently undo the
-    float64 policy this project runs on. `ops.sum` accumulates in float64.
-    """
+@jaxtyped(typechecker=beartype)
+def weighted_bce(
+    d_out: Float[Array | np.ndarray, " n"],
+    y: Real[Array | np.ndarray, " n"],
+    w: Float[Array | np.ndarray, " n"],
+    /,
+) -> Float[Array, ""]:
     one = ops.ones_like(d_out)
     terms = w * y * ops.log(d_out + EPS) + w * (one - y) * ops.log(one - d_out + EPS)
     return -ops.sum(terms) / ops.shape(terms)[0]
@@ -91,50 +92,77 @@ def _make_steps(
     d: RANModel,
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
-) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
-    """Build the jitted disc/gen/eval steps, closing over the models.
-
-    The models are captured rather than passed so jit sees only array
-    arguments; each returned function is traced once per input shape.
-    """
-
+) -> tuple[TrainStep, TrainStep, EvalStep]:
+    @jaxtyped(typechecker=beartype)
     def _weights(
-        g_trainable: Variables, g_non_trainable: Variables, z, y, training: bool
-    ):
+        g_trainable: Variables,
+        g_non_trainable: Variables,
+        z: Float[Array, " n d"],
+        y: Real[Array, " n"],
+        training: bool,
+    ) -> tuple[Float[Array, " n"], Variables]:
         raw_w, g_non_trainable = g.stateless_call(
             g_trainable, g_non_trainable, z, training=training
         )
         return normalize_weights(ops.squeeze(raw_w, axis=-1), y), g_non_trainable
 
-    def _disc_loss(d_trainable, d_non_trainable, x, y, w):
+    @jaxtyped(typechecker=beartype)
+    def _disc_loss(
+        d_trainable: Variables,
+        d_non_trainable: Variables,
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+        w: Float[Array, " n"],
+    ) -> tuple[Float[Array, ""], Variables]:
         d_out, d_non_trainable = d.stateless_call(
-            d_trainable, d_non_trainable, x, training=True
+            trainable_variables=d_trainable,
+            non_trainable_variables=d_non_trainable,
+            inputs=x,
+            training=True,
         )
-        loss = weighted_bce(ops.squeeze(d_out, axis=-1), y, w)
-        return loss, d_non_trainable
+        return weighted_bce(ops.squeeze(d_out, axis=-1), y, w), d_non_trainable
 
-    def _gen_loss(g_trainable, g_non_trainable, d_trainable, d_non_trainable, z, x, y):
+    @jaxtyped(typechecker=beartype)
+    def _gen_loss(
+        g_trainable: Variables,
+        g_non_trainable: Variables,
+        d_trainable: Variables,
+        d_non_trainable: Variables,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[Float[Array, ""], Variables]:
         w, g_non_trainable = _weights(g_trainable, g_non_trainable, z, y, training=True)
-        d_out, _ = d.stateless_call(d_trainable, d_non_trainable, x, training=False)
-        # g plays the opposite side of the same game: it maximizes the BCE that
-        # d minimizes, so its loss is the negation.
-        loss = -weighted_bce(ops.squeeze(d_out, axis=-1), y, w)
-        return loss, g_non_trainable
+        d_out, _ = d.stateless_call(
+            trainable_variables=d_trainable,
+            non_trainable_variables=d_non_trainable,
+            inputs=x,
+            training=False,
+        )
+        # g maximizes the BCE that d minimizes, so its loss is the negation.
+        return -weighted_bce(ops.squeeze(d_out, axis=-1), y, w), g_non_trainable
 
-    disc_grad_fn = jax.value_and_grad(_disc_loss, has_aux=True)
-    gen_grad_fn = jax.value_and_grad(_gen_loss, has_aux=True)
+    disc_grad_fn: DiscGradFn = jax.value_and_grad(fun=_disc_loss, has_aux=True)
+    gen_grad_fn: GenGradFn = jax.value_and_grad(fun=_gen_loss, has_aux=True)
 
     @jax.jit
-    def disc_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
+    @jaxtyped(typechecker=beartype)
+    def disc_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[TrainState, Float[Array, ""]]:
         """One discriminator update; g is frozen."""
-        # Computed outside the differentiated function, so the weights are
-        # constants here -- no stop_gradient needed to keep g out of the update.
+        # Computed outside differentiated function, so the weights are constants
         w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         (loss, d_non_trainable), grads = disc_grad_fn(
             state.d_trainable, state.d_non_trainable, x, y, w
         )
         d_trainable, opt_d_vars = opt_d.stateless_apply(
-            state.opt_d, grads, state.d_trainable
+            optimizer_variables=state.opt_d,
+            grads=grads,
+            trainable_variables=state.d_trainable,
         )
         return (
             state._replace(
@@ -146,7 +174,13 @@ def _make_steps(
         )
 
     @jax.jit
-    def gen_step(state: TrainState, z, x, y) -> tuple[TrainState, jax.Array]:
+    @jaxtyped(typechecker=beartype)
+    def gen_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> tuple[TrainState, Float[Array, ""]]:
         """One generator update; d is frozen (it enters only as a constant)."""
         (loss, g_non_trainable), grads = gen_grad_fn(
             state.g_trainable,
@@ -158,7 +192,9 @@ def _make_steps(
             y,
         )
         g_trainable, opt_g_vars = opt_g.stateless_apply(
-            state.opt_g, grads, state.g_trainable
+            optimizer_variables=state.opt_g,
+            grads=grads,
+            trainable_variables=state.g_trainable,
         )
         return (
             state._replace(
@@ -170,124 +206,102 @@ def _make_steps(
         )
 
     @jax.jit
-    def eval_step(state: TrainState, z, x, y) -> jax.Array:
+    @jaxtyped(typechecker=beartype)
+    def eval_step(
+        state: TrainState,
+        z: Float[Array, " n d"],
+        x: Float[Array, " n d"],
+        y: Real[Array, " n"],
+    ) -> Float[Array, ""]:
         """Weighted BCE with no updates, both models in inference mode."""
         w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         d_out, _ = d.stateless_call(
-            state.d_trainable, state.d_non_trainable, x, training=False
+            trainable_variables=state.d_trainable,
+            non_trainable_variables=state.d_non_trainable,
+            inputs=x,
+            training=False,
         )
         return weighted_bce(ops.squeeze(d_out, axis=-1), y, w)
 
     return disc_step, gen_step, eval_step
 
 
-def _as_batch(
-    features: dict[str, NDArray[np.double]], y: NDArray[np.ubyte]
-) -> tuple[NDArray[np.double], NDArray[np.double], NDArray[np.double]]:
-    """Cast one dataset batch to the float64 arrays the steps expect."""
-    return (
-        features["z"].astype(np.double),
-        features["x"].astype(np.double),
-        y.reshape(-1).astype(np.double),
+def _as_batch[T: np.floating = np.double](
+    features: dict[str, NDArray[T]], y: NDArray[np.ubyte]
+) -> ZXY[T]:
+    return ZXY(
+        Events(
+            z=features["z"],
+            x=features["x"],
+        ),
+        y=y.reshape(-1),
     )
 
 
-def _run_epoch(
+def _run_epoch[T: np.floating = np.double](
     state: TrainState,
-    train_ds: ArrayDataset,
-    disc_step: JitWrapped,
-    gen_step: JitWrapped,
+    train_ds: ArrayDataset[T],
+    disc_step: TrainStep,
+    gen_step: TrainStep,
     n_disc_steps: int,
-) -> tuple[TrainState, float, float]:
-    """One pass over the training split; returns the new state and mean losses.
-
-    `d` updates every batch and `g` every `n_disc_steps`-th batch -- the usual
-    adversarial cadence, giving the discriminator a head start each round. The
-    generator loss is negated back to d's sign convention so the two curves stay
-    directly comparable in the history.
-
-    Losses are reduced to plain floats so every history series has one element
-    type (`np.mean` would give np.floating).
-    """
-    d_losses: list[float] = []
-    g_losses: list[float] = []
+) -> tuple[TrainState, T, T]:
+    n_batches: int = len(train_ds)
+    d_losses: NDArray[T] = np.empty(shape=n_batches, dtype=train_ds.dtype)
+    # g updates on every n_disc_steps-th batch, so its curve has fewer points.
+    # Sized to exactly those, or the unwritten slots would enter the mean.
+    g_losses: NDArray[T] = np.empty(
+        shape=math.ceil(n_batches / n_disc_steps), dtype=train_ds.dtype
+    )
     for step, (features, y) in enumerate(train_ds):
-        z, x, y_f = _as_batch(features, y)
+        zxy: ZXY[T] = _as_batch(features, y)
 
-        state, d_loss = disc_step(state, z, x, y_f)
-        d_losses.append(float(d_loss))
+        state, d_loss = disc_step(state, zxy.z, zxy.x, zxy.y)
+        d_losses[step] = d_loss
 
         if step % n_disc_steps == 0:
-            state, g_loss = gen_step(state, z, x, y_f)
-            g_losses.append(-float(g_loss))
+            state, g_loss = gen_step(state, zxy.z, zxy.x, zxy.y)
+            g_losses[step // n_disc_steps] = -g_loss
 
-    return state, float(np.mean(d_losses)), float(np.mean(g_losses))
+    return state, d_losses.mean(), g_losses.mean()
 
 
-def _eval_dataset(
-    eval_step: JitWrapped, state: TrainState, dataset: ArrayDataset
-) -> tuple[float, float]:
-    """Mean weighted BCE over a split, as (d_loss, g_loss).
-
-    g's loss is the exact negation of d's, so both entries report the same BCE;
-    the pair is kept so the two curves stay directly comparable in the history.
-    """
+def _eval_dataset[T: np.floating = np.double](
+    eval_step: EvalStep, state: TrainState, dataset: ArrayDataset[T]
+) -> tuple[T, T]:
+    """Mean weighted BCE over a split, as (d_loss, g_loss)."""
     total: float = 0.0
-    n_batches: int = 0
     for features, y in dataset:
-        loss = eval_step(state, *_as_batch(features, y))
-        total += float(loss)
-        n_batches += 1
-    mean: float = total / n_batches
+        zxy: ZXY[T] = _as_batch(features, y)
+        total += float(eval_step(state, zxy.z, zxy.x, zxy.y))
+    mean: T = np.divide(total, len(dataset), dtype=dataset.dtype)
     return mean, mean
 
 
 def _assign(variables: list[KerasVariable], values: Variables) -> None:
     """Write JAX arrays back into a model's `keras.Variable`s."""
     for var, val in zip(variables, values, strict=False):
-        var.assign(val)
+        var.assign(value=val)
 
 
-def train(
-    splits: DatasetSplits,
-    dim: int = 1,
+def train[T: np.floating = np.double](
+    splits: DatasetSplits[T],
+    dim: int,
+    hidden_units: int,
+    n_layers: int,
+    seed: int | None,
+    patience: int,
     n_epochs: int = 100,
     n_disc_steps: int = 5,
     lr_g: float = 1e-4,
     lr_d: float = 1e-4,
-    patience: int = 5,
-    min_delta: float = 1e-4,
-    hidden_units: int = 64,
-    n_layers: int = 2,
-    seed: int | None = None,
+    min_delta: float = 0.0001,
 ) -> TrainResult:
-    """Train the generator and discriminator.
-
-    Arguments:
-        seed: Weight-initialization seed. `None` draws one from system entropy.
-            Either way the value used is returned, so a run stays reproducible
-            after the fact without having to decide up front that it is worth
-            reproducing.
-
-    This seeds weight initialization *only*. The train/val/test split and the
-    per-epoch batch order come from the dataset's own seed (`RANDataset`),
-    which draws from an independent generator. Varying `seed` across runs
-    therefore estimates training/initialization variance at fixed data -- the
-    usual HEP model-uncertainty ensemble -- while varying the dataset seed
-    instead would fold in split variance.
-
-    The networks are Dense-only with no dropout or batch norm and Adam is
-    deterministic, so the two seeds together fully determine a run (up to
-    non-deterministic GPU reductions).
-    """
     if seed is None:
-        # A no-argument SeedSequence always fills `entropy` with an int drawn
-        # from the OS; the annotation is widened to int | Sequence[int] | None
-        # only to cover the case where the caller supplied one.
-        seed = cast("int", np.random.SeedSequence().entropy) % 2**31
+        # No-argument SeedSequence always fills `entropy` with int drawn from OS.
+        seed = cast(typ=int, val=np.random.SeedSequence().entropy) % 2**31
     keras.utils.set_random_seed(seed)
     # Rewind the batch-order sequence so repeated runs over one DatasetSplits
-    # -- an ensemble loop over init seeds -- all see identical data.
+    # i.e., an ensemble loop over init seeds, all see identical data.
     splits.train.reset()
 
     g: RANModel = build_generator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
@@ -315,7 +329,7 @@ def train(
         "val_d": [],
         "val_g": [],
     }
-    best_val_d: float = -np.inf
+    best_val_d: float = -math.inf
     best_state: TrainState | None = None
     wait: int = 0
 
@@ -323,16 +337,16 @@ def train(
         state, mean_td, mean_tg = _run_epoch(
             state, splits.train, disc_step, gen_step, n_disc_steps
         )
-        mean_val: tuple[float, float] = _eval_dataset(eval_step, state, splits.val)
+        mean_val: tuple[T, T] = _eval_dataset(eval_step, state, dataset=splits.val)
 
-        history["train_d"].append(mean_td)
-        history["train_g"].append(mean_tg)
-        history["val_d"].append(mean_val[0])
-        history["val_g"].append(mean_val[1])
+        history["train_d"].append(float(mean_td))
+        history["train_g"].append(float(mean_tg))
+        history["val_d"].append(float(mean_val[0]))
+        history["val_g"].append(float(mean_val[1]))
 
         # Early stopping: higher val D = better convergence toward log(2)
         if mean_val[0] > best_val_d + min_delta:
-            best_val_d = mean_val[0]
+            best_val_d = float(mean_val[0])
             best_state = state
             wait = 0
         else:
@@ -353,16 +367,16 @@ def train(
         if wait >= patience:
             logger.info("Early stopping at epoch %d", epoch + 1)
             if best_state is not None:
-                state = best_state
+                state: TrainState = best_state
             break
 
-    _assign(g.trainable_variables, state.g_trainable)
-    _assign(g.non_trainable_variables, state.g_non_trainable)
-    _assign(d.trainable_variables, state.d_trainable)
-    _assign(d.non_trainable_variables, state.d_non_trainable)
+    _assign(g.trainable_variables, values=state.g_trainable)
+    _assign(g.non_trainable_variables, values=state.g_non_trainable)
+    _assign(d.trainable_variables, values=state.d_trainable)
+    _assign(d.non_trainable_variables, values=state.d_non_trainable)
 
     # Final test evaluation
-    test: tuple[float, float] = _eval_dataset(eval_step, state, splits.test)
+    test: tuple[T, T] = _eval_dataset(eval_step, state, dataset=splits.test)
     logger.info("Test  D: %.4f  G: %.4f  (init seed %d)", test[0], test[1], seed)
 
     return TrainResult(g, d, history, seed)

@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_type
 
 import numpy as np
 import pytest
 import yaml
 from numpy import dtype, float64, ndarray
 from ran.data import ArrayDataset, RANDataset
-from ran.rantypes import DatasetSplits, GaussianConfig
+from ran.rantypes import (
+    TRUTH_SENTINEL,
+    ZXY,
+    DatasetSplits,
+    Events,
+    GaussianConfig,
+    Populations,
+    Split,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -75,6 +83,24 @@ class TestGenerateGaussianDataset:
         ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(params=params, n_samples=1000)
         assert splits.train is not None
+
+    def test_dtype_controls_generated_array_runtime_type(self, tmp_path) -> None:
+        params = GaussianConfig(
+            dim=1,
+            mu_gen=np.array([0.0]),
+            mu_true=np.array([0.5]),
+            cov_gen=np.array([[1.0]]),
+            cov_true=np.array([[0.9]]),
+            cov_detector=np.array([[0.5]]),
+        )
+        ds = RANDataset(dtype=np.single, cache_dir=tmp_path)
+        assert_type(ds, RANDataset[np.float32])
+
+        splits = ds.generate_gaussian_dataset(params=params, n_samples=100)
+
+        assert ds.dtype == np.single
+        assert splits.select(Split.ALL).z.dtype == np.single
+        assert splits.select(Split.ALL).x.dtype == np.single
 
     def test_both_config_and_params_raises(self, tmp_path) -> None:
         """Providing both config_path and params should error."""
@@ -181,13 +207,13 @@ class TestGenerateGaussianDataset:
         assert cache_files_after_params == cache_files_after_yaml
 
 
-def test_splits_from_arrays_builds_three_nonempty_splits() -> None:
+def test_splits_from_data_builds_three_nonempty_splits() -> None:
     n = 200
     z = np.random.default_rng(0).normal(size=(2 * n, 1))
     x = np.random.default_rng(1).normal(size=(2 * n, 1))
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
 
-    splits = RANDataset(batch_size=32).splits_from_arrays(z, x, y)
+    splits = RANDataset(batch_size=32).splits_from_data(ZXY(Events(z, x), y))
 
     for ds in (splits.train, splits.val, splits.test):
         features, labels = next(iter(ds))
@@ -200,7 +226,9 @@ def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs) -> DatasetSplits:
     z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
     x = -z
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    return RANDataset(batch_size=batch_size, **kwargs).splits_from_arrays(z, x, y)
+    return RANDataset(batch_size=batch_size, **kwargs).splits_from_data(
+        ZXY(Events(z, x), y)
+    )
 
 
 class TestArrayDataset:
@@ -209,7 +237,7 @@ class TestArrayDataset:
     def test_splits_partition_events_without_overlap(self) -> None:
         """Every event lands in exactly one split."""
         splits = _toy_splits(n=200)
-        ids = [set(ds.as_arrays()[0].ravel().tolist()) for ds in splits]
+        ids = [set(ds.as_arrays().z.ravel().tolist()) for ds in splits]
         assert sum(len(s) for s in ids) == 400
         assert set.union(*ids) == set(range(400))
         assert not (ids[0] & ids[1])
@@ -218,21 +246,21 @@ class TestArrayDataset:
 
     def test_default_split_fractions(self) -> None:
         splits = _toy_splits(n=500)
-        assert splits.test.n_events == 200  # 20% of 1000
-        assert splits.val.n_events == 100  # 10% of 1000
-        assert splits.train.n_events == 700
+        assert splits.test.size == 200  # 20% of 1000
+        assert splits.val.size == 100  # 10% of 1000
+        assert splits.train.size == 700
 
     def test_shuffle_interleaves_classes(self) -> None:
         """Splits must not be single-class: data and MC arrive stacked."""
         for ds in _toy_splits(n=500):
-            frac = float(ds.as_arrays()[2].mean())
+            frac = float(ds.as_arrays().y.mean())
             assert 0.4 < frac < 0.6, f"class fraction {frac} — split is not mixed"
 
     def test_z_and_x_stay_paired(self) -> None:
         """Shuffling and splitting must not decouple particle/detector rows."""
         for ds in _toy_splits(n=200):
-            z, x, _ = ds.as_arrays()
-            np.testing.assert_array_equal(x, -z)
+            events = ds.as_arrays().events
+            np.testing.assert_array_equal(events.x, -events.z)
             for features, _ in ds:
                 np.testing.assert_array_equal(features["x"], -features["z"])
 
@@ -240,12 +268,12 @@ class TestArrayDataset:
         """A short final batch is kept, not dropped."""
         splits = _toy_splits(n=200, batch_size=32)
         train = splits.train
-        assert train.n_events % 32 != 0, "test needs a ragged final batch"
+        assert train.size % 32 != 0, "test needs a ragged final batch"
         sizes = [len(y) for _, y in train]
         assert len(sizes) == len(train)
-        assert sum(sizes) == train.n_events
+        assert sum(sizes) == train.size
         assert all(s == 32 for s in sizes[:-1])
-        assert sizes[-1] == train.n_events % 32
+        assert sizes[-1] == train.size % 32
 
     def test_train_reshuffles_each_epoch_but_val_does_not(self) -> None:
         splits = _toy_splits(n=200)
@@ -287,20 +315,132 @@ class TestArrayDataset:
     def test_as_arrays_matches_iteration_for_ordered_splits(self) -> None:
         val = _toy_splits(n=200).val
         z_iter = np.concatenate([f["z"] for f, _ in val], axis=0)
-        np.testing.assert_array_equal(z_iter, val.as_arrays()[0])
+        np.testing.assert_array_equal(z_iter, val.as_arrays().z)
 
     def test_same_seed_gives_same_split(self) -> None:
         a, b = _toy_splits(n=200, seed=7), _toy_splits(n=200, seed=7)
-        np.testing.assert_array_equal(a.test.as_arrays()[0], b.test.as_arrays()[0])
-
-    def test_mismatched_lengths_raise(self) -> None:
-        from ran.data.datasets import ArrayDataset
-
-        with pytest.raises(ValueError, match="first dimension"):
-            ArrayDataset(
-                np.zeros((5, 1)), np.zeros((4, 1)), np.zeros(5, dtype=np.ubyte)
-            )
+        np.testing.assert_array_equal(a.test.as_arrays().z, b.test.as_arrays().z)
 
     def test_too_few_events_to_split_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one event"):
             _toy_splits(n=2)
+
+
+class TestLabelledAndPhysicsForms:
+    """The two representations and the conversions between them."""
+
+    @staticmethod
+    def _populations(n: int = 4) -> Populations:
+        truth = np.arange(n, dtype=np.double).reshape(-1, 1)
+        gen = np.arange(n, 2 * n, dtype=np.double).reshape(-1, 1)
+        return Populations(mc=Events(gen, -gen), data=-truth, truth=truth)
+
+    def test_events_reject_unaligned_rows(self) -> None:
+        with pytest.raises(ValueError, match="row-aligned"):
+            Events(np.zeros((5, 1)), np.zeros((4, 1)))
+
+    def test_labels_must_be_zero_or_one(self) -> None:
+        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        with pytest.raises(ValueError, match=r"zero \(MC\) or one"):
+            ZXY(events, np.array([0, 1, 2], dtype=np.ubyte))
+
+    def test_one_label_per_event(self) -> None:
+        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        with pytest.raises(ValueError, match="one label per event"):
+            ZXY(events, np.ones(2, dtype=np.ubyte))
+
+    def test_partition_recovers_the_populations_it_was_built_from(self) -> None:
+        original = self._populations()
+
+        recovered = original.interleave().partition()
+
+        np.testing.assert_array_equal(recovered.truth, original.truth)
+        np.testing.assert_array_equal(recovered.data, original.data)
+        np.testing.assert_array_equal(recovered.mc.z, original.mc.z)
+        np.testing.assert_array_equal(recovered.mc.x, original.mc.x)
+
+    def test_interleave_labels_nature_one_and_mc_zero(self) -> None:
+        labelled = self._populations(n=3).interleave()
+
+        np.testing.assert_array_equal(labelled.y, [1, 1, 1, 0, 0, 0])
+        assert len(labelled) == 6
+
+    def test_create_stands_in_a_sentinel_for_absent_truth(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        assert not measured.has_truth
+        assert measured.truth.shape == (5, 2)
+        np.testing.assert_array_equal(measured.truth, TRUTH_SENTINEL)
+
+    def test_astype_changes_precision_without_losing_the_sentinel(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        single = measured.astype(np.single)
+
+        assert single.mc.z.dtype == np.single
+        assert single.data.dtype == np.single
+        assert single.truth.dtype == np.single
+        assert not single.has_truth
+
+    def test_astype_preserves_real_truth(self) -> None:
+        single = self._populations().astype(np.single)
+
+        assert single.has_truth
+        assert single.truth.dtype == np.single
+
+    def test_require_truth_refuses_the_sentinel(self) -> None:
+        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+
+        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+
+        with pytest.raises(ValueError, match="no particle-level truth"):
+            measured.require_truth()
+
+    def test_require_truth_returns_real_answers(self) -> None:
+        original = self._populations()
+
+        np.testing.assert_array_equal(original.require_truth(), original.truth)
+
+    def test_create_keeps_truth_when_given(self) -> None:
+        original = self._populations()
+
+        rebuilt = Populations.create(original.mc, original.data, original.truth)
+
+        assert rebuilt.has_truth
+        np.testing.assert_array_equal(rebuilt.truth, original.truth)
+
+    def test_absent_truth_reaches_z_as_a_finite_number(self) -> None:
+        """`interleave` puts truth in the nature rows of z, so g will see this.
+
+        Training survives that only because the stand-in is an ordinary number
+        -- see `test_a_missing_particle_level_cannot_poison_the_batch`.
+        """
+        mc = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+
+        labelled = Populations.create(mc=mc, data=np.ones((2, 1))).interleave()
+
+        assert np.all(np.isfinite(labelled.z))
+        np.testing.assert_array_equal(labelled.z[labelled.y == 1], TRUTH_SENTINEL)
+
+    def test_partition_rejects_a_single_class_sample(self) -> None:
+        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+
+        with pytest.raises(ValueError, match="nonempty"):
+            ZXY(events, np.zeros(3, dtype=np.ubyte)).partition()
+
+    def test_select_concatenates_only_the_requested_splits(self) -> None:
+        splits = _toy_splits(n=200)
+
+        assert len(splits.select(Split.TEST)) == splits.test.size
+        assert len(splits.select(Split.TRAIN | Split.VAL)) == (
+            splits.train.size + splits.val.size
+        )
+        assert len(splits.select(Split.ALL)) == 400
+
+    def test_select_keeps_events_row_aligned_across_splits(self) -> None:
+        everything = _toy_splits(n=200).select(Split.ALL)
+
+        np.testing.assert_array_equal(everything.x, -everything.z)

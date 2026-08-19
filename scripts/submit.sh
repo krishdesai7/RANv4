@@ -7,9 +7,9 @@
 #SBATCH --output=slurm-%j.log
 
 cd /global/u1/k/kdesai/RANv4
-uv run -m ran train "$@"
+uv run ran train "$@"
 
 # Find the most recent run and compute OmniFold baseline
 LATEST_RUN=$(ls -dt runs/*/ | head -1)
 echo "Running OmniFold baseline on ${LATEST_RUN}."
-uv run -m ran baseline omnifold --run-dir="${LATEST_RUN}"
+uv run ran baseline omnifold --run-dir="${LATEST_RUN}"

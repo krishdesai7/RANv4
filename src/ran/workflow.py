@@ -18,48 +18,37 @@ from .data import (
 )
 from .evaluate import evaluate_run
 from .plotting import plot_detector_level, plot_losses, plot_particle_level
-from .rantypes import JET_OBS, GaussianConfig, VarInfo
+from .rantypes import JET_OBS, DatasetName, GaussianConfig, VarInfo
 from .train import train
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
+    from numpy._typing import _DTypeLike
     from numpy.typing import NDArray
 
-    from .rantypes import DatasetSplits, RANModel
+    from .rantypes import DatasetSplits, RANModel, RunConfig
 
 logger: Logger = logging.getLogger(__name__)
 
 
-def _gaussian_config_from_source(source: dict[str, Any], dim: int) -> GaussianConfig:
-    """Rebuild a GaussianConfig from a reloaded run's config.json.
-
-    Shares `gaussian_config_from_run_config` with `ran.evaluate`, so --load-run
-    and the metrics agree on how to read a run of any vintage. Reading the two
-    independently is what let this drift: this side had been updated to the
-    `cov_*` keys while evaluate still expected `sigma_*`.
-    """
-    return gaussian_config_from_run_config(source["gaussian_params"], dim)
-
-
-def _prepare_gaussian(
+def _prepare_gaussian[T: np.floating](
     config: Path | None,
     saved_config: GaussianConfig | None,
     batch_size: int,
     n_samples: int,
     data_seed: int,
-) -> tuple[DatasetSplits, int, GaussianConfig]:
-    """Build Gaussian splits from a reloaded run's config, or from a YAML file.
-
-    Returns the splits, the dimensionality, and the parsed Gaussian params --
-    the last so a fresh run can record them in its own config.json.
-    """
-    builder = RANDataset(batch_size=batch_size, seed=data_seed)
+    *,
+    dtype: _DTypeLike[T],
+) -> tuple[DatasetSplits[T], int, GaussianConfig]:
+    builder: RANDataset[T] = RANDataset(
+        batch_size=batch_size, seed=data_seed, dtype=dtype
+    )
     if saved_config is not None:
         gaussian_params: GaussianConfig = saved_config
         # Reload: use stored params from config.json
-        splits = builder.generate_gaussian_dataset(
+        splits: DatasetSplits[T] = builder.generate_gaussian_dataset(
             params=saved_config, n_samples=n_samples
         )
     else:
@@ -73,35 +62,34 @@ def _prepare_gaussian(
     return splits, gaussian_params.dim, gaussian_params
 
 
-def _prepare_jets(
+def _prepare_jets[T: np.floating](
     n_samples: int,
     batch_size: int,
     variables: frozenset[str],
     data_seed: int,
-) -> tuple[DatasetSplits, int, list[VarInfo]]:
+    *,
+    dtype: _DTypeLike[T],
+) -> tuple[DatasetSplits[T], int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
-    std_params: dict[str, tuple[np.double, np.double]]
+    std_params: dict[str, tuple[T, T]]
     splits, dim, std_params = load_jet_dataset(
         n_samples=n_samples,
         batch_size=batch_size,
         variables=variables,
         seed=data_seed,
+        dtype=dtype,
     )
     var_info: list[VarInfo] = [
         VarInfo(
             xlim=JET_OBS[v].xlim,
             xlabel=JET_OBS[v].xlabel,
             symbol=JET_OBS[v].symbol,
-            mu=std_params[v][0],
-            sigma=std_params[v][1],
+            mu=float(std_params[v][0]),
+            sigma=float(std_params[v][1]),
         )
         for v in variables
     ]
     return splits, dim, var_info
-
-
-def _to_list(v: Any) -> Any:
-    return v.tolist() if hasattr(v, "tolist") else v
 
 
 def _save_run(
@@ -118,23 +106,18 @@ def _save_run(
     gaussian_params: GaussianConfig | None,
     variables: frozenset[str],
 ) -> Path:
-    """Write models, history and config to a fresh timestamped run directory.
-
-    Gaussian params are stored as covariance matrices so runs are
-    self-contained and reloadable without the original YAML. `init_seed` is the
-    resolved weight-init seed, never None, so a run drawn from entropy is still
-    reproducible via --seed after the fact.
-    """
-    run_dir: Path = Path("runs") / datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
+    run_dir: Path = Path("runs") / datetime.now(tz=UTC).strftime(
+        format="%Y-%m-%dT%H%M%SZ"
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
 
     g.save(run_dir / "generator.keras")
     d.save(run_dir / "discriminator.keras")
     np.savez(
-        run_dir / "history.npz",
+        file=run_dir / "history.npz",
         # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
         # key could in principle be "allow_pickle", which is declared bool.
-        **{k: np.array(v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
+        **{k: np.array(object=v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
     )
 
     config_out: dict[str, Any] = {
@@ -149,7 +132,7 @@ def _save_run(
         config_out["gaussian_params"] = gaussian_params.model_dump()
     else:
         config_out["variables"] = list(variables)
-    json.dump(config_out, (run_dir / "config.json").open("w"), indent=2)
+    json.dump(obj=config_out, fp=(run_dir / "config.json").open(mode="w"), indent=2)
     logger.info("Saved run to %s", run_dir)
     return run_dir
 
@@ -158,22 +141,23 @@ def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
     g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
     history: dict[str, list[float]] = {
-        k: v.tolist() for k, v in np.load(run_dir / "history.npz").items()
+        k: v.tolist() for k, v in np.load(file=run_dir / "history.npz").items()
     }
     logger.info("Loaded run from %s", run_dir)
     return g, history
 
 
-def _load_baseline_weights(
-    run_dir: Path, dim: int
-) -> tuple[NDArray[np.double] | None, list[NDArray[np.double]] | None]:
+def _load_baseline_weights[T: np.floating = np.double](
+    run_dir: Path,
+    dim: int,
+) -> tuple[NDArray[T] | None, list[NDArray[T]] | None]:
     """Pick up OmniFold/IBU weights from the run dir, if those baselines have run."""
-    omnifold_weights = None
-    ibu_weights: list[NDArray[np.double]] | None = None
+    omnifold_weights: NDArray[T] | None = None
+    ibu_weights: list[NDArray[T]] | None = None
     of_path: Path = run_dir / "omnifold_weights.npz"
     ibu_path: Path = run_dir / "ibu_weights.npz"
     if of_path.exists():
-        omnifold_weights = np.load(of_path)["weights"]
+        omnifold_weights = np.load(file=of_path)["weights"]
         logger.info("Loaded OmniFold weights from %s", of_path)
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
@@ -183,35 +167,22 @@ def _load_baseline_weights(
 
 
 def run(
-    batch_size: int = 1024,
-    n_samples: int = 500_000,
-    config: Path | None = None,
-    dataset: str = "gaussian",
-    variables: frozenset[str] = frozenset(("m", "M", "w", "tau21", "zg", "sdm")),
-    load_run: Path | None = None,
-    hidden_units: int = 64,
-    n_layers: int = 2,
-    patience: int = 5,
-    seed: int | None = None,
-    data_seed: int = 42,
+    batch_size: int,
+    n_samples: int,
+    config: Path | None,
+    dataset: DatasetName,
+    variables: frozenset[str],
+    load_run: Path | None,
+    hidden_units: int,
+    n_layers: int,
+    patience: int,
+    seed: int | None,
+    data_seed: int,
 ) -> None:
-    """
-    Main entry point.
-
-    Arguments:
-        seed: Weight-initialization seed. Omit to draw one from system entropy;
-            the value used is always recorded in config.json, so any run can be
-            reproduced afterwards. Vary this across runs (holding data_seed
-            fixed) to build an ensemble for model-uncertainty bands.
-        data_seed: Dataset seed, controlling generation, the shuffle, the
-            train/val/test split and the batch order. Keep fixed across an
-            ensemble so replicas differ only in initialization.
-    """
-    run_dir: Path
-    splits: DatasetSplits
-    var_info: list[VarInfo] | None = None
+    # Each dataset fills in only its own metadata, but the plots and the saved
+    # config are handed both, so the other one has to exist as None.
     gaussian_params: GaussianConfig | None = None
-    dim: int = 1
+    var_info: list[VarInfo] | None = None
 
     # When loading a saved run, read config from that run and rebuild the
     # Gaussian params it recorded, so a reload never re-parses --config (which
@@ -221,33 +192,34 @@ def run(
         run_dir = Path(load_run)
         # parse_run_config validates an already-decoded JSON object, not text --
         # the two baselines that call it both json.loads first.
-        saved_config = parse_run_config(
-            json.loads((run_dir / "config.json").read_text())
+        saved_config: RunConfig = parse_run_config(
+            raw=json.loads(s=(run_dir / "config.json").read_text())
         )
-        dataset = saved_config.dataset
-        n_samples = saved_config.n_samples
-        batch_size = saved_config.batch_size
-        dim = saved_config.dim
+        dataset: DatasetName = saved_config.dataset
+        n_samples: int = saved_config.n_samples
+        batch_size: int = saved_config.batch_size
+        dim: int = saved_config.dim
         # Runs predating seed recording used the then-hardcoded default of 42.
-        data_seed = saved_config.data_seed
-        if dataset == "jets":
+        data_seed: int = saved_config.data_seed
+        if dataset == DatasetName.jets:
             variables = frozenset(saved_config.variable_names)
         else:
-            saved_gaussian_config = _gaussian_config_from_source(
-                saved_config.source, dim
+            saved_gaussian_config = gaussian_config_from_run_config(
+                saved_config.source["gaussian_params"], dim
             )
 
-    if dataset == "gaussian":
+    if dataset == DatasetName.gaussian:
         splits, dim, gaussian_params = _prepare_gaussian(
-            config=config,
-            saved_config=saved_gaussian_config,
-            batch_size=batch_size,
-            n_samples=n_samples,
-            data_seed=data_seed,
+            config,
+            saved_gaussian_config,
+            batch_size,
+            n_samples,
+            data_seed,
+            dtype=np.double,
         )
-    elif dataset == "jets":
+    elif dataset == DatasetName.jets:
         splits, dim, var_info = _prepare_jets(
-            n_samples, batch_size, variables, data_seed
+            n_samples, batch_size, variables, data_seed, dtype=np.double
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")
@@ -262,13 +234,13 @@ def run(
         init_seed: int
         g, d, history, init_seed = train(
             splits,
-            dim=dim,
-            hidden_units=hidden_units,
-            n_layers=n_layers,
-            patience=patience,
-            seed=seed,
+            dim,
+            hidden_units,
+            n_layers,
+            seed,
+            patience,
         )
-        run_dir = _save_run(
+        run_dir: Path = _save_run(
             g,
             d,
             history,
@@ -307,4 +279,4 @@ def run(
     try:
         evaluate_run(run_dir, force=(load_run is None))
     except Exception:
-        logger.exception("Metric evaluation failed")
+        logger.exception(msg="Metric evaluation failed")

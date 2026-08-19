@@ -21,54 +21,54 @@ class TestSigmaToCovariance:
     """Test the three sigma forms: scalar, vector, matrix."""
 
     def test_scalar_1d(self) -> None:
-        cov = sigma_to_covariance(2.0, dim=1)
+        cov = sigma_to_covariance(2.0, 1)
         expected = np.array([[4.0]])
         np.testing.assert_array_almost_equal(cov, expected)
 
     def test_scalar_3d(self) -> None:
-        cov = sigma_to_covariance(1.5, dim=3)
+        cov = sigma_to_covariance(1.5, 3)
         expected = 2.25 * np.eye(3)
         np.testing.assert_array_almost_equal(cov, expected)
 
     def test_vector(self) -> None:
-        cov = sigma_to_covariance([1.0, 2.0], dim=2)
+        cov = sigma_to_covariance([1.0, 2.0], 2)
         expected = np.diag([1.0, 4.0])
         np.testing.assert_array_almost_equal(cov, expected)
 
     def test_matrix_passthrough(self) -> None:
         mat = [[1.0, 0.5], [0.5, 2.0]]
-        cov = sigma_to_covariance(mat, dim=2)
+        cov = sigma_to_covariance(mat, 2)
         np.testing.assert_array_almost_equal(cov, mat)
 
     def test_vector_wrong_dim(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([1.0, 2.0, 3.0], dim=2)
+            sigma_to_covariance([1.0, 2.0, 3.0], 2)
 
     def test_matrix_wrong_shape(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], dim=3)
+            sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], 3)
 
     def test_not_positive_definite(self) -> None:
         """A matrix with negative eigenvalue should fail."""
         bad = [[1.0, 5.0], [5.0, 1.0]]
         with pytest.raises(np.linalg.LinAlgError):
-            sigma_to_covariance(bad, dim=2)
+            sigma_to_covariance(bad, 2)
 
     def test_asymmetric_matrix_raises(self) -> None:
         """An asymmetric matrix should be rejected."""
         asym = [[1.0, 0.5], [999.0, 2.0]]
         with pytest.raises(ValueError, match="symmetric"):
-            sigma_to_covariance(asym, dim=2)
+            sigma_to_covariance(asym, 2)
 
     def test_negative_scalar_raises(self) -> None:
         """Negative scalar sigma is physically nonsensical."""
         with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance(-1.0, dim=2)
+            sigma_to_covariance(-1.0, 2)
 
     def test_negative_vector_element_raises(self) -> None:
         """Negative elements in sigma vector should be rejected."""
         with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance([1.0, -0.5], dim=2)
+            sigma_to_covariance([1.0, -0.5], 2)
 
 
 class TestParseGaussianConfig:

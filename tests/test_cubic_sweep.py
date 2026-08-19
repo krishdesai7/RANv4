@@ -14,7 +14,7 @@ from ran.experiments.cubic_sweep import (
     response,
     unfolded_wasserstein,
 )
-from ran.rantypes import TrainResult
+from ran.train import TrainResult
 from scipy.stats import wasserstein_distance
 
 if TYPE_CHECKING:
@@ -23,13 +23,23 @@ if TYPE_CHECKING:
 
 def test_response_identity_at_zero() -> None:
     z = np.linspace(-3, 3, 100)
-    np.testing.assert_array_equal(response(0.0, z), z)
+    (out,) = response(np.double(0.0), z)
+    np.testing.assert_array_equal(out, z)
 
 
 def test_response_monotonic_for_positive_s() -> None:
     z = np.linspace(-3, 3, 1000)
-    out = response(5.0, z)
+    (out,) = response(np.double(5.0), z)
     assert np.all(np.diff(out) > 0)
+
+
+def test_response_maps_each_sample_in_order() -> None:
+    """One array in, one array out, however many are passed at once."""
+    z1, z2 = np.linspace(-3, 3, 100), np.linspace(-1, 1, 100)
+    both = response(np.double(2.0), z1, z2)
+    assert len(both) == 2
+    for got, z in zip(both, (z1, z2), strict=True):
+        np.testing.assert_array_equal(got, z + 2.0 * z**3)
 
 
 def test_make_particles_shapes_and_means() -> None:
@@ -91,11 +101,24 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
 def test_run_ran_and_run_omnifold_see_identical_particles() -> None:
     """Both subcommands must unfold the same sample to be comparable."""
 
-    a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
-    b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
-    for lhs, rhs in zip(a[1:], b[1:], strict=False):
+    s_a, a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
+    s_b, b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
+    assert s_a == s_b
+    for lhs, rhs in (
+        (a.mc.z, b.mc.z),
+        (a.mc.x, b.mc.x),
+        (a.data, b.data),
+        (a.truth, b.truth),
+    ):
         np.testing.assert_array_equal(lhs, rhs)
-    assert a[0] == b[0]
+
+
+def test_sweep_point_returns_columns_with_truth() -> None:
+    """Both unfolders take (n, 1); the answer key is real, not the sentinel."""
+    _, pops = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
+    for a in (pops.mc.z, pops.mc.x, pops.data, pops.truth):
+        assert a.shape == (1000, 1)
+    assert pops.has_truth
 
 
 def _write_points(

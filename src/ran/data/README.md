@@ -241,7 +241,10 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files.
 - `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
+- `dtype: _DTypeLike[T] = np.double` Floating type of the returned arrays.
+
+Overloaded like `RANDataset.__init__`, and for the same reason: a defaulted `dtype` pins `T` to `np.double` before the argument is read, so the default lives on a non-generic overload and the generic ones take `dtype` without one. Callers get `np.double` from `load_jet_dataset()` and `T` from `load_jet_dataset(dtype=...)`, whether that is a scalar type or a `np.dtype`.
 
 **Returns**:
 
-- `tuple[DatasetSplits, int, dict[str, tuple[np.double, np.double]]]` DatasetSplits, feature dimensionality, and standardization parameters {var_name: (mu, sigma)}.
+- `tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]` DatasetSplits, feature dimensionality, and standardization parameters {var_name: (mu, sigma)}.

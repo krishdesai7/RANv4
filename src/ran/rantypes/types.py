@@ -65,7 +65,7 @@ class StatelessOptimizer(Protocol):
     def stateless_apply(
         self,
         optimizer_variables: Variables,
-        gradients: Variables,
+        grads: Variables,
         trainable_variables: Variables,
     ) -> tuple[Variables, Variables]: ...
 

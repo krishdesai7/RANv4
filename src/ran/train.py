@@ -9,9 +9,8 @@ import keras
 import numpy as np
 from keras import ops
 
-from ran.rantypes import ZXY, Events, Variables
-
 from .models import build_discriminator, build_generator
+from .rantypes import ZXY, Events, Variables
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -27,7 +26,6 @@ if TYPE_CHECKING:
         KerasVariable,
         RANModel,
         StatelessOptimizer,
-        Variables,
     )
 
 logger: Logger = logging.getLogger(name=__name__)
@@ -47,8 +45,8 @@ EPS: float = keras.config.epsilon()
 class TrainResult(NamedTuple):
     """Return package of a model training. Unpacks as ``(g, d, history, seed)``."""
 
-    g: keras.Model
-    d: keras.Model
+    g: RANModel
+    d: RANModel
     history: dict[str, list[SupportsFloat]]
     seed: int
 
@@ -81,10 +79,6 @@ def _make_steps(
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
 ) -> tuple[JitWrapped, JitWrapped, JitWrapped]:
-    # Every step below takes the batch as loose arrays rather than the `ZXY` the
-    # loop carries: a dataclass is not a registered pytree, so jit would trace it
-    # as a single leaf and the first attribute access inside would fail.
-
     def _weights(
         g_trainable: Variables, g_non_trainable: Variables, z, y, training: bool
     ) -> tuple:
@@ -95,7 +89,10 @@ def _make_steps(
 
     def _disc_loss(d_trainable, d_non_trainable, x, y, w) -> tuple:
         d_out, d_non_trainable = d.stateless_call(
-            d_trainable, d_non_trainable, x, training=True
+            trainable_variables=d_trainable,
+            non_trainable_variables=d_non_trainable,
+            inputs=x,
+            training=True,
         )
         return weighted_bce(ops.squeeze(d_out, axis=-1), y, w), d_non_trainable
 
@@ -103,7 +100,12 @@ def _make_steps(
         g_trainable, g_non_trainable, d_trainable, d_non_trainable, z, x, y
     ) -> tuple:
         w, g_non_trainable = _weights(g_trainable, g_non_trainable, z, y, training=True)
-        d_out, _ = d.stateless_call(d_trainable, d_non_trainable, x, training=False)
+        d_out, _ = d.stateless_call(
+            trainable_variables=d_trainable,
+            non_trainable_variables=d_non_trainable,
+            inputs=x,
+            training=False,
+        )
         # g maximizes the BCE that d minimizes, so its loss is the negation.
         return -weighted_bce(ops.squeeze(d_out, axis=-1), y, w), g_non_trainable
 
@@ -145,7 +147,9 @@ def _make_steps(
             y,
         )
         g_trainable, opt_g_vars = opt_g.stateless_apply(
-            state.opt_g, grads, state.g_trainable
+            optimizer_variables=state.opt_g,
+            grads=grads,
+            trainable_variables=state.g_trainable,
         )
         return (
             state._replace(
@@ -161,7 +165,10 @@ def _make_steps(
         """Weighted BCE with no updates, both models in inference mode."""
         w, _ = _weights(state.g_trainable, state.g_non_trainable, z, y, training=False)
         d_out, _ = d.stateless_call(
-            state.d_trainable, state.d_non_trainable, x, training=False
+            trainable_variables=state.d_trainable,
+            non_trainable_variables=state.d_non_trainable,
+            inputs=x,
+            training=False,
         )
         return weighted_bce(ops.squeeze(d_out, axis=-1), y, w)
 
@@ -222,7 +229,7 @@ def _eval_dataset[T: np.floating = np.double](
 def _assign(variables: list[KerasVariable], values: Variables) -> None:
     """Write JAX arrays back into a model's `keras.Variable`s."""
     for var, val in zip(variables, values, strict=False):
-        var.assign(val)
+        var.assign(value=val)
 
 
 def train[T: np.floating = np.double](
@@ -239,8 +246,7 @@ def train[T: np.floating = np.double](
     min_delta: float = 0.0001,
 ) -> TrainResult:
     if seed is None:
-        # A no-argument SeedSequence always fills `entropy` with an int drawn
-        # from the OS
+        # No-argument SeedSequence always fills `entropy` with int drawn from OS.
         seed = cast(typ=int, val=np.random.SeedSequence().entropy) % 2**31
     keras.utils.set_random_seed(seed)
     # Rewind the batch-order sequence so repeated runs over one DatasetSplits
@@ -310,13 +316,13 @@ def train[T: np.floating = np.double](
         if wait >= patience:
             logger.info("Early stopping at epoch %d", epoch + 1)
             if best_state is not None:
-                state = best_state
+                state: TrainState = best_state
             break
 
-    _assign(g.trainable_variables, state.g_trainable)
-    _assign(g.non_trainable_variables, state.g_non_trainable)
-    _assign(d.trainable_variables, state.d_trainable)
-    _assign(d.non_trainable_variables, state.d_non_trainable)
+    _assign(g.trainable_variables, values=state.g_trainable)
+    _assign(g.non_trainable_variables, values=state.g_non_trainable)
+    _assign(d.trainable_variables, values=state.d_trainable)
+    _assign(d.non_trainable_variables, values=state.d_non_trainable)
 
     # Final test evaluation
     test: tuple[T, T] = _eval_dataset(eval_step, state, dataset=splits.test)

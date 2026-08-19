@@ -286,8 +286,8 @@ def _plot_level(
         inner_grid: GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
             nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.0
         )
-        ax: Axes = figure.add_subplot(ax=inner_grid[0])
-        ax_r: Axes = figure.add_subplot(ax=inner_grid[1], sharex=ax)
+        ax: Axes = figure.add_subplot(inner_grid[0])
+        ax_r: Axes = figure.add_subplot(inner_grid[1], sharex=ax)
         ax.tick_params(labelbottom=False)
 
         panel: _PanelSpec = _panel_spec(i, dim, nature, mc, var_info, style)
@@ -360,7 +360,7 @@ def plot_losses(
 
     figure: Figure = Figure(figsize=(8, 5))
     figure.canvas = FigureCanvasPdf(figure)
-    ax: Axes = figure.add_subplot(ax=111)
+    ax: Axes = figure.add_subplot(111)
     train_d: NDArray[np.double] = np.array(
         object=history["train_d"],
         dtype=np.double,

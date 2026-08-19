@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.11.30,<0.13"]
+requires = ["uv_build>=0.12.5,<0.13"]
 build-backend = "uv_build"
 
 
@@ -11,8 +11,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "beartype>=0.22.9",
-    "jax>=0.11.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "jax[cuda13]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "jax>=0.11.1 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "jax[cuda13]>=0.11.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
     "jaxtyping>=0.3.11",
     "keras>=3.15.1",
     "matplotlib>=3.11.1",
@@ -45,7 +45,7 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.3",
     "rust-just>=1.58.0",
-    "ty>=0.0.72",
+    "ty>=0.0.73",
     "types-pyyaml>=6.0.12.20260815",
 ]
 release = [
@@ -58,7 +58,7 @@ required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
-required-version = ">=0.11.30"
+required-version = ">=0.12.5"
 preview-features = true
 cache-keys = [
     { file = "pyproject.toml" },

@@ -307,7 +307,7 @@ RANv4/
 │   └── submit_sweep.sh           Packed cubic-response sweep launcher
 ├── tests/                        pytest tests
 ├── .github/workflows/ci.yml      Lint, format, types, complexity, tests, audit
-├── Justfile                      Development recipes (just check, just fix, ...)
+├── Justfile                      Development recipes (just validate, just lint-fix, ...)
 ├── pyproject.toml                Project metadata and dependencies
 ├── runs/                         Output directory (timestamped subdirectories)
 └── .cache/                       Cached datasets
@@ -370,10 +370,10 @@ training options are listed above.
 ## Development
 
 ```shell
-just check     # all local, read-only validation (format, lint, types, complexity, tests)
-just fix       # apply safe lint fixes, then format
+just validate  # all local, read-only validation (format, lint, types, complexity, tests)
+just lint-fix  # apply safe lint fixes, then format
 just test      # pytest, forwards extra args
-just typecheck # pyrefly
+just type-check # pyrefly
 just ci        # the full CI suite
 just           # list every recipe
 ```

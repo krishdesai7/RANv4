@@ -226,7 +226,11 @@ class RANDataset[T: np.floating = np.double]:
         mu_true: NDArray[T] = parsed.mu_true.astype(dtype=self.dtype)
         cov_gen: NDArray[T] = parsed.cov_gen.astype(dtype=self.dtype)
         cov_true: NDArray[T] = parsed.cov_true.astype(dtype=self.dtype)
-        cov_detector: NDArray[T] = parsed.cov_detector.astype(dtype=self.dtype)
+        # Only ever fed to the Cholesky below, whose result promotes straight
+        # back to float64 in the matmul -- so narrowing it to T buys nothing and
+        # costs precision when T is float32. `mu_*`/`cov_gen`/`cov_true` narrow
+        # harmlessly because `multivariate_normal` upcasts them again anyway.
+        cov_detector: NDArray[np.double] = parsed.cov_detector
 
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)

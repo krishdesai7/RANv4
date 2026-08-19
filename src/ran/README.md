@@ -281,7 +281,7 @@ The networks are Dense-only with no dropout or batch norm and Adam is determinis
 
 ## module `workflow`
 
-### def `_prepare_gaussian[T: np.floating = np.double](config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int) -> tuple[DatasetSplits[T], int, GaussianConfig]`
+### def `_prepare_gaussian[T: np.floating](config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int, *, dtype: _DTypeLike[T]) -> tuple[DatasetSplits[T], int, GaussianConfig]`
 
 Build Gaussian splits from a reloaded run's config, or from a YAML file. Returns the splits, the dimensionality, and the parsed Gaussian params. The last is so a fresh run can record them in its own config.json.
 
@@ -292,6 +292,7 @@ Build Gaussian splits from a reloaded run's config, or from a YAML file. Returns
 - `batch_size: int` The batch size to use for training.
 - `n_samples: int` The number of samples to use for training.
 - `data_seed: int` The data seed to use for training.
+- `dtype: _DTypeLike[T]` Floating type of the generated arrays. Required, and keyword-only: with one call site there is nothing to gain from a default, and without one `T` follows the argument instead of being pinned to it.
 
 **Returns:**
 

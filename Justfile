@@ -1,21 +1,20 @@
 # List available recipes.
 default:
-    @printf '%s\n' \
-        'Available recipes:' \
-        '  Immutable / read-only:' \
-        '    format *args      # Check formatting without modifying files.' \
-        '    lint              # Run Ruff lint checks.' \
-        '    type-check       # Run Pyrefly type checks.' \
-        '    complexity        # Run complexity checks.' \
-        '    test *args        # Run tests, optionally forwarding arguments to pytest.' \
-        '    audit             # Audit locked dependencies for known vulnerabilities.' \
-        '    validate          # Run all local, read-only validation.' \
-        '    ci                # Run the full CI validation suite.' \
-        '  Mutable / writes:' \
-        '    lint-fix         # Apply safe lint fixes, then format.' \
-        '    lint-fix-unsafe  # Apply unsafe lint fixes, then format.' \
-        '    infer             # Infer annotations and imports, then apply safe fixes.' \
-        '    upgrade-deps     # Upgrade all locked dependencies and synchronize the environment.'
+    @printf '\033[1mAvailable recipes:\033[0m\n'
+    @printf '  \033[1m\033[36mImmutable / read-only:\033[0m\n'
+    @printf '  %-26s %s\n' '    ci'              '# Run the full CI validation suite.'
+    @printf '  %-26s %s\n' '      validate'     '# Run all local, read-only validation.'
+    @printf '  %-26s %s\n' '        format *args' '# Check formatting without modifying files.'
+    @printf '  %-26s %s\n' '        lint'        '# Run Ruff lint checks.'
+    @printf '  %-26s %s\n' '        type-check'  '# Run Pyrefly type checks.'
+    @printf '  %-26s %s\n' '        complexity'   '# Run complexity checks.'
+    @printf '  %-26s %s\n' '        test *args'  '# Run tests, optionally forwarding arguments to pytest.'
+    @printf '  %-26s %s\n' '      audit'        '# Audit locked dependencies for known vulnerabilities.'
+    @printf '  \033[1m\033[33mMutable / writes:\033[0m\n'
+    @printf '  %-26s %s\n' '    lint-fix'        '# Apply safe lint fixes, then format.'
+    @printf '  %-26s %s\n' '    lint-fix-unsafe' '# Apply unsafe lint fixes, then format.'
+    @printf '  %-26s %s\n' '    infer'           '# Infer annotations and imports, then apply safe fixes.'
+    @printf '  %-26s %s\n' '    upgrade'         '# Upgrade all locked dependencies and synchronize the environment.'
 
 # --- Read-only checks ---
 
@@ -80,6 +79,6 @@ infer:
     just lint-fix
 
 # Upgrade all locked dependencies and synchronize the environment.
-upgrade-deps:
+upgrade:
     uv lock --upgrade
     uv sync

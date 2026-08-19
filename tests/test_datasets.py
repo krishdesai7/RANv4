@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING, assert_type
 import numpy as np
 import pytest
 import yaml
-from numpy import dtype, float64, ndarray
-from ran.data import ArrayDataset, RANDataset
+from ran.data import RANDataset
 from ran.rantypes import (
     TRUTH_SENTINEL,
     ZXY,
@@ -65,10 +64,9 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=2000)
-        for features, _y in splits.test:
-            assert features["z"].shape[1] == 2
-            assert features["x"].shape[1] == 2
-            break
+        events = splits.test.as_arrays().events
+        assert events.z.shape[1] == 2
+        assert events.x.shape[1] == 2
 
     def test_params_dict_interface(self) -> None:
         """Passing promoted params directly should work (for --load_run)."""
@@ -160,13 +158,10 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         ds = RANDataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
-        for features, _y in splits.test:
-            z = features["z"]
-            x = features["x"]
-            for d in range(2):
-                corr = np.corrcoef(z[:, d], x[:, d])[0, 1]
-                assert corr > 0.95, f"dim {d}: corr={corr}, expected >0.95"
-            break
+        events = splits.test.as_arrays().events
+        for d in range(2):
+            corr = np.corrcoef(events.z[:, d], events.x[:, d])[0, 1]
+            assert corr > 0.95, f"dim {d}: corr={corr}, expected >0.95"
 
     def test_yaml_and_params_share_cache(self, tmp_path) -> None:
         """A YAML config and the params it promotes to must share a cache key.
@@ -216,10 +211,9 @@ def test_splits_from_data_builds_three_nonempty_splits() -> None:
     splits = RANDataset(batch_size=32).splits_from_data(ZXY(Events(z, x), y))
 
     for ds in (splits.train, splits.val, splits.test):
-        features, labels = next(iter(ds))
-        assert set(features.keys()) == {"z", "x"}
-        assert features["z"].shape[-1] == 1
-        assert labels.shape[0] > 0
+        data = ds.as_arrays()
+        assert data.z.shape[-1] == 1
+        assert data.y.shape[0] > 0
 
 
 def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs) -> DatasetSplits:
@@ -261,61 +255,16 @@ class TestArrayDataset:
         for ds in _toy_splits(n=200):
             events = ds.as_arrays().events
             np.testing.assert_array_equal(events.x, -events.z)
-            for features, _ in ds:
-                np.testing.assert_array_equal(features["x"], -features["z"])
 
-    def test_batches_cover_split_and_keep_remainder(self) -> None:
-        """A short final batch is kept, not dropped."""
-        splits = _toy_splits(n=200, batch_size=32)
-        train = splits.train
-        assert train.size % 32 != 0, "test needs a ragged final batch"
-        sizes = [len(y) for _, y in train]
-        assert len(sizes) == len(train)
-        assert sum(sizes) == train.size
-        assert all(s == 32 for s in sizes[:-1])
-        assert sizes[-1] == train.size % 32
+    def test_batch_count_covers_the_split(self) -> None:
+        """`__len__` counts a short trailing batch, which the device layer drops.
 
-    def test_train_reshuffles_each_epoch_but_val_does_not(self) -> None:
-        splits = _toy_splits(n=200)
-
-        def first(ds: ArrayDataset) -> ndarray[tuple[int], dtype[float64]]:
-            return next(iter(ds))[0]["z"].ravel().copy()
-
-        assert not np.array_equal(first(splits.train), first(splits.train))
-        np.testing.assert_array_equal(first(splits.val), first(splits.val))
-
-    def test_reset_rewinds_the_shuffle_sequence(self) -> None:
-        """Two passes after a reset must repeat the first two exactly.
-
-        Without this, a second training run over the same splits would resume
-        mid-sequence and see different data — silently coupling the dataset
-        seed to how many runs preceded it.
+        The container reports how the split divides; whether the remainder is
+        used is `train_indices`' call, not this object's.
         """
-        train = _toy_splits(n=200).train
-
-        def firsts():
-            return [next(iter(train))[0]["z"].ravel().copy() for _ in range(2)]
-
-        before = firsts()
-        assert not np.array_equal(before[0], before[1]), "passes should differ"
-        train.reset()
-        for a, b in zip(before, firsts(), strict=False):
-            np.testing.assert_array_equal(a, b)
-
-    def test_shuffle_order_is_independent_of_other_iterations(self) -> None:
-        """Pass N's order depends only on (seed, N), not on who else iterated."""
-        a, b = _toy_splits(n=200).train, _toy_splits(n=200).train
-        for _ in range(3):  # advance `a` only
-            list(a)
-        a.reset()
-        np.testing.assert_array_equal(
-            next(iter(a))[0]["z"].ravel(), next(iter(b))[0]["z"].ravel()
-        )
-
-    def test_as_arrays_matches_iteration_for_ordered_splits(self) -> None:
-        val = _toy_splits(n=200).val
-        z_iter = np.concatenate([f["z"] for f, _ in val], axis=0)
-        np.testing.assert_array_equal(z_iter, val.as_arrays().z)
+        train = _toy_splits(n=200, batch_size=32).train
+        assert train.size % 32 != 0, "test needs a ragged final batch"
+        assert len(train) == -(-train.size // 32)
 
     def test_same_seed_gives_same_split(self) -> None:
         a, b = _toy_splits(n=200, seed=7), _toy_splits(n=200, seed=7)

@@ -56,3 +56,11 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)
 TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(int_type=np.short).min)
+
+# What `ran leakage-check --poison` overwrites z_true with. Any far-off-manifold
+# value does the job, so this is only a default -- but it must not be
+# TRUTH_SENTINEL. A truth column set entirely to that value is exactly what
+# `Populations.create` writes when there is no truth at all, so `has_truth`
+# would report the poisoned arm as having none and `require_truth()` would
+# refuse the particle-level comparison the check exists to make.
+POISON_SENTINEL: Final[np.double] = np.double(-999.0)

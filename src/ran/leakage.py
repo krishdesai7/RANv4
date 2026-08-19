@@ -12,7 +12,7 @@ from .evaluate import (
     _triangular_per_dim,
     _wd_per_dim,
 )
-from .rantypes import Events, Populations
+from .rantypes import POISON_SENTINEL, TRUTH_SENTINEL, Events, Populations
 from .train import train
 
 if TYPE_CHECKING:
@@ -28,6 +28,16 @@ logger: Logger = logging.getLogger(name=__name__)
 
 def run_leakage_check(poison: bool, sentinel: float, seed: int, init_seed: int) -> None:
     _: Any
+    if poison and sentinel == TRUTH_SENTINEL:
+        # Caught here rather than 100k events and a full training run later,
+        # where it surfaces as `require_truth()` refusing for a reason that has
+        # nothing obvious to do with the flag that caused it.
+        raise ValueError(
+            f"--sentinel {sentinel} is TRUTH_SENTINEL, which marks a sample as "
+            "having no particle-level truth at all -- so the particle-level "
+            "comparison this check exists to make would be refused. Pick any "
+            f"other far-off-manifold value; the default is {POISON_SENTINEL}."
+        )
     tag: Literal["CLEAN", "POISONED"] = "POISONED" if poison else "CLEAN"
     logger.info(
         "Running %s (z_true = %s), init seed %d",

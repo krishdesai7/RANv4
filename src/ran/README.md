@@ -194,12 +194,12 @@ The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the
 
 **Arguments:**
 
-- `raw_w` The raw generator output for every event in the batch.
-- `y` The target labels for every event in the batch.
+- `raw_w: Float[Array | np.ndarray, " n"]` The raw generator output for every event in the batch, already squeezed to one dimension.
+- `y: Real[Array | np.ndarray, " n"]` The target labels for every event in the batch. `Real` rather than `Float` because the pipeline carries them as `uint8` while the tests pass floats.
 
 **Returns:**
 
-- The normalized weights.
+- `Float[Array, " n"]` The normalized weights.
 
 ### def `weighted_bce(d_out, y, w)`
 
@@ -209,9 +209,13 @@ Reduced with `ops.sum(...) / n` rather than `ops.mean`: for float64 input `keras
 
 **Arguments:**
 
-- `d_out` The discriminator output for every event in the batch.
-- `y` The target labels for every event in the batch.
-- `w` The weights for every event in the batch.
+- `d_out: Float[Array | np.ndarray, " n"]` The discriminator output for every event in the batch, already squeezed to one dimension.
+- `y: Real[Array | np.ndarray, " n"]` The target labels for every event in the batch.
+- `w: Float[Array | np.ndarray, " n"]` The weights for every event in the batch.
+
+**Returns:**
+
+- `Float[Array, ""]` The scalar loss. Declaring it scalar is what catches a dropped reduction.
 
 **Returns:**
 

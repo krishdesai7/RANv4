@@ -10,8 +10,10 @@ description = "Reweighting Adversarial Networks"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "beartype>=0.22.9",
     "jax>=0.11.0 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "jax[cuda13]>=0.11.0 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
+    "jaxtyping>=0.3.11",
     "keras>=3.15.1",
     "matplotlib>=3.11.1",
     "numpy>=2.5.2",
@@ -125,7 +127,13 @@ extend-select = [
     "LOG",  # (flake8-logging): Flags logging anti-patterns (such as string formatting inside logger calls instead of passing lazy arguments).
     "TC",  # (flake8-type-checking): Automatically moves type-only imports behind if TYPE_CHECKING: blocks to reduce runtime import overhead.
 ]
-ignore = ["runtime-cast-value"]
+ignore = [
+    "runtime-cast-value",
+    # jaxtyping puts the shape spec in a string subscript, e.g.
+    # `Float[Array, " n d"]`, which F722 reads as a broken forward annotation.
+    # Silencing it is what jaxtyping documents; pyrefly and ty parse these fine.
+    "forward-annotation-syntax-error",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]

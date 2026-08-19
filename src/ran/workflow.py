@@ -33,13 +33,14 @@ if TYPE_CHECKING:
 logger: Logger = logging.getLogger(__name__)
 
 
-def _prepare_gaussian[T: np.floating = np.double](
+def _prepare_gaussian[T: np.floating](
     config: Path | None,
     saved_config: GaussianConfig | None,
     batch_size: int,
     n_samples: int,
     data_seed: int,
-    dtype: _DTypeLike[T] = np.double,  # ty: ignore[invalid-parameter-default]
+    *,
+    dtype: _DTypeLike[T],
 ) -> tuple[DatasetSplits[T], int, GaussianConfig]:
     builder: RANDataset[T] = RANDataset(
         batch_size=batch_size, seed=data_seed, dtype=dtype
@@ -61,21 +62,22 @@ def _prepare_gaussian[T: np.floating = np.double](
     return splits, gaussian_params.dim, gaussian_params
 
 
-def _prepare_jets[T: np.floating = np.double](
+def _prepare_jets[T: np.floating](
     n_samples: int,
     batch_size: int,
     variables: frozenset[str],
     data_seed: int,
-    dtype: _DTypeLike[T] = np.double,  # ty: ignore[invalid-parameter-default]
+    *,
+    dtype: _DTypeLike[T],
 ) -> tuple[DatasetSplits[T], int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
     std_params: dict[str, tuple[T, T]]
-    splits, dim, std_params = load_jet_dataset(  # ty: ignore[invalid-assignment]
+    splits, dim, std_params = load_jet_dataset(
         n_samples=n_samples,
         batch_size=batch_size,
         variables=variables,
         seed=data_seed,
-        dtype=dtype,  # ty: ignore[invalid-argument-type]
+        dtype=dtype,
     )
     var_info: list[VarInfo] = [
         VarInfo(
@@ -87,7 +89,7 @@ def _prepare_jets[T: np.floating = np.double](
         )
         for v in variables
     ]
-    return splits, dim, var_info  # ty: ignore[invalid-return-type]
+    return splits, dim, var_info
 
 
 def _save_run(
@@ -213,10 +215,11 @@ def run(
             batch_size,
             n_samples,
             data_seed,
+            dtype=np.double,
         )
     elif dataset == DatasetName.jets:
         splits, dim, var_info = _prepare_jets(
-            n_samples, batch_size, variables, data_seed
+            n_samples, batch_size, variables, data_seed, dtype=np.double
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")

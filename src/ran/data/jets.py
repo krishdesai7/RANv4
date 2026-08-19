@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, overload
 
 import numpy as np
 
@@ -21,19 +21,57 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy._typing import _DTypeLike
-    from numpy.typing import NDArray
+    from numpy.typing import DTypeLike, NDArray
 
 logger: Logger = logging.getLogger(name=__name__)
 
 
-def load_jet_dataset[T: np.floating = np.double](
+@overload
+def load_jet_dataset(
+    n_samples: int = ...,
+    batch_size: int = ...,
+    cache_dir: Path = ...,
+    variables: frozenset[str] = ...,
+    seed: int = ...,
+    dtype: _DTypeLike[np.double] = ...,
+) -> tuple[DatasetSplits[np.double], int, dict[str, tuple[np.double, np.double]]]: ...
+
+
+@overload
+def load_jet_dataset[T: np.floating](
+    n_samples: int = ...,
+    batch_size: int = ...,
+    cache_dir: Path = ...,
+    variables: frozenset[str] = ...,
+    seed: int = ...,
+    *,
+    dtype: _DTypeLike[T],
+) -> tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]: ...
+
+
+@overload
+def load_jet_dataset[T: np.floating](
+    n_samples: int,
+    batch_size: int,
+    cache_dir: Path,
+    variables: frozenset[str],
+    seed: int,
+    dtype: _DTypeLike[T],
+) -> tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]: ...
+
+
+def load_jet_dataset[T: np.floating](
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
     variables: frozenset[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
-    dtype: _DTypeLike[T] = np.double,  # ty: ignore[invalid-parameter-default]
+    dtype: DTypeLike = np.double,
 ) -> tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]:
+    # The overloads above carry the caller-visible link between dtype and T; the
+    # implementation takes the widest form and pins it once, as RANDataset does.
+    scalar: np.dtype[T] = cast("np.dtype[T]", np.dtype(dtype))
+
     # Check cache, download if needed
     missing: list[str] = [
         v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
@@ -51,10 +89,10 @@ def load_jet_dataset[T: np.floating = np.double](
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
     # Initialize arrays
-    z_true: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=dtype)
-    x_data: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=dtype)
-    z_gen: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=dtype)
-    x_sim: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=dtype)
+    z_true: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=scalar)
+    x_data: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=scalar)
+    z_gen: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=scalar)
+    x_sim: NDArray[T] = np.empty(shape=(n_samples, n_features), dtype=scalar)
 
     # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[T, T]] = {}
@@ -79,7 +117,7 @@ def load_jet_dataset[T: np.floating = np.double](
         mc=Events(z_gen, x_sim), data=x_data, truth=z_true
     ).interleave()
 
-    splits: DatasetSplits[T] = RANDataset(  # ty: ignore[invalid-assignment, no-matching-overload]
-        batch_size, seed, dtype=dtype
+    splits: DatasetSplits[T] = RANDataset(
+        batch_size, seed, dtype=scalar
     ).splits_from_data(data)
     return splits, n_features, std_params

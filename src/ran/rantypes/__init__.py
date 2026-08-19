@@ -24,10 +24,15 @@ from .results import IBUResult as IBUResult
 from .results import UnfoldingPopulations as UnfoldingPopulations
 from .results import VariableOutcome as VariableOutcome
 from .types import Batch as Batch
+from .types import DiscGradFn as DiscGradFn
+from .types import EvalStep as EvalStep
+from .types import GenGradFn as GenGradFn
+from .types import GradsAndAux as GradsAndAux
 from .types import KerasVariable as KerasVariable
 from .types import MetricRecord as MetricRecord
 from .types import Nested as Nested
 from .types import RANModel as RANModel
 from .types import StatelessOptimizer as StatelessOptimizer
+from .types import TrainStep as TrainStep
 from .types import Variables as Variables
 from .types import VarInfo as VarInfo

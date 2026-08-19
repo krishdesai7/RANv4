@@ -15,7 +15,6 @@ from .evaluate import _get_weights
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from logging import Logger
-    from typing import SupportsFloat
 
     from matplotlib.axes import Axes
     from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -353,7 +352,7 @@ def plot_particle_level(
 
 
 def plot_losses(
-    history: dict[str, list[SupportsFloat]],
+    history: dict[str, list[float]],
     save_path: Path = Path("plots/losses.pdf"),
 ) -> None:
     epochs: NDArray[np.uintc] = np.arange(len(history["train_d"]), dtype=np.uintc)

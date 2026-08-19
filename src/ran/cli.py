@@ -9,9 +9,9 @@ import typer
 from .logging_config import configure_logging
 from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
+    POISON_SENTINEL,
     RUN_DIR,
     SUBSTRUCTURE_VARIABLES,
-    TRUTH_SENTINEL,
     DatasetName,
     LogLevel,
 )
@@ -177,7 +177,7 @@ def sweep_collect_command(
 @app.command(name="leakage-check")
 def leakage_check_command(
     poison: Annotated[bool, typer.Option("--poison/--clean", "-X/")] = False,
-    sentinel: Annotated[float, typer.Option("--sentinel", "-S")] = TRUTH_SENTINEL,
+    sentinel: Annotated[float, typer.Option("--sentinel", "-S")] = POISON_SENTINEL,
     seed: int = 42,
     init_seed: int = 0,
 ) -> None:

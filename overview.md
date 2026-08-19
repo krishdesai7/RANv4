@@ -35,14 +35,14 @@ The difficulty: we never measure `z_true` for real data events. We only have MC 
 **Discriminator `d(x)`** — reco-level network
 
 - Input: `x` (reco-level events, both data and reweighted sim)
-- Output: probability in [0,1] via sigmoid
+- Output: probability in \[0,1\] via sigmoid
 - Trained to distinguish data (y=1) from reweighted sim (y=0)
 
 ### Loss function
 
 Weighted binary cross-entropy:
 
-```
+```text
 L = -mean[ w_i * y_i * log(d(x_i)) + w_i * (1-y_i) * log(1 - d(x_i)) ]
 ```
 
@@ -88,8 +88,8 @@ The reco-level `x_data` is generated _before_ poisoning, so the data that the di
 **To run:**
 
 ```bash
-uv run -m ran leakage-check --clean    # clean baseline
-uv run -m ran leakage-check --poison   # poisoned — should match
+ran leakage-check --clean    # clean baseline
+ran leakage-check --poison   # poisoned — should match
 ```
 
 Both arms must share `--seed`, or initialization variance swamps the effect and
@@ -102,7 +102,7 @@ bit-identical between the two arms.
 
 Both networks share the same MLP structure:
 
-```
+```text
 Input (dim,) → [Dense(64, relu)] × n_layers → Dense(1, activation)
 ```
 
@@ -118,7 +118,7 @@ Hyperparameters exposed at CLI: `--hidden-units`, `--n-layers`.
 
 ### Weight normalization (`_compute_weights`)
 
-```
+```python
 w_MC = g(z_gen) * N_MC / sum(g(z_gen))   (MC events)
 w_data = 1                                (data events)
 ```
@@ -152,7 +152,7 @@ Controlled test where the true answer is known analytically. Each YAML in `param
 
 Data generation:
 
-```
+```python
 z_true ~ N(mu_true, cov_true)       # data particle-level
 x_data = z_true + ε, ε ~ N(0, cov_detector)   # data reco
 
@@ -245,8 +245,8 @@ Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs e
 
 Classic frequentist unfolding. 1D per-variable:
 
-1. Build response matrix R[t,r] = P(reco=r | truth=t) from MC
-2. Apply Bayes iteratively: P(t|r) = R[t,r]·P(t) / Σ R[t',r]·P(t')
+1. Build response matrix R\[t,r\] = P(reco=r | truth=t) from MC
+2. Apply Bayes iteratively: P(t|r) = R\[t,r\]·P(t) / Σ R\[t',r\]·P(t')
 3. Convert unfolded histogram → per-event weights for comparison
 
 **Purity-based binning:** bins are grown greedily from the left until P(same bin at gen and reco) > √0.5 ≈ 0.707. This ensures the response matrix is well-conditioned.
@@ -271,8 +271,8 @@ All three plots overlay OmniFold and IBU curves if their weights are present in 
 
 ## 11. Run Lifecycle
 
-```
-uv run -m ran --config params/1d_default.yaml
+```shell
+ran train --config params/1d_default.yaml
   └─ parse YAML → generate/load dataset → train (adversarial) → save to runs/<timestamp>/
        ├── generator.keras, discriminator.keras
        ├── history.npz
@@ -282,9 +282,9 @@ uv run -m ran --config params/1d_default.yaml
        ├── losses.pdf
        └── metrics.json
 
-uv run -m ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
-uv run -m ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
-uv run -m ran train --load-run runs/...             → reload + re-plot with baseline overlays
+ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
+ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
+ran train --load-run runs/...             → reload + re-plot with baseline overlays
 ```
 
 `config.json` stores full covariance matrices (not just the original YAML scalars) so runs are self-contained and exactly reproducible without the original config file.

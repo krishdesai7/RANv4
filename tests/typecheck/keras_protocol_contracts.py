@@ -11,10 +11,9 @@ from ran.rantypes import (
     KerasVariable,
     RANModel,
     StatelessOptimizer,
-    TrainResult,
     Variables,
 )
-from ran.train import _make_steps
+from ran.train import TrainResult, _make_steps
 from ran.workflow import _load_artifacts
 
 if TYPE_CHECKING:

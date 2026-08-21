@@ -8,6 +8,7 @@ from .constants import GENERATORS as GENERATORS
 from .constants import JET_OBS as JET_OBS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
+from .constants import POISON_SENTINEL as POISON_SENTINEL
 from .constants import RUN_DIR as RUN_DIR
 from .constants import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
 from .constants import TRUTH_SENTINEL as TRUTH_SENTINEL
@@ -23,7 +24,6 @@ from .events import Split as Split
 from .results import IBUResult as IBUResult
 from .results import UnfoldingPopulations as UnfoldingPopulations
 from .results import VariableOutcome as VariableOutcome
-from .types import Batch as Batch
 from .types import DiscGradFn as DiscGradFn
 from .types import EvalStep as EvalStep
 from .types import GenGradFn as GenGradFn

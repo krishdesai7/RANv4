@@ -6,20 +6,22 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, cast, overload
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from ..rantypes import ZXY, DatasetSplits, Events, GaussianConfig, Populations
 from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from logging import Logger
     from typing import Final, LiteralString, SupportsFloat
 
+    from jaxtyping import Array, Float
     from numpy._typing import _DTypeLike
     from numpy.typing import DTypeLike, NDArray
 
-    from ..rantypes import Batch, Nested
+    from ..rantypes import Nested
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -27,24 +29,74 @@ _ONE_SOURCE_ONLY: Final[LiteralString] = (
     "Exactly one of config_path or params must be provided"
 )
 
+# Bumped whenever the generator changes, because the cache key is otherwise a
+# pure function of the physics config -- an old .npz would be silently reused
+# and hand back a sample drawn from a different stream.
+_RNG_VERSION: Final[LiteralString] = "jax-v1"
+
+
+def _draw_gaussian(
+    seed: int,
+    /,
+    *,
+    mu_true: NDArray[np.double],
+    mu_gen: NDArray[np.double],
+    cov_true: NDArray[np.double],
+    cov_gen: NDArray[np.double],
+    cov_detector: NDArray[np.double],
+    n_samples: int,
+) -> tuple[
+    Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"]
+]:
+    """Draw the four Gaussian populations: (z_true, z_gen, x_data, x_sim).
+
+    Pinned to CPU. Generation runs once and is then npz-cached, so there is
+    nothing to gain from the accelerator --- and this function is reachable from
+    ``ran.baselines._shared`` on a cache miss, which runs inside the
+    TensorFlow-pinned OmniFold process. Letting JAX take a device there would
+    have it preallocate the GPU out from under TensorFlow.
+
+    No ``check_valid`` equivalent is needed: ``parse_gaussian_config`` has already
+    asserted positive-definiteness with a Cholesky factorization.
+    """
+    with jax.default_device(jax.devices("cpu")[0]):
+        k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
+
+        z_true = jax.random.multivariate_normal(
+            k_true, mu_true, cov_true, (n_samples,), method="svd"
+        )
+        z_gen = jax.random.multivariate_normal(
+            k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
+        )
+
+        chol_det = jnp.linalg.cholesky(jnp.asarray(cov_detector))
+        smear = chol_det.T
+
+        x_data = z_true + jax.random.normal(k_data, z_true.shape) @ smear
+        x_sim = z_gen + jax.random.normal(k_sim, z_gen.shape) @ smear
+    return z_true, z_gen, x_data, x_sim
+
 
 class ArrayDataset[T: np.floating = np.double]:
-    """In-memory (z, x, y) arrays with deterministic minibatching."""
+    """One host-resident split of (z, x, y), plus how it should be batched.
+
+    This is a container, not an iterator. Batch order is drawn on device, per
+    epoch, by ``ran.device.train_indices`` --- so ``batch_size`` and ``seed`` are
+    carried here as the split's own parameters and read by
+    ``DeviceSplits.from_splits``, but nothing iterates this object.
+    """
 
     def __init__(
         self,
         data: ZXY[T],
         batch_size: int = 128,
-        shuffle: bool = False,
         seed: int = 42,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
         self.data: ZXY[T] = data
         self.batch_size: int = batch_size
-        self.shuffle: bool = shuffle
         self.seed: int = seed
-        self._pass = 0
 
     @property
     def size(self) -> int:
@@ -54,25 +106,9 @@ class ArrayDataset[T: np.floating = np.double]:
     def dtype(self) -> np.dtype[T]:
         return self.data.dtype
 
-    def reset(self) -> None:
-        """Rewind to the first pass, so iteration repeats from the start."""
-        self._pass = 0
-
     def __len__(self) -> int:
-        """Number of batches per pass."""
+        """Number of batches per pass, counting a short trailing one."""
         return (self.size + self.batch_size - 1) // self.batch_size
-
-    def __iter__(self) -> Iterator[Batch[T]]:
-        if self.shuffle:
-            order: NDArray[np.intp] = np.random.default_rng(
-                seed=[self.seed, self._pass]
-            ).permutation(self.size)
-            self._pass += 1
-        else:
-            order = np.arange(self.size)
-        for start in range(0, len(order), self.batch_size):
-            idx: NDArray[np.intp] = order[start : start + self.batch_size]
-            yield {"z": self.data.z[idx], "x": self.data.x[idx]}, self.data.y[idx]
 
     def as_arrays(self) -> ZXY[T]:
         """Return the whole split as flat labelled arrays, in stored order."""
@@ -151,7 +187,7 @@ class RANDataset[T: np.floating = np.double]:
 
     def _cache_key(self, parsed: GaussianConfig, n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
-        key_data: dict[str, Nested[float]] = {
+        key_data: dict[str, Nested[float] | str] = {
             "mu_gen": self._round_nested(parsed.mu_gen.tolist()),
             "mu_true": self._round_nested(parsed.mu_true.tolist()),
             "cov_gen": self._round_nested(parsed.cov_gen.tolist()),
@@ -159,6 +195,10 @@ class RANDataset[T: np.floating = np.double]:
             "cov_detector": self._round_nested(parsed.cov_detector.tolist()),
             "n_samples": n_samples,
             "seed": self.seed,
+            "rng": _RNG_VERSION,
+            # Without this a float32 and a float64 run share one file, and
+            # whichever ran first decides the precision on disk.
+            "dtype": str(self.dtype),
         }
         return hashlib.sha256(
             data=json.dumps(obj=key_data, sort_keys=True).encode(encoding="utf-8")
@@ -187,21 +227,20 @@ class RANDataset[T: np.floating = np.double]:
                 "every split needs at least one event"
             )
 
-        def _slice(lo: int, hi: int, shuffle: bool) -> ArrayDataset[T]:
+        def _slice(lo: int, hi: int) -> ArrayDataset[T]:
             return ArrayDataset(
                 data=ZXY(
                     Events(dataset.z[lo:hi], dataset.x[lo:hi]),
                     dataset.y[lo:hi],
                 ),
                 batch_size=self.batch_size,
-                shuffle=shuffle,
                 seed=self.seed,
             )
 
         return DatasetSplits(
-            train=_slice(0, n_train, shuffle=True),
-            val=_slice(lo=n_train, hi=n_non_test, shuffle=False),
-            test=_slice(lo=n_non_test, hi=n, shuffle=False),
+            train=_slice(0, n_train),
+            val=_slice(lo=n_train, hi=n_non_test),
+            test=_slice(lo=n_non_test, hi=n),
         )
 
     def generate_gaussian_dataset(
@@ -222,16 +261,10 @@ class RANDataset[T: np.floating = np.double]:
         else:
             parsed = parse_gaussian_config(config_path)
 
-        mu_gen: NDArray[T] = parsed.mu_gen.astype(dtype=self.dtype)
-        mu_true: NDArray[T] = parsed.mu_true.astype(dtype=self.dtype)
-        cov_gen: NDArray[T] = parsed.cov_gen.astype(dtype=self.dtype)
-        cov_true: NDArray[T] = parsed.cov_true.astype(dtype=self.dtype)
-        # Only ever fed to the Cholesky below, whose result promotes straight
-        # back to float64 in the matmul -- so narrowing it to T buys nothing and
-        # costs precision when T is float32. `mu_*`/`cov_gen`/`cov_true` narrow
-        # harmlessly because `multivariate_normal` upcasts them again anyway.
-        cov_detector: NDArray[np.double] = parsed.cov_detector
-
+        # The parameters go into `_draw_gaussian` at the float64 they were parsed
+        # in, and the sample narrows to `T` once on the way out. Pre-narrowing
+        # them bought nothing -- the draw upcasts again -- and cost precision in
+        # the detector Cholesky whenever `T` was float32.
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -246,37 +279,23 @@ class RANDataset[T: np.floating = np.double]:
                     y=cached["y"],
                 )
         else:
-            rng: np.random.Generator = np.random.default_rng(self.seed)
-
-            z_true: NDArray[np.double] = rng.multivariate_normal(
-                mean=mu_true,
-                cov=cov_true,
-                size=n_samples,
-                check_valid="raise",
-                method="svd",
+            z_true, z_gen, x_data, x_sim = _draw_gaussian(
+                self.seed,
+                mu_true=parsed.mu_true,
+                mu_gen=parsed.mu_gen,
+                cov_true=parsed.cov_true,
+                cov_gen=parsed.cov_gen,
+                cov_detector=parsed.cov_detector,
+                n_samples=n_samples,
             )
-            z_gen: NDArray[np.double] = rng.multivariate_normal(
-                mean=mu_gen,
-                cov=cov_gen,
-                size=n_samples,
-                check_valid="raise",
-                method="svd",
-            )
-
-            chol_det: NDArray[np.double] = np.linalg.cholesky(cov_detector, upper=False)
-
-            s_data: NDArray[np.double] = rng.standard_normal(size=z_true.shape)
-            x_data: NDArray[np.double] = z_true + s_data @ chol_det.T
-
-            s_sim: NDArray[np.double] = rng.standard_normal(size=z_gen.shape)
-            x_sim: NDArray[np.double] = z_gen + s_sim @ chol_det.T
 
             data: ZXY[T] = Populations(
                 mc=Events(
-                    z=z_gen.astype(dtype=self.dtype), x=x_sim.astype(dtype=self.dtype)
+                    z=np.asarray(z_gen, dtype=self.dtype),
+                    x=np.asarray(x_sim, dtype=self.dtype),
                 ),
-                data=x_data.astype(dtype=self.dtype),
-                truth=z_true.astype(dtype=self.dtype),
+                data=np.asarray(x_data, dtype=self.dtype),
+                truth=np.asarray(z_true, dtype=self.dtype),
             ).interleave()
 
             np.savez_compressed(file=cache_path, z=data.z, x=data.x, y=data.y)

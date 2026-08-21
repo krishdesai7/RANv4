@@ -4,6 +4,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+import jax.numpy as jnp
 import numpy as np
 from rich.console import Console
 from rich.table import Table
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from logging import Logger
     from pathlib import Path
 
+    from jax import Array as JaxArray
     from numpy.typing import NDArray
 
     from .rantypes import ZXY, DatasetSplits, GaussianConfig, Populations, RANModel
@@ -103,13 +105,21 @@ def _collect_test_data[T: np.floating = np.double](test_ds: ArrayDataset[T]) -> 
 def _get_weights(
     g: RANModel, z_gen: NDArray, chunk_size: int = 10_000
 ) -> NDArray[np.double]:
-    """Compute normalized generator weights in chunks to limit peak memory."""
+    """Compute normalized generator weights, mean 1, as host NumPy.
+
+    Chunked because it is the intermediate activations, not the output, that set
+    peak memory --- a full-dataset forward pass through a wide hidden layer is
+    orders of magnitude larger than the one weight per event it produces. The
+    chunks are stitched together and normalized on device, so the whole call
+    costs exactly one device-to-host copy rather than one per chunk.
+    """
     n: int = len(z_gen)
-    raw: NDArray[np.double] = np.empty(shape=n, dtype=np.double)
-    for start in range(0, n, chunk_size):
-        end: int = min(start + chunk_size, n)
-        raw[start:end] = np.asarray(a=g(z_gen[start:end])).flatten()
-    return raw / raw.mean()
+    chunks: list[JaxArray] = [
+        jnp.ravel(g(z_gen[start : start + chunk_size]))
+        for start in range(0, n, chunk_size)
+    ]
+    raw: JaxArray = jnp.concatenate(chunks)
+    return np.asarray(a=raw / (jnp.sum(raw) / n), dtype=np.double)
 
 
 def _dim(x: NDArray, /) -> int:

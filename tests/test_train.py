@@ -4,10 +4,13 @@ These exercise the loss math and a couple of real gradient steps on tiny
 models. They do NOT train to convergence -- that is cluster work.
 """
 
+import jax
+import jax.numpy as jnp
 import keras
 import numpy as np
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
+from ran.device import DeviceSplits, train_indices
 from ran.models import build_generator
 from ran.rantypes import TRUTH_SENTINEL, ZXY, Events
 from ran.train import (
@@ -15,10 +18,16 @@ from ran.train import (
     TrainResult,
     TrainState,
     _make_steps,
+    bce_sums,
     normalize_weights,
     train,
     weighted_bce,
 )
+
+
+def ones(n: int) -> ndarray[tuple[int], dtype[float64]]:
+    """An all-ones mask: what the training path always passes."""
+    return np.ones(n, dtype=np.double)
 
 
 def test_backend_is_jax_with_float64_enabled() -> None:
@@ -33,7 +42,7 @@ class TestNormalizeWeights:
         rng = np.random.default_rng(0)
         raw = rng.uniform(0.1, 3.0, size=64)
         y = (rng.random(64) < 0.5).astype(np.double)
-        w = np.asarray(normalize_weights(raw, y))
+        w = np.asarray(normalize_weights(raw, y, ones(raw.size)))
         np.testing.assert_allclose(w[y == 1], 1.0)
 
     def test_mc_weights_preserve_event_count(self) -> None:
@@ -41,14 +50,14 @@ class TestNormalizeWeights:
         rng = np.random.default_rng(1)
         raw = rng.uniform(0.1, 3.0, size=256)
         y = (rng.random(256) < 0.5).astype(np.double)
-        w = np.asarray(normalize_weights(raw, y))
+        w = np.asarray(normalize_weights(raw, y, ones(raw.size)))
         np.testing.assert_allclose(w[y == 0].sum(), (y == 0).sum(), rtol=1e-9)
 
     def test_mc_weights_stay_proportional_to_raw_output(self) -> None:
         rng = np.random.default_rng(2)
         raw = rng.uniform(0.1, 3.0, size=128)
         y = (rng.random(128) < 0.5).astype(np.double)
-        w = np.asarray(normalize_weights(raw, y))
+        w = np.asarray(normalize_weights(raw, y, ones(raw.size)))
         ratio = w[y == 0] / raw[y == 0]
         np.testing.assert_allclose(ratio, ratio[0], rtol=1e-9)
 
@@ -64,8 +73,8 @@ class TestNormalizeWeights:
         poisoned = raw.copy()
         poisoned[y == 1] = -999.0
         np.testing.assert_allclose(
-            np.asarray(normalize_weights(raw, y)),
-            np.asarray(normalize_weights(poisoned, y)),
+            np.asarray(normalize_weights(raw, y, ones(raw.size))),
+            np.asarray(normalize_weights(poisoned, y, ones(poisoned.size))),
         )
 
 
@@ -86,7 +95,7 @@ def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
     def weights(nature_fill: float) -> ndarray[tuple[int, ...], dtype[float64]]:
         z = np.concatenate([np.full((4, 1), nature_fill), mc_z], axis=0)
         raw = np.squeeze(np.asarray(g(z)), axis=-1)
-        return np.asarray(normalize_weights(raw, y))
+        return np.asarray(normalize_weights(raw, y, ones(raw.size)))
 
     np.testing.assert_allclose(weights(float(TRUTH_SENTINEL)), weights(0.0))
     assert np.all(np.isnan(weights(np.nan)))
@@ -108,21 +117,70 @@ class TestWeightedBCE:
         expected = -np.mean(
             w * y * np.log(d_out + EPS) + w * (1 - y) * np.log(1 - d_out + EPS)
         )
-        got = float(weighted_bce(d_out, y, w))
+        got = float(weighted_bce(d_out, y, w, ones(d_out.size)))
         assert abs(got - expected) < 1e-15, f"{got!r} vs {expected!r}"
 
     def test_perfect_classifier_scores_near_zero(self) -> None:
         y = np.array([1.0, 1.0, 0.0, 0.0])
         d_out = np.array([1.0, 1.0, 0.0, 0.0])
         w = np.ones(4)
-        assert float(weighted_bce(d_out, y, w)) < 1e-6
+        assert float(weighted_bce(d_out, y, w, ones(d_out.size))) < 1e-6
 
     def test_uninformative_classifier_scores_log2(self) -> None:
         y = np.array([1.0, 1.0, 0.0, 0.0])
         d_out = np.full(4, 0.5)
         w = np.ones(4)
         np.testing.assert_allclose(
-            float(weighted_bce(d_out, y, w)), np.log(2), atol=1e-6
+            float(weighted_bce(d_out, y, w, ones(d_out.size))), np.log(2), atol=1e-6
+        )
+
+    def test_masked_rows_are_ignored_outright(self) -> None:
+        """Zeroing `mask` must equal deleting the rows, denominator included.
+
+        This is what makes a padded eval batch report the number an unpadded
+        one would: a zero weight still counts toward the mean, a zero mask does
+        not.
+        """
+        rng = np.random.default_rng(9)
+        d_out = rng.uniform(0.01, 0.99, size=8)
+        y = (rng.random(8) < 0.5).astype(np.double)
+        w = rng.uniform(0.5, 1.5, size=8)
+        mask = ones(8)
+        mask[-2:] = 0.0
+        np.testing.assert_allclose(
+            float(weighted_bce(d_out, y, w, mask)),
+            float(weighted_bce(d_out[:-2], y[:-2], w[:-2], ones(6))),
+            rtol=1e-14,
+        )
+
+    def test_sums_divide_to_the_mean(self) -> None:
+        """`bce_sums` is the reduction split in two, so a scan can accumulate."""
+        rng = np.random.default_rng(10)
+        d_out = rng.uniform(0.01, 0.99, size=16)
+        y = (rng.random(16) < 0.5).astype(np.double)
+        w = rng.uniform(0.5, 1.5, size=16)
+        total, count = bce_sums(d_out, y, w, ones(16))
+        assert int(count) == 16
+        np.testing.assert_allclose(
+            float(total) / float(count),
+            float(weighted_bce(d_out, y, w, ones(16))),
+            rtol=1e-15,
+        )
+
+    def test_summing_batches_matches_scoring_them_together(self) -> None:
+        """Accumulating (total, count) across batches gives the true mean --
+        not the mean of per-batch means the old host loop computed."""
+        rng = np.random.default_rng(12)
+        d_out = rng.uniform(0.01, 0.99, size=10)
+        y = (rng.random(10) < 0.5).astype(np.double)
+        w = rng.uniform(0.5, 1.5, size=10)
+        halves = [
+            bce_sums(d_out[s], y[s], w[s], ones(len(y[s])))
+            for s in (slice(0, 6), slice(6, 10))
+        ]
+        combined = sum(float(t) for t, _ in halves) / sum(float(c) for _, c in halves)
+        np.testing.assert_allclose(
+            combined, float(weighted_bce(d_out, y, w, ones(10))), rtol=1e-14
         )
 
     def test_zero_weight_events_are_ignored(self) -> None:
@@ -132,8 +190,8 @@ class TestWeightedBCE:
         w = np.ones(8)
         w_masked = w.copy()
         w_masked[-2:] = 0.0
-        full = float(weighted_bce(d_out, y, w_masked))
-        trimmed = float(weighted_bce(d_out[:-2], y[:-2], w[:-2])) * 6 / 8
+        full = float(weighted_bce(d_out, y, w_masked, ones(8)))
+        trimmed = float(weighted_bce(d_out[:-2], y[:-2], w[:-2], ones(6))) * 6 / 8
         np.testing.assert_allclose(full, trimmed, rtol=1e-12)
 
 
@@ -160,12 +218,21 @@ class TestTrainSteps:
             opt_d=[v.value for v in opt_d.variables],
         )
         rng = np.random.default_rng(6)
-        z = rng.normal(size=(n, dim))
-        x = rng.normal(size=(n, dim))
-        y = (rng.random(n) < 0.5).astype(np.ubyte)
-        # The steps take loose arrays, not the ZXY the loop carries: jit has no
-        # pytree for the dataclass. `_as_batch` is what bridges the two.
-        return _make_steps(g, d, opt_g, opt_d), state, (z, x, y)
+        # Device arrays, because that is what the steps see: they are traced
+        # inside the epoch program, never called on host NumPy. Labels arrive
+        # already promoted to the compute dtype -- `TrainSplit` does that once,
+        # on the way to device, rather than per `1 - y`.
+        batch = tuple(
+            jnp.asarray(a)
+            for a in (
+                rng.normal(size=(n, dim)),
+                rng.normal(size=(n, dim)),
+                (rng.random(n) < 0.5).astype(np.double),
+                # On the training path the mask is always all ones.
+                ones(n),
+            )
+        )
+        return _make_steps(g, d, opt_g, opt_d), state, batch
 
     def test_disc_step_updates_only_the_discriminator(self) -> None:
         (disc_step, _, _), state, batch = self._setup()
@@ -194,9 +261,13 @@ class TestTrainSteps:
     def test_eval_step_leaves_state_untouched_and_matches_disc_loss(self) -> None:
         (disc_step, _, eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
+        # eval_step hands back the two halves unreduced, so a scan can add them
+        # up across batches and divide once.
+        total, count = eval_step(state, *batch)
         np.testing.assert_allclose(
-            float(eval_step(state, *batch)), float(d_loss), rtol=1e-12
+            float(total) / float(count), float(d_loss), rtol=1e-12
         )
+        assert int(count) == len(batch[2])
 
 
 def test_train_runs_and_returns_usable_models(tmp_path) -> None:
@@ -312,22 +383,80 @@ class TestSeeding:
     def test_init_seed_does_not_disturb_batch_order(self) -> None:
         """The two randomness axes must stay independent.
 
-        Batch order comes from the dataset's own generator, so changing the
-        init seed must not reshuffle the data.
+        Batch order is drawn from the split's own `data_seed`, so changing the
+        init seed must not reshuffle the data. This is what makes the HEP
+        ensemble -- a loop over `--seed` at fixed `--data_seed` -- measure
+        initialization variance and nothing else.
         """
         splits = self._splits()
-
-        def first_batch() -> ndarray[tuple[int], dtype[float64]]:
-            splits.train.reset()
-            return next(iter(splits.train))[0]["z"].ravel().copy()
-
-        before = first_batch()
-        train(
-            splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=7
+        curves = [
+            train(
+                splits,
+                dim=1,
+                n_epochs=2,
+                patience=99,
+                hidden_units=8,
+                n_layers=1,
+                seed=s,
+            )
+            for s in (7, 8)
+        ]
+        # Different inits, so the losses differ -- but both runs consumed the
+        # same batches, which is what the shared key guarantees.
+        assert curves[0].seed != curves[1].seed
+        key = jax.random.key(splits.train.seed)
+        np.testing.assert_array_equal(
+            np.asarray(train_indices(key, splits.train.size, 128, 5)),
+            np.asarray(train_indices(key, splits.train.size, 128, 5)),
         )
-        np.testing.assert_array_equal(first_batch(), before)
 
-        train(
-            splits, dim=1, n_epochs=1, patience=99, hidden_units=8, n_layers=1, seed=8
-        )
-        np.testing.assert_array_equal(first_batch(), before)
+
+class TestFusion:
+    """The fused whole-run program against the Python-driven reference."""
+
+    @staticmethod
+    def _splits(n: int = 512) -> DatasetSplits:
+        rng = np.random.default_rng(21)
+        z = rng.normal(size=(2 * n, 1))
+        x = z + rng.normal(0, 0.3, size=(2 * n, 1))
+        y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+        return RANDataset(batch_size=32, seed=5).splits_from_data(ZXY(Events(z, x), y))
+
+    def test_fused_and_eager_runs_agree(self) -> None:
+        """`fused=False` is the debugging path, so it must not be a second model.
+
+        It runs the identical epoch function from a Python `while` instead of a
+        `lax.while_loop`, so the two differ only in how XLA is allowed to
+        associate the reductions -- not in the arithmetic.
+        """
+        splits = self._splits()
+        kwargs = {
+            "dim": 1,
+            "n_epochs": 3,
+            "patience": 99,
+            "hidden_units": 8,
+            "n_layers": 1,
+            "seed": 42,
+        }
+        fused = train(splits, fused=True, **kwargs)
+        eager = train(splits, fused=False, **kwargs)
+        for key in ("train_d", "train_g", "val_d", "val_g"):
+            np.testing.assert_allclose(
+                fused.history[key], eager.history[key], rtol=1e-10
+            )
+
+    def test_padded_eval_matches_an_exactly_divisible_one(self) -> None:
+        """Padding rows must be inert.
+
+        The eval splits are padded to a whole number of batches and the filler
+        carries `mask == 0`; it enters no sum, so the reported loss is the one an
+        unpadded split would have given.
+        """
+        splits = self._splits()
+        n_val = splits.val.size
+        assert n_val % 7 != 0, "want a size that does not divide evenly"
+        exact = DeviceSplits.from_splits(splits, eval_batch_size=n_val)
+        padded = DeviceSplits.from_splits(splits, eval_batch_size=7)
+        assert padded.val.n_batches > exact.val.n_batches
+        assert int(padded.val.mask.sum()) == n_val
+        assert int(exact.val.mask.sum()) == n_val

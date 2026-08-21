@@ -108,13 +108,13 @@ def _get_var(data: dict[str, NDArray], var: str, ptype: str, /) -> NDArray[np.do
     raise ValueError(f"Unknown variable '{var}'")
 
 
-def _ensure_shard(path: Path, gen: str, idx: int, progress: Progress, /) -> None:
+def _ensure_shard(dest: Path, gen: str, idx: int, progress: Progress, /) -> None:
     """Download one shard unless it is already cached."""
-    if path.exists():
-        logger.info("%s: already downloaded", path.name)
+    if dest.exists():
+        logger.info("%s: already downloaded", dest.name)
         return
-    task_id: TaskID = progress.add_task(description=path.name, total=None)
-    _download_file(_download_url(generator=gen, file_idx=idx), path, progress, task_id)
+    task_id: TaskID = progress.add_task(description=dest.name, total=None)
+    _download_file(_download_url(generator=gen, file_idx=idx), dest, progress, task_id)
     progress.remove_task(task_id)
 
 

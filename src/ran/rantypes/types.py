@@ -13,9 +13,7 @@ from jax import Array as JaxArray
 if TYPE_CHECKING:
     from os import PathLike
 
-    import numpy as np
-    from jax.typing import ArrayLike as JaxArrayLike
-    from numpy.typing import ArrayLike, NDArray
+    from numpy.typing import ArrayLike
 
     from ..train import TrainState
 
@@ -91,9 +89,10 @@ class DiscGradFn(Protocol):
         self,
         d_trainable: Variables,
         d_non_trainable: Variables,
-        x: JaxArrayLike,
-        y: JaxArrayLike,
-        w: JaxArrayLike,
+        x: JaxArray,
+        y: JaxArray,
+        w: JaxArray,
+        mask: JaxArray,
         /,
     ) -> GradsAndAux: ...
 
@@ -105,37 +104,45 @@ class GenGradFn(Protocol):
         g_non_trainable: Variables,
         d_trainable: Variables,
         d_non_trainable: Variables,
-        z: JaxArrayLike,
-        x: JaxArrayLike,
-        y: JaxArrayLike,
+        z: JaxArray,
+        x: JaxArray,
+        y: JaxArray,
+        mask: JaxArray,
         /,
     ) -> GradsAndAux: ...
 
 
 class TrainStep(Protocol):
-    """A jitted ``(state, z, x, y) -> (state, loss)`` update."""
+    """A traced ``(state, z, x, y, mask) -> (state, loss)`` update."""
 
     def __call__(
         self,
         state: TrainState,
-        z: JaxArrayLike,
-        x: JaxArrayLike,
-        y: JaxArrayLike,
+        z: JaxArray,
+        x: JaxArray,
+        y: JaxArray,
+        mask: JaxArray,
         /,
     ) -> tuple[TrainState, JaxArray]: ...
 
 
 class EvalStep(Protocol):
-    """A jitted ``(state, z, x, y) -> loss`` forward pass, no updates."""
+    """A traced forward pass with no updates.
+
+    Returns the *unnormalized* masked loss and the mask total, so a scan over
+    batches can accumulate both and divide once --- a true mean over the split
+    rather than a mean of per-batch means.
+    """
 
     def __call__(
         self,
         state: TrainState,
-        z: JaxArrayLike,
-        x: JaxArrayLike,
-        y: JaxArrayLike,
+        z: JaxArray,
+        x: JaxArray,
+        y: JaxArray,
+        mask: JaxArray,
         /,
-    ) -> JaxArray: ...
+    ) -> tuple[JaxArray, JaxArray]: ...
 
 
 # ---------------------------------
@@ -161,5 +168,3 @@ class MetricRecord(TypedDict):
 # Data
 # ---------------------------------
 type Nested[T] = T | list[Nested[T]]
-
-type Batch[T: np.floating = np.double] = tuple[dict[str, NDArray[T]], NDArray[np.ubyte]]

@@ -2,7 +2,7 @@
 
 The two-optimizer min-max game does not fit ``Model.fit``, so this is hand-rolled
 --- but it is not a Python loop over batches. The dataset is moved to device once
-(:mod:`ran.device`), one epoch is a ``lax.scan`` over grouped batch indices, and
+(:mod:`ran.data.device`), one epoch is a ``lax.scan`` over grouped batch indices, and
 the epoch loop with its early stopping is a ``lax.while_loop``, so a whole run
 compiles to one program and the batch gathers fuse into the first ``Dense``.
 
@@ -29,7 +29,7 @@ from beartype import beartype
 from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
-from .device import DeviceSplits, gather, train_indices
+from .data.device import DeviceSplits, gather, train_indices
 from .models import build_discriminator, build_generator
 
 # `Variables` annotates the `@jaxtyped(beartype)` closures below, and beartype
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
     from jaxtyping import PRNGKeyArray
 
-    from .device import EvalSplit, TrainSplit
+    from .data.device import EvalSplit, TrainSplit
     from .rantypes import (
         DatasetSplits,
         DiscGradFn,

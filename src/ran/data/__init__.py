@@ -3,5 +3,11 @@ from .config import parse_gaussian_config as parse_gaussian_config
 from .config import sigma_to_covariance as sigma_to_covariance
 from .datasets import ArrayDataset as ArrayDataset
 from .datasets import RANDataset as RANDataset
+from .device import DeviceSplits as DeviceSplits
+from .device import EvalSplit as EvalSplit
+from .device import TrainSplit as TrainSplit
+from .device import gather as gather
+from .device import grouping as grouping
+from .device import train_indices as train_indices
 from .download import download_jet_data as download_jet_data
 from .jets import load_jet_dataset as load_jet_dataset

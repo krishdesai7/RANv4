@@ -40,7 +40,7 @@ class _BinnedReweighting[T: np.floating = np.double]:
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class _VariableUnfolding[T: np.floating = np.double]:
+class VariableUnfolding[T: np.floating = np.double]:
     """One variable's reweighting, or `None` where it could not be fit."""
 
     reweighting: _BinnedReweighting[T] | None
@@ -274,20 +274,20 @@ def _ibu[T: np.floating = np.double](
     return posterior
 
 
-def _unfold_variable[T: np.floating = np.double](
+def unfold_variable[T: np.floating = np.double](
     variable_name: str,
     mc_gen: NDArray[T],
     mc_sim: NDArray[T],
     observed: NDArray[T],
     n_iterations: int,
     purity_threshold: float,
-) -> _VariableUnfolding[T]:
+) -> VariableUnfolding[T]:
     dtype: np.dtype[T] = mc_gen.dtype
     bins: NDArray[T] = _purity_bins(mc_gen, mc_sim, purity_threshold)
     n_bins: int = bins.size - 1
     if n_bins < 2:
         logger.warning("%s: only %d bin(s), skipping", variable_name, n_bins)
-        return _VariableUnfolding(
+        return VariableUnfolding(
             reweighting=None,
             outcome=VariableOutcome(
                 variable_name,
@@ -322,7 +322,7 @@ def _unfold_variable[T: np.floating = np.double](
 
     unfolded: NDArray[T] = _ibu(prior, data_hist, response, n_iterations)
     logger.info("%s: %d bins, %d iterations", variable_name, n_bins, n_iterations)
-    return _VariableUnfolding(
+    return VariableUnfolding(
         reweighting=_BinnedReweighting(
             edges=bins,
             bin_weights=_unfolded_to_bin_weights(unfolded, prior),
@@ -355,7 +355,7 @@ def _run_and_evaluate(
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
         # Fit on every split, then score the test split with the result.
-        unfolding: _VariableUnfolding[np.single] = _unfold_variable(
+        unfolding: VariableUnfolding[np.single] = unfold_variable(
             variable_name=variable_name,
             mc_gen=full.mc.z[:, dimension],
             mc_sim=full.mc.x[:, dimension],

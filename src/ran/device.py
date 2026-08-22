@@ -2,12 +2,10 @@
 
 ``Populations`` is the physics form and ``ZXY`` the transport form; both are host
 NumPy, because they feed SciPy, Matplotlib, npz I/O, and the two baselines --- and
-``ran.baselines.omnifold`` runs them in a TensorFlow process, which must not have
-JAX preallocating the GPU underneath it.
 
 This module is the training form. It lives at the top of the package rather than
 inside ``ran.data`` on purpose: ``ran.data`` is reachable from ``ran.evaluate``
-and so from ``ran.baselines._shared``, which the TensorFlow process imports.
+and so from ``ran.baselines._shared``.
 Nothing here is imported along that path.
 
 Both splits are laid out for a single fused XLA program: the train split stays

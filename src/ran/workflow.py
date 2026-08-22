@@ -150,20 +150,15 @@ def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
 def _load_baseline_weights[T: np.floating = np.double](
     run_dir: Path,
     dim: int,
-) -> tuple[NDArray[T] | None, list[NDArray[T]] | None]:
-    """Pick up OmniFold/IBU weights from the run dir, if those baselines have run."""
-    omnifold_weights: NDArray[T] | None = None
+) -> list[NDArray[T]] | None:
+    """Pick up IBU weights from the run dir, if those baselines have run."""
     ibu_weights: list[NDArray[T]] | None = None
-    of_path: Path = run_dir / "omnifold_weights.npz"
     ibu_path: Path = run_dir / "ibu_weights.npz"
-    if of_path.exists():
-        omnifold_weights = np.load(file=of_path)["weights"]
-        logger.info("Loaded OmniFold weights from %s", of_path)
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
         ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
         logger.info("Loaded IBU weights from %s", ibu_path)
-    return omnifold_weights, ibu_weights
+    return ibu_weights
 
 
 def run(
@@ -254,7 +249,7 @@ def run(
             variables=variables,
         )
 
-    omnifold_weights, ibu_weights = _load_baseline_weights(run_dir, dim)
+    ibu_weights = _load_baseline_weights(run_dir, dim)
 
     # Plots
     plot_detector_level(
@@ -262,7 +257,6 @@ def run(
         g,
         save_path=run_dir / "detector_level.pdf",
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
     plot_particle_level(
@@ -270,7 +264,6 @@ def run(
         g,
         save_path=run_dir / "particle_level.pdf",
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
     plot_losses(history, save_path=run_dir / "losses.pdf")

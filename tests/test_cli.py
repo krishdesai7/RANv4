@@ -30,8 +30,8 @@ def test_registered_command_trees_are_exact() -> None:
         "sweep",
         "leakage-check",
     }
-    assert _command_names(baseline_app) == {"omnifold", "ibu"}
-    assert _command_names(sweep_app) == {"ran", "omnifold", "collect"}
+    assert _command_names(baseline_app) == {"ibu"}
+    assert _command_names(sweep_app) == {"ran", "collect"}
 
 
 @pytest.mark.parametrize(
@@ -39,10 +39,8 @@ def test_registered_command_trees_are_exact() -> None:
     [
         ("train",),
         ("evaluate",),
-        ("baseline", "omnifold"),
         ("baseline", "ibu"),
         ("sweep", "ran"),
-        ("sweep", "omnifold"),
         ("sweep", "collect"),
         ("leakage-check",),
     ],
@@ -54,7 +52,7 @@ def test_every_leaf_command_has_help(command) -> None:
 
 
 def test_importing_cli_does_not_commit_a_keras_backend() -> None:
-    completed = subprocess.run(
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
         [
             sys.executable,
             "-c",

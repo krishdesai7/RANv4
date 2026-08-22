@@ -82,18 +82,6 @@ def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
     evaluate_runs(run_dir, force)
 
 
-@baseline_app.command(name="omnifold")
-def omnifold_command(
-    run_dir: Path = RUN_DIR,
-    force: bool = False,
-    niter: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
-    epochs: Annotated[int, typer.Option("--epochs", "-e", min=1)] = 50,
-) -> None:
-    from .baselines.omnifold import evaluate_runs
-
-    evaluate_runs(run_dir, force, niter, epochs)
-
-
 @baseline_app.command(name="ibu")
 def ibu_command(
     run_dir: Path = RUN_DIR,
@@ -134,33 +122,6 @@ def sweep_ran_command(
         batch_size,
         ran_epochs,
         init_seed,
-    )
-
-
-@sweep_app.command(name="omnifold")
-def sweep_omnifold_command(
-    s_index: Annotated[int, typer.Option("--s-index", "-s", min=0)],
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-    seed: int = 42,
-    omnifold_niter: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
-    omnifold_epochs: Annotated[int, typer.Option("--epochs", "-e", min=1)] = 50,
-    omnifold_batch_size: Annotated[
-        int, typer.Option("--batch-size", "-b", min=1)
-    ] = 512,
-) -> None:
-    from .experiments.cubic_sweep import run_omnifold
-
-    run_omnifold(
-        s_index,
-        sweep_dir,
-        n_samples,
-        n_points,
-        seed,
-        omnifold_niter,
-        omnifold_epochs,
-        omnifold_batch_size,
     )
 
 

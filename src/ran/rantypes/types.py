@@ -4,10 +4,7 @@ from typing import TYPE_CHECKING, Protocol, TypedDict
 
 # `Variables` is used as a runtime annotation by the `@jaxtyped(beartype)`
 # functions in `ran.train`, and beartype has to evaluate the alias to check
-# it -- so `JaxArray` cannot hide under TYPE_CHECKING. Importing `jax` here is
-# safe: `ran.rantypes.types` cannot be imported without `ran.__init__` running
-# first, so JAX_ENABLE_X64 is already set, and jax does not fix the Keras
-# backend that `ran.baselines.omnifold` pins to tensorflow.
+# it -- so `JaxArray` cannot hide under TYPE_CHECKING.
 from jax import Array as JaxArray
 
 if TYPE_CHECKING:

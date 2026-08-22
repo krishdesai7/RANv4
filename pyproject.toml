@@ -134,6 +134,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
+# Benchmarks report to a terminal and are read by a human running them by hand;
+# routing that through the logging config would bury the numbers.
+"benchmarks/**.py" = ["T20"]
 # package __init__ is the backend bootstrap: must set KERAS_BACKEND and
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]

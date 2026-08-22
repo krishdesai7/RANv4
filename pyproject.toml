@@ -83,9 +83,14 @@ search-path = ["src"]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
+# Benchmarks rebind `ran.models` builders to the same functions recompiled at
+# another dtype. That is the measurement, and no checker can follow it. They are
+# still linted and formatted; they are just not part of the typed surface.
+project-excludes = ["benchmarks/**"]
 
 
-[tool.ty]
+[tool.ty.src]
+exclude = ["benchmarks/**"]
 
 
 [tool.ruff]

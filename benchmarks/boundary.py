@@ -13,18 +13,21 @@ from __future__ import annotations
 import io
 import sys
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import jax
 import numpy as np
-import ran  # noqa: F401  -- pins KERAS_BACKEND/x64 before keras or jax load
+import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND/x64 before keras or jax load
 from ran.data import RANDataset
 from ran.data.device import TrainSplit
 from ran.rantypes import Events, Populations
 from ran.train import train
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 N_SAMPLES: int = 500_000
 DIM: int = 6
@@ -35,10 +38,14 @@ results: dict[str, float] = {}
 
 
 @contextmanager
-def phase(name: str) -> Iterator[None]:
+def phase(name: str) -> Generator[None]:
     start = time.perf_counter()
-    yield
-    results[name] = time.perf_counter() - start
+    try:
+        yield
+    finally:
+        # Record even on failure, so a crash mid-benchmark still reports the
+        # phases that completed rather than losing the whole run.
+        results[name] = time.perf_counter() - start
 
 
 def main() -> None:
@@ -64,14 +71,24 @@ def main() -> None:
 
     with phase("train, 1 epoch (includes XLA compile)"):
         train(
-            splits, dim=DIM, hidden_units=64, n_layers=2,
-            patience=99, n_epochs=1, seed=0,
+            splits,
+            dim=DIM,
+            hidden_units=64,
+            n_layers=2,
+            patience=99,
+            n_epochs=1,
+            seed=0,
         )
 
     with phase(f"train, {EPOCHS} epochs (a default run)"):
         train(
-            splits, dim=DIM, hidden_units=64, n_layers=2,
-            patience=99, n_epochs=EPOCHS, seed=0,
+            splits,
+            dim=DIM,
+            hidden_units=64,
+            n_layers=2,
+            patience=99,
+            n_epochs=EPOCHS,
+            seed=0,
         )
 
     # --- host side: does NOT scale with the accelerator ---
@@ -91,9 +108,7 @@ def main() -> None:
                 jensenshannon(h_ref / h_ref.sum(), h_comp / h_comp.sum())
 
     with phase("np.savez_compressed (the dataset cache)"):
-        np.savez_compressed(
-            io.BytesIO(), z=ref, x=comp, y=splits.train.as_arrays().y
-        )
+        np.savez_compressed(io.BytesIO(), z=ref, x=comp, y=splits.train.as_arrays().y)
 
     width = max(len(name) for name in results)
     for name, seconds in results.items():

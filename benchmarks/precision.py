@@ -18,10 +18,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol, cast
 
 DTYPE: str = sys.argv[1] if len(sys.argv) > 1 else "float64"
 SEED: int = int(sys.argv[2]) if len(sys.argv) > 2 else 7
@@ -33,17 +30,32 @@ if DTYPE not in {"float32", "float64"}:
 os.environ["KERAS_BACKEND"] = "jax"
 os.environ["JAX_ENABLE_X64"] = "1" if DTYPE == "float64" else "0"
 
-import numpy as np  # noqa: E402
-import ran  # noqa: E402, F401  -- import order is load-bearing; see above
-import ran.train as train_module  # noqa: E402
-from ran.data import RANDataset  # noqa: E402
-from ran.rantypes import Events, Populations  # noqa: E402
-from scipy.stats import wasserstein_distance  # noqa: E402
+import numpy as np  # ruff: ignore[module-import-not-at-top-of-file]
+import ran  # ruff: ignore[module-import-not-at-top-of-file, unused-import]  -- import order is load-bearing; see above
+import ran.train as train_module  # ruff: ignore[module-import-not-at-top-of-file]
+from ran.data import RANDataset  # ruff: ignore[module-import-not-at-top-of-file]
+from ran.rantypes import (  # ruff: ignore[module-import-not-at-top-of-file]
+    Events,
+    Populations,
+)
+from scipy.stats import (  # ruff: ignore[module-import-not-at-top-of-file]
+    wasserstein_distance,
+)
 
 if TYPE_CHECKING:
     from ran.rantypes import DatasetSplits, RANModel
 
-    type ModelBuilder = Callable[..., RANModel]
+    class ModelBuilder(Protocol):
+        """The exact shape of `ran.models.build_{generator,discriminator}`.
+
+        Spelled out rather than `Callable[..., RANModel]` so that rebinding the
+        module attributes below type-checks instead of needing a suppression.
+        """
+
+        def __call__(
+            self, dim: int = 1, hidden_units: int = 64, n_layers: int = 2
+        ) -> RANModel: ...
+
 
 N_SAMPLES: int = 200_000
 DIM: int = 6
@@ -60,7 +72,7 @@ def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """
     source: str = (REPO_ROOT / "src" / "ran" / "models.py").read_text()
     namespace: dict = {}
-    exec(  # noqa: S102 -- our own source, recompiled with one literal changed
+    exec(  # ruff: ignore[exec-builtin] -- our own source, recompiled with one literal changed
         compile(source.replace('"float64"', f'"{dtype}"'), "ran/models.py", "exec"),
         namespace,
     )
@@ -73,9 +85,7 @@ def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
 def main() -> None:
     scalar = np.float64 if DTYPE == "float64" else np.float32
     generator, discriminator = _builders_at(DTYPE)
-    # pyrefly: ignore[bad-assignment]  -- rebound to the same shape at another dtype
     train_module.build_generator = generator
-    # pyrefly: ignore[bad-assignment]
     train_module.build_discriminator = discriminator
 
     rng = np.random.default_rng(0)

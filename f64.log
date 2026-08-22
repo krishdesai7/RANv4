@@ -8,3 +8,13 @@ SUMMARY dtype=float64 seed=6 mean_improvement=97.4532 min_improvement=95.3583 va
 SUMMARY dtype=float64 seed=7 mean_improvement=97.4379 min_improvement=94.7550 val_loss=0.6932580938 epochs=40
 SUMMARY dtype=float64 seed=8 mean_improvement=97.9455 min_improvement=95.6968 val_loss=0.6929013496 epochs=40
 SUMMARY dtype=float64 seed=9 mean_improvement=97.4199 min_improvement=95.3449 val_loss=0.6928133788 epochs=40
+SUMMARY dtype=float64 seed=12 mean_improvement=97.4126 min_improvement=95.6704 val_loss=0.6931232125 epochs=40
+SUMMARY dtype=float64 seed=23 mean_improvement=97.5386 min_improvement=94.7708 val_loss=0.6929665538 epochs=40
+SUMMARY dtype=float64 seed=32 mean_improvement=97.8017 min_improvement=95.4633 val_loss=0.6928971886 epochs=40
+SUMMARY dtype=float64 seed=58 mean_improvement=98.5663 min_improvement=97.8242 val_loss=0.6933511929 epochs=40
+SUMMARY dtype=float64 seed=96 mean_improvement=98.0234 min_improvement=96.5881 val_loss=0.6928720267 epochs=40
+SUMMARY dtype=float64 seed=117 mean_improvement=97.4761 min_improvement=96.4457 val_loss=0.6932207546 epochs=40
+SUMMARY dtype=float64 seed=132 mean_improvement=97.7531 min_improvement=95.3882 val_loss=0.6931383039 epochs=40
+SUMMARY dtype=float64 seed=153 mean_improvement=97.3660 min_improvement=95.7917 val_loss=0.6929850352 epochs=40
+SUMMARY dtype=float64 seed=166 mean_improvement=97.7615 min_improvement=94.9516 val_loss=0.6931765456 epochs=40
+SUMMARY dtype=float64 seed=170 mean_improvement=97.4882 min_improvement=96.4868 val_loss=0.6927071519 epochs=40

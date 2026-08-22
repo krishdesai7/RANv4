@@ -1,12 +1,12 @@
 """Device-resident training data, the third form alongside ``Populations``/``ZXY``.
 
 ``Populations`` is the physics form and ``ZXY`` the transport form; both are host
-NumPy, because they feed SciPy, Matplotlib, npz I/O, and the two baselines --- and
+NumPy, because they feed SciPy, Matplotlib, npz I/O and the IBU baseline. This
+module is the training form: ``DeviceSplits.from_splits`` is the single
+host-to-device transfer of a run, and after it no batch crosses the boundary again.
 
-This module is the training form. It lives at the top of the package rather than
-inside ``ran.data`` on purpose: ``ran.data`` is reachable from ``ran.evaluate``
-and so from ``ran.baselines._shared``.
-Nothing here is imported along that path.
+All three forms live under ``ran.data`` because they are all the dataset, just at
+different points in its trip to the accelerator.
 
 Both splits are laid out for a single fused XLA program: the train split stays
 flat and is gathered by index inside a ``lax.scan``, so XLA fuses the gather into
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from jaxtyping import Array, Float, Int, PRNGKeyArray
     from numpy.typing import NDArray
 
-    from .rantypes import ZXY, DatasetSplits
+    from ..rantypes import ZXY, DatasetSplits
 
 # Evaluation is forward-only and its batching is not part of the training
 # contract, so it uses a wider batch than training to keep the scan short.

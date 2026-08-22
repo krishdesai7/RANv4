@@ -50,28 +50,28 @@ def _draw_gaussian(
 ]:
     """Draw the four Gaussian populations: (z_true, z_gen, x_data, x_sim).
 
-    Pinned to CPU. Generation runs once and is then npz-cached, so there is
-    nothing to gain from the accelerator --- and this function is reachable from
-    ``ran.baselines._shared`` on a cache miss.
+    Runs on the default device. This used to pin itself to CPU, back when a
+    sibling process was running TensorFlow on the same card and JAX claiming a
+    device would have preallocated the GPU out from under it. Nothing else
+    competes for the accelerator now, so the draw takes whatever is there.
 
     No ``check_valid`` equivalent is needed: ``parse_gaussian_config`` has already
     asserted positive-definiteness with a Cholesky factorization.
     """
-    with jax.default_device(jax.devices(backend="cpu")[0]):
-        k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
+    k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
 
-        z_true = jax.random.multivariate_normal(
-            k_true, mu_true, cov_true, (n_samples,), method="svd"
-        )
-        z_gen = jax.random.multivariate_normal(
-            k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
-        )
+    z_true = jax.random.multivariate_normal(
+        k_true, mu_true, cov_true, (n_samples,), method="svd"
+    )
+    z_gen = jax.random.multivariate_normal(
+        k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
+    )
 
-        chol_det = jnp.linalg.cholesky(jnp.asarray(cov_detector))
-        smear = chol_det.T
+    chol_det = jnp.linalg.cholesky(jnp.asarray(cov_detector))
+    smear = chol_det.T
 
-        x_data = z_true + jax.random.normal(k_data, z_true.shape) @ smear
-        x_sim = z_gen + jax.random.normal(k_sim, z_gen.shape) @ smear
+    x_data = z_true + jax.random.normal(k_data, z_true.shape) @ smear
+    x_sim = z_gen + jax.random.normal(k_sim, z_gen.shape) @ smear
     return z_true, z_gen, x_data, x_sim
 
 
@@ -79,7 +79,7 @@ class ArrayDataset[T: np.floating = np.double]:
     """One host-resident split of (z, x, y), plus how it should be batched.
 
     This is a container, not an iterator. Batch order is drawn on device, per
-    epoch, by ``ran.device.train_indices`` --- so ``batch_size`` and ``seed`` are
+    epoch, by ``ran.data.device.train_indices`` --- so ``batch_size`` and ``seed`` are
     carried here as the split's own parameters and read by
     ``DeviceSplits.from_splits``, but nothing iterates this object.
     """

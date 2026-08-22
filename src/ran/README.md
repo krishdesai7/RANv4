@@ -165,7 +165,7 @@ Adversarial training loop for RAN, on Keras 3 with the JAX backend.
 
 The min-max game needs two optimizers driven at different cadences against a shared loss, which does not fit `Model.fit`, so this is a hand-rolled loop. It follows the standard Keras 3 + JAX pattern: model state lives in plain JAX pytrees (never in the `keras.Variable`s) for the duration of training, updates go through `stateless_call`/`stateless_apply`, and each step is a single jitted function. Values are written back into the Keras models at the end so the returned objects are ordinary, saveable `keras.Model`s.
 
-The loss math is written in backend-agnostic `keras.ops`; only the gradient transform and jit are native JAX.
+The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace — `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX, so backend-agnostic `keras.ops` bought nothing this module could still use.
 
 ### class `TrainResult(NamedTuple)`
 
@@ -201,7 +201,7 @@ The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the
 
 Weighted binary cross-entropy.
 
-Reduced with `ops.sum(...) / n` rather than `ops.mean`: for float64 input `keras.ops.mean` picks a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error, which would silently undo the float64 policy this project runs on. `ops.sum` accumulates in float64, avoiding the error.
+Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops.mean` picks a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error, which would silently undo the float64 policy this project runs on. This module no longer touches `keras.ops`, but the explicit sum-and-divide is what the guard test pins, and anything reaching for `keras.ops` again needs to know. `ops.sum` is unaffected.
 
 **Arguments:**
 

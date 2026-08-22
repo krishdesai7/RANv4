@@ -167,7 +167,7 @@ This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences
 
 ### Baseline Comparisons
 
-Run or IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
+Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
 
 ```bash
 # IBU — single run
@@ -181,9 +181,15 @@ Results are saved to `metrics_ibu.json` in each run directory using the same met
 
 ### Cubic-Response Sweep
 
+Sweeps the strength $s$ of a cubic detector response $r(s, z) = z + s z^3$ and
+records how well each method unfolds it. Each point trains RAN and unfolds the
+same populations with IBU in one pass, writing both into `point_NN.json`;
+`collect` joins them into `results.npz` and `wasserstein_vs_s.pdf`.
+
 ```bash
 ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
 ran sweep collect --sweep-dir runs/cubic-sweep
+bash scripts/submit_sweep.sh   # every point at once on SLURM
 ```
 
 ### Leakage Verification
@@ -206,8 +212,9 @@ bit-identical between the clean and poisoned arms.
 
 ## Backend
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=1`. **Any `ran.*` import must come before `import keras`.** The backend is fixed at the
-first keras import. `src/ran/train.py` raises a clear error if the backend has been incorrectly initialized.
+JAX is the only backend in the build; TensorFlow is not a dependency, direct or transitive.
+
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=1`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
 
 The project is run in float64 precision end to end. Improved GPU throughput can be achieved by reducing precision to float32 by setting `JAX_ENABLE_X64=0` and switching the`dtype=`arguments in`src/ran/models.py`.
 
@@ -217,16 +224,14 @@ The project is run in float64 precision end to end. Improved GPU throughput can 
 - Updates are applied through `stateless_call`/`stateless_apply`
 - Each step is a single jitted function.
 - Values are written back into the Keras models at the end, so the returned objects are ordinary saveable `keras.Model`s.
-- Loss math is written in backend-agnostic `keras.ops`.
-- Only the gradient transform and `jit` are native JAX.
+- Loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace; `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX, so backend-agnostic `keras.ops` bought nothing this module could still use.
 
-It is important to flag two potentially unexpected behaviours that may lead to bugs:
+One unexpected behaviour is worth flagging, because it is the reason the reduction is written the way it is:
 
 - **`keras.ops.mean` is not float64-safe.**
   - For float64 input, it selects a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error.
-  - This is why RAN's `src/ran/train.py` reduces with `ops.sum(...) / n` instead of `ops.mean(...)`;
-  - `tests/test_train.py` guards this behaviour.
-  - `ops.sum` is unaffected.
+  - `src/ran/train.py` no longer touches `keras.ops`, but it still reduces with `jnp.sum(...) / n` rather than a mean, and `tests/test_train.py` guards the accuracy either way.
+  - Anything that reaches for `keras.ops` again needs to know. `ops.sum` is unaffected.
 
 ## Seeding
 
@@ -270,12 +275,13 @@ RANv4/
 │   │   ├── config.py             YAML config parsing, sigma promotion
 │   │   ├── datasets.py           DatasetSplits, RANDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
+│   │   ├── device.py             Device-resident training form (TrainSplit/EvalSplit)
 │   │   └── download.py           One-time Zenodo data download
 │   ├── baselines/
-│   │   ├── _shared.py            Run config and populations shared by both (keras-free)
+│   │   ├── _shared.py            Run config and populations a baseline needs, minus the unfolder
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 │   ├── experiments/
-│   │   └── cubic_sweep.py        Cubic-response RAN sweep
+│   │   └── cubic_sweep.py        Cubic-response RAN-vs-IBU sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -296,8 +302,8 @@ RANv4/
 └── .cache/                       Cached datasets
 ```
 
-`src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with
-module-level detail.
+`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
+`src/ran/experiments/` carry their own `README.md` with module-level detail.
 
 ## Datasets
 

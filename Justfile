@@ -27,7 +27,7 @@ lint:
     uv run --locked ruff check
 
 # Run Pyrefly type checks.
-type-check:
+typecheck:
     uv run --locked pyrefly check --min-severity info
     uv check --locked
 

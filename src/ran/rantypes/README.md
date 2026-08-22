@@ -2,10 +2,6 @@
 
 Records, constants and aliases shared across the package.
 
-These live apart from the code that uses them because a process gets a single Keras backend, fixed at the first `keras` import, so `ran.cli` and `ran.baselines._shared` have to stay importable without committing to one. They cannot reach into `ran.train` (JAX) or `ran.baselines.omnifold` (TensorFlow) for a shared declaration, so the
-declaration must live here instead. Nothing in this package imports keras or jax
-at runtime.
-
 Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.train`.
 
 ## module: `configs`

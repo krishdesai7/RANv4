@@ -222,9 +222,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
         return json.loads(out_path.read_text())
 
     # Imported here, not at module scope, so this module stays keras-free on
-    # import. ran.baselines.omnifold depends on that: it must pin
-    # KERAS_BACKEND=tensorflow before anything pulls keras in, and it imports
-    # from this module.
+    # import.
     import keras
 
     config = json.loads((run_dir / "config.json").read_text())

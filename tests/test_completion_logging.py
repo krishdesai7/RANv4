@@ -1,7 +1,5 @@
 import json
 import logging
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- backend isolation
-import sys
 from types import SimpleNamespace
 
 
@@ -56,8 +54,6 @@ def test_evaluation_records_metrics_artifact_completion(
     z = np.array([[0.0], [1.0], [2.0], [3.0]])
     test_data = ZXY(Events(z, z.copy()), np.array([1, 1, 0, 0], dtype=np.ubyte))
 
-    # evaluate_run imports keras inside the function (so ran.evaluate stays
-    # keras-free for the OmniFold backend pin), so patch the real module.
     monkeypatch.setattr(keras.saving, "load_model", lambda _path: object())
     monkeypatch.setattr(
         evaluate, "_load_splits", lambda _config: SimpleNamespace(test=object())
@@ -93,42 +89,6 @@ def test_evaluation_records_metrics_artifact_completion(
         "metrics" in message.lower() and str(out_path) in message
         for message in messages
     )
-
-
-def test_omnifold_records_metric_and_weight_artifact_completion(tmp_path) -> None:
-    run_dir = tmp_path / "sample-run"
-    run_dir.mkdir()
-    script = """
-import logging
-import sys
-from pathlib import Path
-
-import numpy as np
-
-from ran.baselines import omnifold
-
-run_dir = Path(sys.argv[1])
-(run_dir / "config.json").write_text('{"dim": 1, "n_samples": 1, "batch_size": 1}')
-omnifold._run_and_evaluate = lambda config, niter, epochs, out_dir: ({}, [], np.ones(2))
-omnifold.render_metrics = lambda *args, **kwargs: None
-logging.basicConfig(level=logging.INFO)
-omnifold.evaluate_single(run_dir)
-"""
-
-    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- isolated fixed script
-        [sys.executable, "-c", script, str(run_dir)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    metrics_path = run_dir / "metrics_omnifold.json"
-    weights_path = run_dir / "omnifold_weights.npz"
-    assert completed.returncode == 0, completed.stderr
-    assert metrics_path.exists()
-    assert weights_path.exists()
-    assert str(metrics_path) in completed.stderr
-    assert str(weights_path) in completed.stderr
 
 
 def test_ibu_records_metric_and_weight_artifact_completion(

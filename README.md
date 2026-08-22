@@ -167,18 +167,9 @@ This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences
 
 ### Baseline Comparisons
 
-Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) or IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
+Run or IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
 
 ```bash
-# OmniFold — single run
-ran baseline omnifold --run-dir runs/2026-03-14T061023Z
-
-# OmniFold — all runs
-ran baseline omnifold
-
-# Customize OmniFold iterations/epochs
-ran baseline omnifold --run-dir runs/2026-03-14T061023Z --niter 5 --epochs 100
-
 # IBU — single run
 ran baseline ibu --run-dir runs/2026-03-14T061023Z
 
@@ -186,15 +177,12 @@ ran baseline ibu --run-dir runs/2026-03-14T061023Z
 ran baseline ibu
 ```
 
-Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
+Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
 
 ### Cubic-Response Sweep
 
-Run each step as its own process so RAN's JAX backend and OmniFold's TensorFlow backend never share an interpreter:
-
 ```bash
 ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
-ran sweep omnifold --s-index 0 --sweep-dir runs/cubic-sweep
 ran sweep collect --sweep-dir runs/cubic-sweep
 ```
 
@@ -239,10 +227,6 @@ It is important to flag two potentially unexpected behaviours that may lead to b
   - This is why RAN's `src/ran/train.py` reduces with `ops.sum(...) / n` instead of `ops.mean(...)`;
   - `tests/test_train.py` guards this behaviour.
   - `ops.sum` is unaffected.
-- **`omnifold` cannot run on JAX.**
-  - Its `weighted_binary_crossentropy` calls raw `tf.gather`, which raises `TracerArrayConversionError` under JAX tracing.
-  - Therefore, `src/ran/baselines/omnifold.py` pins `KERAS_BACKEND=tensorflow` at import and must be the entry point of its own process.
-  - This is why RAN does not allow `omnifold` to be imported from a module that has already touched JAX, and why the cubic sweep splits into separate `sweep ran` / `sweep omnifold` subcommands.
 
 ## Seeding
 
@@ -289,10 +273,9 @@ RANv4/
 │   │   └── download.py           One-time Zenodo data download
 │   ├── baselines/
 │   │   ├── _shared.py            Run config and populations shared by both (keras-free)
-│   │   ├── omnifold.py           OmniFold comparison baseline (pins TensorFlow)
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 │   ├── experiments/
-│   │   └── cubic_sweep.py        Cubic-response RAN-vs-OmniFold sweep
+│   │   └── cubic_sweep.py        Cubic-response RAN sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -348,7 +331,6 @@ Each run produces a timestamped directory under `runs/` containing:
 - **`particle_level.pdf`** -- Same comparison at particle level
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
-- **`metrics_omnifold.json`** -- Same metrics from OmniFold baseline (if run)
 - **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
 
 ## Training Hyperparameters
@@ -393,4 +375,3 @@ cognitive complexity of 10.
 - [`Matplotlib`](https://matplotlib.org/) >= 3.11.1
 - [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
 - [`PyYAML`](https://pyyaml.org/) >= 6.0.3
-- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1.36

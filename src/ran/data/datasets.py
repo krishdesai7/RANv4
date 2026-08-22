@@ -52,14 +52,12 @@ def _draw_gaussian(
 
     Pinned to CPU. Generation runs once and is then npz-cached, so there is
     nothing to gain from the accelerator --- and this function is reachable from
-    ``ran.baselines._shared`` on a cache miss, which runs inside the
-    TensorFlow-pinned OmniFold process. Letting JAX take a device there would
-    have it preallocate the GPU out from under TensorFlow.
+    ``ran.baselines._shared`` on a cache miss.
 
     No ``check_valid`` equivalent is needed: ``parse_gaussian_config`` has already
     asserted positive-definiteness with a Cholesky factorization.
     """
-    with jax.default_device(jax.devices("cpu")[0]):
+    with jax.default_device(jax.devices(backend="cpu")[0]):
         k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
 
         z_true = jax.random.multivariate_normal(

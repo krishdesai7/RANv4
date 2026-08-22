@@ -230,17 +230,6 @@ All computed per-dimension (1D marginals). Improvement reported as percent reduc
 
 ## 9. Baselines
 
-### OmniFold (`src/ran/baselines/omnifold.py`)
-
-The standard ML unfolding method. Trains two networks iteratively:
-
-1. Step 1: reweight data vs. sim at reco level → weights on sim
-2. Step 2: reweight pushed-back MC at particle level
-
-Uses the same dataset as RAN for fair comparison. Runs 3 iterations, 50 epochs each. Weights are saved to `omnifold_weights.npz` and overlaid on RAN plots.
-
-**Key difference from RAN:** OmniFold uses a two-step iterative procedure and operates differently at each level. RAN trains both networks simultaneously in an adversarial game, with the generator directly producing particle-level weights in one shot.
-
 ### IBU (`src/ran/baselines/ibu.py`)
 
 Classic frequentist unfolding. 1D per-variable:
@@ -251,7 +240,7 @@ Classic frequentist unfolding. 1D per-variable:
 
 **Purity-based binning:** bins are grown greedily from the left until P(same bin at gen and reco) > √0.5 ≈ 0.707. This ensures the response matrix is well-conditioned.
 
-**Limitation:** strictly 1D — cannot capture correlations between variables. RAN and OmniFold handle the joint distribution natively.
+**Limitation:** strictly 1D — cannot capture correlations between variables. RAN handles the joint distribution natively.
 
 ---
 
@@ -265,7 +254,7 @@ Each run produces three PDFs:
 
 **`losses.pdf`** — train/val discriminator and generator loss curves with `log(2)` reference line. Convergence to `log(2)` confirms the adversarial equilibrium was reached.
 
-All three plots overlay OmniFold and IBU curves if their weights are present in the run directory.
+All three plots overlay IBU curves if their weights are present in the run directory.
 
 ---
 
@@ -282,7 +271,6 @@ ran train --config params/1d_default.yaml
        ├── losses.pdf
        └── metrics.json
 
-ran baseline omnifold --run-dir runs/...  → metrics_omnifold.json, omnifold_weights.npz
 ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
 ran train --load-run runs/...             → reload + re-plot with baseline overlays
 ```
@@ -299,7 +287,6 @@ ran train --load-run runs/...             → reload + re-plot with baseline ove
 - **SciPy** — Wasserstein distance, Jensen-Shannon divergence
 - **Matplotlib** — publication-quality plots (serif font, ratio panels)
 - **Typer** + **Rich** — one CLI command tree, structured logging and metrics tables
-- **TensorFlow** — only for the OmniFold baseline, which cannot run on JAX and so runs in its own process
 - **SLURM** — `scripts/submit.sh` for cluster runs
 
 ---
@@ -356,7 +343,7 @@ Runs are organized into five experimental families. Each family demonstrates a d
 | `2026-03-14T060656Z` | 5   | 97.4%, 92.2%, 96.4%, 96.8%, 95.8%         |
 | `2026-03-14T061333Z` | 6   | 96.2%, 97.5%, 95.8%, 94.6%, 84.5%, 88.4%  |
 
-**Takeaway:** performance stays consistently above ~85% across all dimensions with uncorrelated structure. All runs have full baseline overlays (OmniFold + IBU).
+**Takeaway:** performance stays consistently above ~85% across all dimensions with uncorrelated structure. All runs have full baseline overlays (IBU).
 
 ---
 
@@ -439,4 +426,3 @@ Earlier jets runs:
 
 - `2026-03-17T181755Z` — missing `metrics.json` (evaluation crashed, baselines still present)
 - `2026-03-19T172653Z` — same
-- `2026-03-19T202353Z` — has metrics but missing `omnifold_weights.npz`

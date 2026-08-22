@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch the cubic-response RAN-vs-OmniFold sweep as ONE packed multi-node job.
+# Launch the cubic-response RAN sweep as ONE packed multi-node job.
 # Run on the login node:  bash scripts/submit_sweep.sh
 # (Do NOT sbatch this file itself; it computes the sweep dir and submits the job.)
 #
@@ -48,14 +48,10 @@ cd "${PROJECT_DIR}"
 step="srun --exact --nodes=1 --ntasks=1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56G"
 
 for i in $(seq 0 $((N_POINTS - 1))); do
-  # RAN (JAX) and OmniFold (TensorFlow) cannot share a process -- one Keras
-  # backend per interpreter -- so each point is two sequential subcommands in
-  # one GPU step. Capture the log so a crash in one point is easy to find and
+  # Capture the log so a crash in one point is easy to find and
   # never sinks the others (collect tolerates missing point files).
   $step bash -c "
       uv run ran sweep ran \
-          --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
-      uv run ran sweep omnifold \
           --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
     " > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
 

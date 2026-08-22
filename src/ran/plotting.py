@@ -77,7 +77,6 @@ def _hist_ratio_panel(
     mc_label: str,
     xlabel: str,
     title: str,
-    w_omnifold: NDArray[np.double] | None = None,
     w_ibu: NDArray[np.double] | None = None,
 ) -> None:
     h_nature: tuple = ax.hist(
@@ -138,31 +137,6 @@ def _hist_ratio_panel(
         linestyle="--",
         alpha=0.35,
     )
-
-    if w_omnifold is not None:
-        h_of: tuple = ax.hist(
-            x_mc,
-            bins=h_nature[1],
-            weights=w_omnifold,
-            histtype="step",
-            color="red",
-            linestyle="--",
-            linewidth=4,
-            alpha=0.35,
-            label="OmniFold",
-        )
-        ratio_of: NDArray[np.double] = np.full_like(
-            a=h_of[0], fill_value=np.nan, dtype=np.double
-        )
-        ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
-        ax_r.plot(
-            centres,
-            ratio_of,
-            color="red",
-            marker="d",
-            linestyle="--",
-            alpha=0.35,
-        )
 
     if w_ibu is not None:
         h_ibu: tuple = ax.hist(
@@ -273,7 +247,6 @@ def _plot_level(
     style: _LevelStyle,
     save_path: str | Path,
     var_info: list[VarInfo] | None,
-    omnifold_weights: NDArray[np.double] | None,
     ibu_weights: list[NDArray[np.double]] | None,
 ) -> None:
     """Draw one stacked hist+ratio panel per dimension and save the figure."""
@@ -301,7 +274,6 @@ def _plot_level(
             mc_label=style.mc_label,
             xlabel=panel.xlabel,
             title=panel.title,
-            w_omnifold=omnifold_weights,
             w_ibu=ibu_weights[i] if ibu_weights is not None else None,
         )
     _save_fig(figure, save_path=Path(save_path))
@@ -312,7 +284,6 @@ def plot_detector_level(
     g: RANModel,
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: NDArray[np.double] | None = None,
     ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
     test: Populations[np.double] = _collect_data(test_dataset)
@@ -324,7 +295,6 @@ def plot_detector_level(
         style=_DETECTOR,
         save_path=save_path,
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
 
@@ -334,7 +304,6 @@ def plot_particle_level(
     g: RANModel,
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: NDArray[np.double] | None = None,
     ibu_weights: list[NDArray[np.double]] | None = None,
 ) -> None:
     test: Populations[np.double] = _collect_data(test_dataset)
@@ -346,7 +315,6 @@ def plot_particle_level(
         style=_PARTICLE,
         save_path=save_path,
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
 

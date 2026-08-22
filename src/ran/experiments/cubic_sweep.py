@@ -142,64 +142,19 @@ def run_ran(
     )
 
 
-def run_omnifold(
-    s_index: int,
-    sweep_dir: Path,
-    n_samples: int = 500_000,
-    n_points: int = 25,
-    seed: int = 42,
-    omnifold_niter: int = 3,
-    omnifold_epochs: int = 50,
-    omnifold_batch_size: int = 512,
-) -> dict:
-    from ..baselines.omnifold import omnifold_unfold
-
-    s, pops = _sweep_point(s_index, n_points, n_samples, seed)
-
-    # OmniFold derives validation_steps=0.2*NTRAIN//batch_size from reco events; if that
-    # floors to 0 model.fit hangs forever. Cap batch size at 2*n/5 so there is always
-    # >= 1 validation step.
-    of_batch: int = max(1, min(omnifold_batch_size, 2 * n_samples // 5))
-    w_of: NDArray[np.single] = _finite(
-        omnifold_unfold(
-            x_data=pops.data,
-            x_sim=pops.mc.x,
-            z_gen=pops.mc.z,
-            niter=omnifold_niter,
-            epochs=omnifold_epochs,
-            batch_size=of_batch,
-            # Per-point subdirectory, not sweep_dir: submit_sweep.sh runs every point
-            # from cwd concurrently, so shared out_dir would truncate OmniFold logs.
-            out_dir=sweep_dir / f"omnifold_{s_index:02d}",
-        )
-    )
-
-    of_wd: np.double = unfolded_wasserstein(
-        z_truth=pops.require_truth(), z_gen=pops.mc.z, weights=w_of
-    )
-    logger.info("s=%.4f  OmniFold=%.6f", s, of_wd)
-    return _write_point(
-        sweep_dir,
-        prefix="omnifold",
-        out={"s_index": s_index, "s": s, "omnifold_wd": of_wd},
-    )
-
-
 def _complete_points(sweep_dir: Path, n_points: int) -> list[dict[str, Any]]:
     records: dict[int, dict[str, Any]] = {}
-    for prefix in ("ran", "omnifold"):
+    for prefix in ("ran",):
         for f in sorted(sweep_dir.glob(pattern=f"{prefix}_*.json")):
             rec: dict = json.loads(s=f.read_text())
             records.setdefault(rec["s_index"], {}).update(rec)
 
     complete: list[dict[str, Any]] = sorted(
-        (r for r in records.values() if "ran_wd" in r and "omnifold_wd" in r),
+        (r for r in records.values() if "ran_wd" in r),
         key=operator.itemgetter("s"),
     )
     if not complete:
-        raise FileNotFoundError(
-            f"No sweep point in {sweep_dir} has both ran_*.json and omnifold_*.json"
-        )
+        raise FileNotFoundError(f"No sweep point in {sweep_dir} has ran_*.json")
 
     present: set[Any] = {r["s_index"] for r in complete}
     missing: list[int] = sorted(set(range(n_points)) - present)
@@ -212,14 +167,12 @@ def _plot_sweep(
     sweep_dir: Path,
     s: NDArray[np.double],
     ran: NDArray[np.double],
-    omnifold: NDArray[np.double],
 ) -> None:
     """Wasserstein-vs-distortion curve for both methods."""
     figure = Figure(figsize=(7, 5))
     figure.canvas = FigureCanvasPdf(figure)
     ax: Axes = figure.subplots()
     ax.plot(s, ran, "o-", label="RAN")
-    ax.plot(s, omnifold, "s-", label="OmniFold")
     ax.set_xlabel(xlabel=r"$s$ (cubic distortion strength)")
     ax.set_ylabel(ylabel=r"Wasserstein($z_\mathrm{truth}$, $z_\mathrm{unfolded}$)")
     ax.set_title(label="Unfolding performance vs detector distortion")
@@ -233,9 +186,8 @@ def collect(sweep_dir: Path, n_points: int = 25) -> None:
 
     s: NDArray[np.double] = np.array(object=[r["s"] for r in complete])
     ran: NDArray[np.double] = np.array(object=[r["ran_wd"] for r in complete])
-    omnifold: NDArray[np.double] = np.array(object=[r["omnifold_wd"] for r in complete])
-    np.savez(file=sweep_dir / "results.npz", s=s, ran=ran, omnifold=omnifold)
-    _plot_sweep(sweep_dir, s, ran, omnifold)
+    np.savez(file=sweep_dir / "results.npz", s=s, ran=ran)
+    _plot_sweep(sweep_dir, s, ran)
     logger.info(
         "Wrote %s and %s (%d points)",
         sweep_dir / "results.npz",

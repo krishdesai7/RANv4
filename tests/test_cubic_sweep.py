@@ -98,21 +98,6 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
     assert json.loads((tmp_path / "ran_03.json").read_text()) == out
 
 
-def test_run_ran_and_run_omnifold_see_identical_particles() -> None:
-    """Both subcommands must unfold the same sample to be comparable."""
-
-    s_a, a = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
-    s_b, b = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
-    assert s_a == s_b
-    for lhs, rhs in (
-        (a.mc.z, b.mc.z),
-        (a.mc.x, b.mc.x),
-        (a.data, b.data),
-        (a.truth, b.truth),
-    ):
-        np.testing.assert_array_equal(lhs, rhs)
-
-
 def test_sweep_point_returns_columns_with_truth() -> None:
     """Both unfolders take (n, 1); the answer key is real, not the sentinel."""
     _, pops = _sweep_point(s_index=4, n_points=25, n_samples=1000, seed=0)
@@ -122,16 +107,12 @@ def test_sweep_point_returns_columns_with_truth() -> None:
 
 
 def _write_points(
-    tmp_path, indices: list[int], s_values: list[float], ran=True, omnifold=True
+    tmp_path, indices: list[int], s_values: list[float], ran=True
 ) -> None:
     for i, s in zip(indices, s_values, strict=False):
         if ran:
             (tmp_path / f"ran_{i:02d}.json").write_text(
                 json.dumps({"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1)})
-            )
-        if omnifold:
-            (tmp_path / f"omnifold_{i:02d}.json").write_text(
-                json.dumps({"s_index": i, "s": s, "omnifold_wd": 0.2 * (i + 1)})
             )
 
 
@@ -146,14 +127,13 @@ def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path) -> Non
     data = np.load(tmp_path / "results.npz")
     np.testing.assert_array_equal(data["s"], [0.0, 10.0])
     np.testing.assert_allclose(data["ran"], [0.1, 0.2])
-    np.testing.assert_allclose(data["omnifold"], [0.2, 0.4])
 
 
 def test_collect_skips_points_missing_one_method(tmp_path, caplog) -> None:
     """A point where only one side finished must not be half-plotted."""
 
     _write_points(tmp_path, [0], [0.0])
-    _write_points(tmp_path, [1], [10.0], omnifold=False)  # RAN only
+    _write_points(tmp_path, [1], [10.0])  # RAN only
     with caplog.at_level("WARNING"):
         collect(sweep_dir=tmp_path, n_points=2)
 
@@ -164,6 +144,6 @@ def test_collect_skips_points_missing_one_method(tmp_path, caplog) -> None:
 
 def test_collect_raises_when_no_point_is_complete(tmp_path) -> None:
 
-    _write_points(tmp_path, [0], [0.0], omnifold=False)
+    _write_points(tmp_path, [0], [0.0])
     with pytest.raises(FileNotFoundError, match="both"):
         collect(sweep_dir=tmp_path, n_points=1)

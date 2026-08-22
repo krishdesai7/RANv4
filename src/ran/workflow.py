@@ -151,7 +151,7 @@ def _load_baseline_weights[T: np.floating = np.double](
     run_dir: Path,
     dim: int,
 ) -> list[NDArray[T]] | None:
-    """Pick up IBU weights from the run dir, if those baselines have run."""
+    """Pick up IBU weights from the run dir, if that baseline has run."""
     ibu_weights: list[NDArray[T]] | None = None
     ibu_path: Path = run_dir / "ibu_weights.npz"
     if ibu_path.exists():
@@ -186,7 +186,7 @@ def run(
     if load_run is not None:
         run_dir = Path(load_run)
         # parse_run_config validates an already-decoded JSON object, not text --
-        # the two baselines that call it both json.loads first.
+        # the IBU baseline that also calls it json.loads first.
         saved_config: RunConfig = parse_run_config(
             raw=json.loads(s=(run_dir / "config.json").read_text())
         )

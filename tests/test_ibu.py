@@ -194,14 +194,14 @@ def test_normalize_weights_returns_mean_one() -> None:
     assert np.all(normalized >= 0)
 
 
-def test_unfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
+def testunfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
     monkeypatch.setattr(
         ibu,
         "_purity_bins",
         lambda *_args, **_kwargs: np.array([0.0, 1.0], dtype=np.double),
     )
 
-    result = ibu._unfold_variable(
+    result = ibu.unfold_variable(
         variable_name="dim_0",
         mc_gen=np.array([0.2, 0.8], dtype=np.double),
         mc_sim=np.array([0.3, 0.7], dtype=np.double),
@@ -218,14 +218,14 @@ def test_unfold_variable_reports_insufficient_bins_as_skip(monkeypatch) -> None:
     )
 
 
-def test_unfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
+def testunfold_variable_returns_safe_mean_one_weights(monkeypatch) -> None:
     monkeypatch.setattr(
         ibu,
         "_purity_bins",
         lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
     )
 
-    result = ibu._unfold_variable(
+    result = ibu.unfold_variable(
         variable_name="dim_0",
         mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
         mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
@@ -255,7 +255,7 @@ def test_unfolds_in_single_precision_end_to_end() -> None:
     mc_sim = (mc_gen + 0.3 * rng.normal(size=n)).astype(np.single)
     observed = (0.5 + rng.normal(size=n)).astype(np.single)
 
-    result = ibu._unfold_variable(
+    result = ibu.unfold_variable(
         variable_name="dim_0",
         mc_gen=mc_gen,
         mc_sim=mc_sim,
@@ -282,7 +282,7 @@ def test_unfolding_applies_to_a_sample_it_was_not_fit_on(monkeypatch) -> None:
         lambda *_args, **_kwargs: np.array([0.0, 1.0, 2.0], dtype=np.double),
     )
 
-    result = ibu._unfold_variable(
+    result = ibu.unfold_variable(
         variable_name="dim_0",
         mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
         mc_sim=np.array([-1.0, 0.7, 1.3, 3.0], dtype=np.double),
@@ -303,7 +303,7 @@ def test_unfolding_applies_to_a_sample_it_was_not_fit_on(monkeypatch) -> None:
     ("corrupt_call", "population"),
     [(1, "prior"), (2, "observed")],
 )
-def test_unfold_variable_reports_population_count_mismatch(
+def testunfold_variable_reports_population_count_mismatch(
     monkeypatch, corrupt_call: int, population: str
 ) -> None:
     monkeypatch.setattr(
@@ -325,7 +325,7 @@ def test_unfold_variable_reports_population_count_mismatch(
     monkeypatch.setattr(ibu, "_bin_counts", dropping_bin_counts)
 
     with pytest.raises(ValueError, match=rf"{population}.*3.*4"):
-        ibu._unfold_variable(
+        ibu.unfold_variable(
             variable_name="dim_0",
             mc_gen=np.array([0.2, 0.8, 1.2, 1.8], dtype=np.double),
             mc_sim=np.array([0.3, 0.7, 1.3, 1.7], dtype=np.double),

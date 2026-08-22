@@ -1,8 +1,8 @@
 # Baselines
 
-This directory contains the baselines for the RAN project.
+This directory contains the comparison baselines for the RAN project.
 
-Comparison baselines: **IBU**
+Comparison baseline: **IBU**
 
 ```python
     from ran.baselines.ibu import evaluate_runs
@@ -10,9 +10,9 @@ Comparison baselines: **IBU**
 
 ## Shared
 
-Module `._shared` contains the data handling shared by the IBU baseline.
+Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics RAN is scored by.
 
-Both methods attempt the same task: to generate weights to reweight Generation based on the relationship between Data and Simulation, and thus both baselines provide the same inputs and then score the result. So they need the same run config, the same event populations, and the same metric record. Only the unfolding method differs.
+A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. IBU is currently the only caller; the split is what makes adding a second one a matter of writing an unfolder.
 
 ### `_shared::parse_run_config`
 
@@ -28,7 +28,7 @@ Validate a run's config.json into a RunConfig.
 
 ### `_shared::_partitioned`
 
-Checks the shape assumptions the baselines rely on, then partitions.
+Checks the shape assumptions a baseline relies on, then partitions.
 
 ### `_shared::prepare_populations`
 
@@ -153,9 +153,9 @@ Iterative Bayesian Unfolding.
 
 - A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
 
-### `ibu::_unfold_variable`
+### `ibu::unfold_variable`
 
-Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `_VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
+Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
 
 `mc_gen` and `mc_sim` are one column of a `Populations`' `mc.z` and `mc.x`; they are row-aligned and together give the response. `observed` is the same column of its `data`. No part of `truth` belongs here.
 
@@ -170,7 +170,7 @@ Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`
 
 #### Returns
 
-- A `_VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
+- A `VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
 
 ### `ibu::evaluate_runs`
 

@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from ran.data import RANDataset
-from ran.device import (
+from ran.data.device import (
     DEFAULT_EVAL_BATCH_SIZE,
     DeviceSplits,
     EvalSplit,

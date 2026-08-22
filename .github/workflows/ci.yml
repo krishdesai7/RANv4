@@ -3,7 +3,12 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master, refactor/jax]
+
+# A branch only needs its newest commit checked. Without this, pushing three
+# times in a minute queues three full runs and the first two are already stale.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci:

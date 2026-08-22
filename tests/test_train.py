@@ -10,7 +10,7 @@ import keras
 import numpy as np
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
-from ran.device import DeviceSplits, train_indices
+from ran.data.device import DeviceSplits, train_indices
 from ran.models import build_generator
 from ran.rantypes import TRUTH_SENTINEL, ZXY, Events
 from ran.train import (

@@ -12,16 +12,20 @@ from .evaluate import (
     _triangular_per_dim,
     _wd_per_dim,
 )
-from .rantypes import POISON_SENTINEL, TRUTH_SENTINEL, Events, Populations
+from .rantypes import (
+    EVENT_DTYPE,
+    POISON_SENTINEL,
+    TRUTH_SENTINEL,
+    Events,
+    Populations,
+)
 from .train import train
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Literal
 
-    from numpy.typing import NDArray
-
-    from .rantypes import ZXY, DatasetSplits, RANModel
+    from .rantypes import ZXY, DatasetSplits, EventArray, RANModel
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -50,21 +54,27 @@ def run_leakage_check(poison: bool, sentinel: float, seed: int, init_seed: int) 
     rng: np.random.Generator = np.random.default_rng(seed)
     n: int = 100_000
 
-    z_true: NDArray[np.double] = rng.normal(loc=0.0, scale=1.0, size=(n, 1))
-    z_gen: NDArray[np.double] = rng.normal(loc=-0.5, scale=1.0, size=(n, 1))
-    x_data: NDArray[np.double] = z_true + rng.normal(loc=0, scale=0.25, size=(n, 1))
-    x_sim: NDArray[np.double] = z_gen + rng.normal(loc=0, scale=0.25, size=(n, 1))
+    # `Generator.normal` is float64 whatever the caller wants, so the check's
+    # own sample narrows here, at the one boundary where it enters the pipeline.
+    z_true: EventArray = rng.normal(loc=0.0, scale=1.0, size=(n, 1)).astype(EVENT_DTYPE)
+    z_gen: EventArray = rng.normal(loc=-0.5, scale=1.0, size=(n, 1)).astype(EVENT_DTYPE)
+    x_data: EventArray = (z_true + rng.normal(loc=0, scale=0.25, size=(n, 1))).astype(
+        EVENT_DTYPE
+    )
+    x_sim: EventArray = (z_gen + rng.normal(loc=0, scale=0.25, size=(n, 1))).astype(
+        EVENT_DTYPE
+    )
 
     if poison:
         z_true[:] = sentinel
 
-    data: ZXY[np.double] = Populations(
+    data: ZXY = Populations(
         mc=Events(z_gen, x_sim), data=x_data, truth=z_true
     ).interleave()
 
-    splits: DatasetSplits[np.double] = RANDataset(
-        batch_size=1024, seed=seed
-    ).splits_from_data(data)
+    splits: DatasetSplits = RANDataset(batch_size=1024, seed=seed).splits_from_data(
+        data
+    )
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.
@@ -72,10 +82,10 @@ def run_leakage_check(poison: bool, sentinel: float, seed: int, init_seed: int) 
         splits, dim=1, hidden_units=32, n_layers=2, patience=5, seed=init_seed
     ).g
 
-    test: Populations[np.double] = _collect_test_data(test_ds=splits.test).partition()
+    test: Populations = _collect_test_data(test_ds=splits.test).partition()
 
-    raw_w: NDArray[np.double] = np.asarray(a=g(test.mc.z)).flatten()
-    w: NDArray[np.double] = raw_w / raw_w.mean()
+    raw_w: EventArray = np.asarray(a=g(test.mc.z)).flatten()
+    w: EventArray = raw_w / raw_w.mean()
 
     for level, ref, comp in [
         ("DETECTOR", test.data, test.mc.x),

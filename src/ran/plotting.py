@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import Populations, RANModel, VarInfo
+    from .rantypes import EventArray, Populations, RANModel, VarInfo
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -42,8 +42,8 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 class _PanelSpec(NamedTuple):
     """Everything that varies between the panels of one figure."""
 
-    nature: NDArray[np.double]
-    mc: NDArray[np.double]
+    nature: EventArray
+    mc: EventArray
     bins: NDArray[np.double]
     xlabel: str
     title: str
@@ -61,7 +61,7 @@ class _LevelStyle(NamedTuple):
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
-def _collect_data(dataset: ArrayDataset[np.double]) -> Populations[np.double]:
+def _collect_data(dataset: ArrayDataset) -> Populations:
     """Return the split as the four physics populations, each (n, dim)."""
     return dataset.as_arrays().partition()
 
@@ -69,15 +69,15 @@ def _collect_data(dataset: ArrayDataset[np.double]) -> Populations[np.double]:
 def _hist_ratio_panel(
     ax: Axes,
     ax_r: Axes,
-    x_nature: NDArray[np.double],
-    x_mc: NDArray[np.double],
-    w_ran: NDArray[np.double],
+    x_nature: EventArray,
+    x_mc: EventArray,
+    w_ran: EventArray,
     bins: Sequence[float] | int,
     nature_label: str,
     mc_label: str,
     xlabel: str,
     title: str,
-    w_ibu: NDArray[np.double] | None = None,
+    w_ibu: EventArray | None = None,
 ) -> None:
     h_nature: tuple = ax.hist(
         x_nature,
@@ -201,8 +201,8 @@ _PARTICLE = _LevelStyle(
 def _panel_spec(
     i: int,
     dim: int,
-    nature: NDArray[np.double],
-    mc: NDArray[np.double],
+    nature: EventArray,
+    mc: EventArray,
     var_info: list[VarInfo] | None,
     style: _LevelStyle,
 ) -> _PanelSpec:
@@ -219,12 +219,12 @@ def _panel_spec(
             title=f"{cfg['xlabel']} ({style.level} level)",
         )
 
-    nature_i: NDArray[np.double] = nature[:, i]
-    mc_i: NDArray[np.double] = mc[:, i]
-    lo: np.double = (
+    nature_i: EventArray = nature[:, i]
+    mc_i: EventArray = mc[:, i]
+    lo: np.single = (
         min(nature_i.min(), mc_i.min()) if style.bins_span_both else nature_i.min()
     )
-    hi: np.double = (
+    hi: np.single = (
         max(nature_i.max(), mc_i.max()) if style.bins_span_both else nature_i.max()
     )
     return _PanelSpec(
@@ -241,13 +241,13 @@ def _panel_spec(
 
 
 def _plot_level(
-    nature: NDArray[np.double],
-    mc: NDArray[np.double],
-    w: NDArray[np.double],
+    nature: EventArray,
+    mc: EventArray,
+    w: EventArray,
     style: _LevelStyle,
     save_path: str | Path,
     var_info: list[VarInfo] | None,
-    ibu_weights: list[NDArray[np.double]] | None,
+    ibu_weights: list[EventArray] | None,
 ) -> None:
     """Draw one stacked hist+ratio panel per dimension and save the figure."""
     dim: int = nature.shape[1]
@@ -280,13 +280,13 @@ def _plot_level(
 
 
 def plot_detector_level(
-    test_dataset: ArrayDataset[np.double],
+    test_dataset: ArrayDataset,
     g: RANModel,
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    ibu_weights: list[NDArray[np.double]] | None = None,
+    ibu_weights: list[EventArray] | None = None,
 ) -> None:
-    test: Populations[np.double] = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.data,
@@ -300,13 +300,13 @@ def plot_detector_level(
 
 
 def plot_particle_level(
-    test_dataset: ArrayDataset[np.double],
+    test_dataset: ArrayDataset,
     g: RANModel,
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    ibu_weights: list[NDArray[np.double]] | None = None,
+    ibu_weights: list[EventArray] | None = None,
 ) -> None:
-    test: Populations[np.double] = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.require_truth(),

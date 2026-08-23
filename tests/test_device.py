@@ -24,7 +24,7 @@ from ran.rantypes import ZXY, DatasetSplits, Events
 
 def _toy(n: int = 200, batch_size: int = 32, seed: int = 4) -> DatasetSplits:
     """z counts up, x is its negation, so pairing is checkable by eye."""
-    z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
+    z = np.arange(2 * n, dtype=np.single).reshape(-1, 1)
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
     return RANDataset(batch_size=batch_size, seed=seed).splits_from_data(
         ZXY(Events(z, -z), y)
@@ -37,8 +37,8 @@ class TestTrainSplit:
         host = _toy().train.as_arrays()
         assert host.y.dtype == np.ubyte
         split = TrainSplit.from_zxy(host)
-        assert split.z.dtype == split.y.dtype == np.double
-        np.testing.assert_array_equal(np.asarray(split.y), host.y.astype(np.double))
+        assert split.z.dtype == split.y.dtype == np.single
+        np.testing.assert_array_equal(np.asarray(split.y), host.y.astype(np.single))
 
     def test_is_a_pytree(self) -> None:
         """The splits have to survive `tree_map` to cross a jit boundary."""

@@ -9,6 +9,16 @@ if TYPE_CHECKING:
     from typing import Final, LiteralString
 
 
+# The one floating type the pipeline carries, end to end.
+#
+# The jet inputs justify it: `mass` and `mult` are bit-exact through a float32
+# round trip, and the other four observables lose exactly half a ULP, so there
+# is no structure below float32 to preserve. An ensemble of 20 paired seeds put
+# float32 and float64 within +/-0.5 percentage points of unfolding improvement
+# (TOST p=0.015); see `benchmarks/precision.py`. Everything downstream --- the
+# containers, the models, `JAX_ENABLE_X64` --- follows from this line.
+EVENT_DTYPE: Final[type[np.single]] = np.single
+
 CACHE_DIR: Final[Path] = Path(".cache")
 RUN_DIR: Final[Path] = Path("runs")
 ZENODO_RECORD: Final[int] = 3548091

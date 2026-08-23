@@ -1,7 +1,7 @@
 import os
 
 os.environ.setdefault(key="KERAS_BACKEND", value="jax")
-os.environ.setdefault(key="JAX_ENABLE_X64", value="1")
+os.environ.setdefault(key="JAX_ENABLE_X64", value="0")
 
 from .cli import app as app
 from .cli import configure as configure

@@ -60,35 +60,54 @@ Every dataset here is a closure test, so `truth` is always known; a real measure
 
 ## Datasets
 
-### `ran.data.datasets::ArrayDataset`
+### Function `_draw_gaussian`
 
-An in-memory `ZXY` with deterministic minibatching.
+Draw the four Gaussian populations: `(z_true, z_gen, x_data, x_sim)`.
 
-Iterating yields `({"z": ..., "x": ...}, y)` batches of NumPy arrays. The final batch is short rather than dropped whenever the split length is not a multiple of `batch_size`.
+Runs on the default device. This can be pinned to CPU, if a sibling process is running on the same card and JAX claiming a device would preallocate the GPU out from under it. If nothing else competes for the accelerator, the draw takes whatever is there.
 
-Every split holds a view onto one shared pair of base arrays; slicing is done with fancy indexing at batch time, so splitting costs no extra memory.
+No `check_valid` equivalent is needed: `parse_gaussian_config` has already asserted positive-definiteness with a Cholesky factorization.
+
+**Arguments**:
+
+- `seed: int` Seed for the random number generator.
+- `mu_true: NDArray[np.double]` The mean of the true data.
+- `mu_gen: NDArray[np.double]` The mean of the generated data.
+- `cov_true: NDArray[np.double]` The covariance matrix of the true data.
+- `cov_gen: NDArray[np.double]` The covariance matrix of the generated data.
+- `cov_detector: NDArray[np.double]` The covariance matrix of the detector.
+- `n_samples: int` Number of samples to draw.
+
+**Returns**:
+
+- `tuple[NDArray[np.double], NDArray[np.double], NDArray[np.double], NDArray[np.double]]` The four Gaussian populations.
+
+### `class ArrayDataset`
+
+An in-memory `ZXY` with deterministic minibatching. One host-resident split of (z, x, y), plus how it should be batched.
+
+This is a container, not an iterator. Batch order is drawn on device, per epoch, by `ran.data.device.train_indices` --- so `batch_size` and `seed` are carried here as the split's own parameters and read by
+`DeviceSplits.from_splits`, but nothing iterates this object.
+
+Every split holds a view onto one shared pair of base arrays; slicing is done with indexing at batch time, so splitting costs no extra memory.
 
 #### Fields
 
 - `data: ZXY` The split's events and labels. `data.z` and `data.x` reach through to the underlying `Events`.
 - `batch_size: int` Events per batch.
-- `shuffle: bool` Re-permute the event order before every pass. Used for the training split; validation and test iterate in fixed order.
 - `seed: int` Seed for the reshuffling generator.
 
 #### Properties
 
 - `size: int` Number of events in the dataset.
-
-Each pass draws its permutation from `(seed, pass_index)` rather than from a generator carried across passes, so the order an epoch sees depends only on how many passes preceded it, not on who else has iterated this object.
+- `dtype: np.dtype[np.single]` The dtype of the data.
 
 #### Methods
 
-- `reset() -> None` Return to the first pass.
 - `len() -> int` Number of batches per pass.
-- `iter() -> Iterator[Batch]` Iterate over the dataset.
-- `as_arrays() -> ZXY` Return the whole split in stored order. Callers that just want every event (plotting, metrics, the baselines) should use this instead of concatenating iterations, and usually follow it with `.partition()`.
+- `as_arrays() -> ZXY` Return the whole split as flat labelled arrays, in stored order.
 
-### `ran.data.datasets::RANDataset`
+### `class RANDataset`
 
 Dataset class for RAN.
 
@@ -171,11 +190,144 @@ Shuffle one labelled sample and cut it into train/val/test.
 
 `ZXY` has already checked that the particle- and detector-level arrays are row-aligned and that every label is zero or one, so this does no validation of its own.
 
+## module `device`
+
+Device-resident training data, the third form alongside `Populations`/`ZXY`.
+
+`Populations` is the physics form and `ZXY` the transport form; both are host NumPy, because they feed SciPy, Matplotlib, npz I/O and the IBU baseline. This module is the training form: `DeviceSplits.from_splits` is the single host-to-device transfer of a run, and after it no batch crosses the boundary again.
+
+All three forms live under `ran.data` because they are all the dataset, just at different points in its trip to the accelerator. Both splits are laid out for a single fused XLA program: the train split stays flat and is gathered by index inside a `lax.scan`, so XLA fuses the gather into the first `Dense`; the eval splits are pre-batched with a mask, so evaluation scans with no gather at all and still sees every event exactly once.
+
+Evaluation is forward-only and its batching is not part of the training contract, so it uses a wider batch than training to keep the scan short.
+
+### dataclass`TrainSplit`
+
+A flat, device-resident split, gathered by index inside the scan. Labels are promoted from `np.ubyte` to the compute dtype once, here, rather than in every `1 - y` inside the trace.
+
+#### Fields
+
+- `z: Float[Array, "n d"]` The particle-level data.
+- `x: Float[Array, "n d"]` The detector-level data.
+- `y: Float[Array, "n"]` The labels.
+
+#### Properties
+
+- `n: int` The number of events in the split.
+
+#### class method `from_zxy`
+
+**Arguments**:
+
+- `data: ZXY` The events as `interleave` produced them.
+
+**Returns**:
+
+- `TrainSplit` The train split.
+
+### dataclass`EvalSplit`
+
+A pre-batched device-resident split; padding rows carry `mask == 0`.
+
+#### Fields
+
+- `z: Float[Array, "nb bs d"]` The particle-level data.
+- `x: Float[Array, "nb bs d"]` The detector-level data.
+- `y: Float[Array, "nb bs"]` The labels.
+- `mask: Float[Array, "nb bs"]` The mask.
+
+#### Properties
+
+- `n_batches: int` The number of batches in the split.
+
+#### class method `from_zxy`
+
+**Arguments**:
+
+- `data: ZXY` The events as `interleave` produced them.
+- `batch_size: int` Events per batch.
+
+**Returns**:
+
+- `EvalSplit` The eval split class instance.
+
+### `class DeviceSplits(NamedTuple)`
+
+The whole dataset on device, plus the seed that drives batch order.
+
+#### Fields
+
+- `train: TrainSplit` The train split.
+- `val: EvalSplit` The validation split.
+- `test: EvalSplit` The test split.
+- `data_seed: int` The seed that drives batch order.
+
+#### class method `from_splits`
+
+Move a host `DatasetSplits` to device. The one H2D transfer.
+
+`batch_size` is accepted for symmetry but unused: the train split stays flat, and its batching is decided per epoch by `train_indices`.
+
+**Arguments**:
+
+- `splits: DatasetSplits` The dataset splits.
+- `batch_size: int | None = None` Events per batch.
+- `eval_batch_size: int = DEFAULT_EVAL_BATCH_SIZE` Evaluation batch size.
+
+**Returns**:
+
+- `DeviceSplits` The device splits class instance.
+
+### function `grouping`
+
+Split one pass over `n` events into `(groups, disc steps per group)`.
+
+`n_disc_steps` is clamped to the number of whole batches available. A split too small to fill one group still trains --- it becomes a single group with every batch in it, and one generator update --- which is what the host loop did when `step % n_disc_steps == 0` fired only at step 0.
+
+**Arguments**:
+
+- `n: int` The number of events.
+- `batch_size: int` Events per batch.
+- `n_disc_steps: int` Number of discriminator steps per group.
+
+**Returns**:
+
+- `tuple[int, int]` The number of groups and the number of discriminator steps per group.
+
+### function `train_indices`
+
+One epoch's batch order, grouped so the update rhythm is structural.
+
+Each group is `n_disc_steps` discriminator batches; the generator updates once per group, on the group's first batch. The tail that does not fill a whole group is dropped. Because the permutation is redrawn every epoch, it is a different random tail each pass.
+
+**Arguments**:
+
+- `key: PRNGKeyArray` The random key.
+- `n: int` The number of events.
+- `batch_size: int` Events per batch.
+- `n_disc_steps: int` Number of discriminator steps per group.
+
+**Returns**:
+
+- `Int[Array, "groups disc batch"]` The batch indices.
+
+### function `gather`
+
+Pull one batch out of the flat split, fused into the first matrix multiplication.
+
+**Arguments**:
+
+- `split: TrainSplit` The train split.
+- `idx: Int[Array, "b"]` The batch indices.
+
+**Returns**:
+
+- `tuple[Float[Array, "b d"], Float[Array, "b d"], Float[Array, "b"]]` The particle-level data, the detector-level data and the labels.
+
 ## Download
 
 One-time download of jet substructure data from Zenodo (record 3548091).
 
-Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to .cache/, and deletes the raw downloads.
+Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to .cache/, and deletes the raw downloads
 
 ### Degenerate jets
 
@@ -241,9 +393,9 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files.
 - `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
-There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.
+  There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.
 
-Narrowing *after* the observables are computed is deliberate, not incidental: `ran.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
+Narrowing _after_ the observables are computed is deliberate, not incidental: `ran.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
 
 **Returns**:
 

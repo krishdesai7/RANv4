@@ -24,7 +24,8 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Final, LiteralString, SupportsFloat
 
-    from jaxtyping import Array, Float
+    from jax import Array
+    from jaxtyping import Float
     from numpy.typing import NDArray
 
     from ..rantypes import Nested
@@ -54,42 +55,28 @@ def _draw_gaussian(
 ) -> tuple[
     Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"]
 ]:
-    """Draw the four Gaussian populations: (z_true, z_gen, x_data, x_sim).
+    k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), num=4)
 
-    Runs on the default device. This used to pin itself to CPU, back when a
-    sibling process was running TensorFlow on the same card and JAX claiming a
-    device would have preallocated the GPU out from under it. Nothing else
-    competes for the accelerator now, so the draw takes whatever is there.
-
-    No ``check_valid`` equivalent is needed: ``parse_gaussian_config`` has already
-    asserted positive-definiteness with a Cholesky factorization.
-    """
-    k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
-
-    z_true = jax.random.multivariate_normal(
+    z_true: Float[Array, "n d"] = jax.random.multivariate_normal(
         k_true, mu_true, cov_true, (n_samples,), method="svd"
     )
-    z_gen = jax.random.multivariate_normal(
+    z_gen: Float[Array, "n d"] = jax.random.multivariate_normal(
         k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
     )
 
-    chol_det = jnp.linalg.cholesky(jnp.asarray(cov_detector))
-    smear = chol_det.T
+    chol_det: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector))
+    smear: Float[Array, "d d"] = chol_det.T
 
-    x_data = z_true + jax.random.normal(k_data, z_true.shape) @ smear
-    x_sim = z_gen + jax.random.normal(k_sim, z_gen.shape) @ smear
+    x_data: Float[Array, "n d"] = (
+        z_true + jax.random.normal(key=k_data, shape=z_true.shape) @ smear
+    )
+    x_sim: Float[Array, "n d"] = (
+        z_gen + jax.random.normal(key=k_sim, shape=z_gen.shape) @ smear
+    )
     return z_true, z_gen, x_data, x_sim
 
 
 class ArrayDataset:
-    """One host-resident split of (z, x, y), plus how it should be batched.
-
-    This is a container, not an iterator. Batch order is drawn on device, per
-    epoch, by ``ran.data.device.train_indices`` --- so ``batch_size`` and ``seed`` are
-    carried here as the split's own parameters and read by
-    ``DeviceSplits.from_splits``, but nothing iterates this object.
-    """
-
     def __init__(
         self,
         data: ZXY,
@@ -111,11 +98,9 @@ class ArrayDataset:
         return self.data.dtype
 
     def __len__(self) -> int:
-        """Number of batches per pass, counting a short trailing one."""
         return (self.size + self.batch_size - 1) // self.batch_size
 
     def as_arrays(self) -> ZXY:
-        """Return the whole split as flat labelled arrays, in stored order."""
         return self.data
 
 
@@ -165,9 +150,8 @@ class RANDataset:
             "n_samples": n_samples,
             "seed": self.seed,
             "rng": _RNG_VERSION,
-            # Without this a float32 and a float64 run share one file, and
-            # whichever ran first decides the precision on disk.
-            "dtype": str(self.dtype),
+            # Without this a float32 and a float64 run share one file
+            "dtype": str(object=self.dtype),
         }
         return hashlib.sha256(
             data=json.dumps(obj=key_data, sort_keys=True).encode(encoding="utf-8")
@@ -231,9 +215,8 @@ class RANDataset:
             parsed = parse_gaussian_config(config_path)
 
         # The parameters go into `_draw_gaussian` at the float64 they were parsed
-        # in, and the sample narrows to `np.single` once on the way out. Pre-narrowing
-        # them bought nothing -- the draw upcasts again -- and cost precision in
-        # the detector Cholesky whenever `np.single` was float32.
+        # in, and the sample narrows to `np.single` once on the way out because the draw
+        # upcasts again and costs precision in the Cholesky whenever `np.single`
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -260,11 +243,11 @@ class RANDataset:
 
             data: ZXY = Populations(
                 mc=Events(
-                    z=np.asarray(z_gen, dtype=self.dtype),
-                    x=np.asarray(x_sim, dtype=self.dtype),
+                    z=np.asarray(a=z_gen, dtype=self.dtype),
+                    x=np.asarray(a=x_sim, dtype=self.dtype),
                 ),
-                data=np.asarray(x_data, dtype=self.dtype),
-                truth=np.asarray(z_true, dtype=self.dtype),
+                data=np.asarray(a=x_data, dtype=self.dtype),
+                truth=np.asarray(a=z_true, dtype=self.dtype),
             ).interleave()
 
             np.savez_compressed(file=cache_path, z=data.z, x=data.x, y=data.y)
@@ -274,6 +257,6 @@ class RANDataset:
 
     def splits_from_data(self, data: ZXY) -> DatasetSplits:
         """Shuffle one labelled sample and cut it into train/val/test."""
-        self.dataset = self._build_dataset(data)
-        self.splits = self._split_dataset(self.dataset)
+        self.dataset: ZXY = self._build_dataset(data)
+        self.splits: DatasetSplits = self._split_dataset(self.dataset)
         return self.splits

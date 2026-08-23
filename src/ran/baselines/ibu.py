@@ -413,7 +413,7 @@ def evaluate_single(
     weights_path: Path = run_dir / "ibu_weights.npz"
     np.savez(
         weights_path,
-        # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. Our keys are
+        # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. The keys are
         # built by f-string, so their type is plain `str`.
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)

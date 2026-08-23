@@ -1,55 +1,33 @@
-"""Compare two precision ensembles produced by `benchmarks/precision.py`.
-
-    uv run python benchmarks/compare_precision.py f64.log f32.log [margin_pp]
-
-The runs are **paired**: the same `--seed` initializes the same weights in both
-arms, on the same data. Pairing is most of the available statistical power
-here, because seed-to-seed variation (sd ~0.4pp) is several times the effect
-being looked for (~0.2pp), and it cancels in the within-pair difference.
-
-Three mistakes earlier versions of this file made, kept here as warnings
-because each one produced a confident and wrong verdict:
-
-1. Comparing the separation of means to the *pooled standard deviation*. That
-   is the spread of individual runs, not of their mean; the right scale is the
-   standard error of the difference, smaller by sqrt(1/n1 + 1/n2).
-2. Treating paired runs as independent samples, discarding the pairing.
-3. Reporting "n needed for 80% power" computed from the *observed* effect. An
-   effect estimated near p=0.05 at small n is inflated, so that figure is far
-   too small. It read ~16 seeds at n=10; ten more seeds shrank the estimate and
-   it would have read ~75.
-
-The deeper lesson is in the data rather than the code: at n=10 this showed
-+0.27pp with p=0.052 and float64 ahead 8/10. Ten fresh seeds showed +0.12pp,
-p=0.64, float64 ahead 4/10. The first result was a fluctuation. A t-test can
-only ever fail to find a difference, so the affirmative question -- "is the gap
-small enough not to care?" -- is answered by TOST against a stated margin.
-"""
-
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy import stats
 
-CONFIDENCE: float = 0.95
-ALPHA: float = 0.05
-# How much unfolding improvement you are willing to trade, in percentage points.
-# Equivalence is only ever "within a margin"; the margin is a physics judgement
-# and has to be stated, so it is an argument rather than a hidden default.
-DEFAULT_MARGIN_PP: float = 0.5
+if TYPE_CHECKING:
+    from collections.abc import Buffer, Callable
+    from typing import IO, Final, TextIO
+
+    from numpy.typing import NDArray
+
+CONFIDENCE: Final[float] = 0.95
+ALPHA: Final[float] = 0.05
+DEFAULT_MARGIN_PP: Final[float] = 0.5
 
 
 def _read(path: Path) -> tuple[dict[int, float], str]:
     """Map seed -> mean_improvement for every SUMMARY line in a log."""
     by_seed: dict[int, float] = {}
-    dtype = "?"
+    dtype: str = "?"
     for line in path.read_text().splitlines():
         if not line.startswith("SUMMARY "):
             continue
-        fields = dict(token.split("=", 1) for token in line.split()[1:])
+        fields: dict[str, str] = dict(
+            token.split(sep="=", maxsplit=1) for token in line.split()[1:]
+        )
         by_seed[int(fields["seed"])] = float(fields["mean_improvement"])
         dtype = fields.get("dtype", dtype)
     if not by_seed:
@@ -57,7 +35,7 @@ def _read(path: Path) -> tuple[dict[int, float], str]:
     return by_seed, dtype
 
 
-def _describe(values: np.ndarray, name: str) -> str:
+def _describe(values: NDArray[np.double], name: str, /) -> str:
     return (
         f"{name:>8}: n={values.size:<3} "
         f"mean={values.mean():7.4f}%  sd={values.std(ddof=1):.4f}  "
@@ -66,15 +44,15 @@ def _describe(values: np.ndarray, name: str) -> str:
 
 
 def _paired_report(
-    a: np.ndarray, b: np.ndarray, names: tuple[str, str], margin: float
+    a: NDArray[np.double], b: NDArray[np.double], names: tuple[str, str], margin: float
 ) -> None:
-    out = sys.stdout.write
-    diff = a - b
-    n = diff.size
+    out: Callable[[IO[bytes] | TextIO, Buffer | str], int] = sys.stdout.write
+    diff: NDArray[np.double] = a - b
+    n: int = diff.size
     t_stat, p_value = stats.ttest_rel(a, b)
     _, p_wilcoxon = stats.wilcoxon(diff)
 
-    stderr = float(diff.std(ddof=1) / np.sqrt(n))
+    stderr: float = float(diff.std(ddof=1) / np.sqrt(n))
     lo, hi = stats.t.interval(CONFIDENCE, n - 1, loc=diff.mean(), scale=stderr)
     wins = int((diff > 0).sum())
 
@@ -88,9 +66,9 @@ def _paired_report(
     # A t-test can only ever fail to find a difference; it cannot show there
     # isn't one. TOST asks the question actually being asked -- "is the effect
     # small enough not to care?" -- against a margin stated up front.
-    t_lower = (diff.mean() + margin) / stderr
-    t_upper = (diff.mean() - margin) / stderr
-    p_tost = max(
+    t_lower: np.double = (diff.mean() + margin) / stderr
+    t_upper: np.double = (diff.mean() - margin) / stderr
+    p_tost: float = max(
         float(1 - stats.t.cdf(t_lower, n - 1)), float(stats.t.cdf(t_upper, n - 1))
     )
     out(f"  TOST +/-{margin:.2f}pp    : p={p_tost:.5f}\n")
@@ -115,11 +93,6 @@ def _paired_report(
             "as physically irrelevant.\n"
         )
 
-    # Deliberately no "n needed for 80% power" from the observed effect. An
-    # effect estimated near p=0.05 at small n is inflated (Type M error), so
-    # that number comes out far too small -- it read ~16 at n=10 here, and ~75
-    # once ten more seeds shrank the estimate.
-
 
 def main() -> None:
     if len(sys.argv) not in {3, 4}:
@@ -130,11 +103,11 @@ def main() -> None:
     a_by_seed, a_name = _read(Path(sys.argv[1]))
     b_by_seed, b_name = _read(Path(sys.argv[2]))
 
-    out = sys.stdout.write
-    out(_describe(np.array(list(a_by_seed.values())), a_name) + "\n")
-    out(_describe(np.array(list(b_by_seed.values())), b_name) + "\n")
+    out: Callable[[IO[bytes] | TextIO, Buffer | str], int] = sys.stdout.write
+    out(_describe(np.array(object=list(a_by_seed.values())), a_name) + "\n")
+    out(_describe(np.array(object=list(b_by_seed.values())), b_name) + "\n")
 
-    shared = sorted(set(a_by_seed) & set(b_by_seed))
+    shared: list[int] = sorted(set(a_by_seed) & set(b_by_seed))
     if len(shared) < 2:
         out(
             "\n--> Fewer than two shared seeds; cannot pair. Re-run both arms "
@@ -142,15 +115,15 @@ def main() -> None:
         )
         return
 
-    dropped = (len(a_by_seed) - len(shared)) + (len(b_by_seed) - len(shared))
+    dropped: int = (len(a_by_seed) - len(shared)) + (len(b_by_seed) - len(shared))
     if dropped:
         out(f"\nnote: {dropped} unpaired run(s) ignored; only shared seeds count.\n")
 
     _paired_report(
-        np.array([a_by_seed[s] for s in shared]),
-        np.array([b_by_seed[s] for s in shared]),
-        (a_name, b_name),
-        float(sys.argv[3]) if len(sys.argv) == 4 else DEFAULT_MARGIN_PP,
+        a=np.array(object=[a_by_seed[s] for s in shared]),
+        b=np.array(object=[b_by_seed[s] for s in shared]),
+        names=(a_name, b_name),
+        margin=float(sys.argv[3]) if len(sys.argv) == 4 else DEFAULT_MARGIN_PP,
     )
 
 

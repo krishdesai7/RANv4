@@ -14,7 +14,7 @@ Both methods run in the same invocation, on the same `Populations` object. IBU c
 
 Unfold one sweep point with IBU and score it the way RAN is scored.
 
-IBU narrows to float32 at its own boundary, exactly as it does under `ran baseline ibu` — it has to match the arithmetic its published results were produced with. The weights are returned to float64 before the Wasserstein call, so both arms are *scored* by identical arithmetic and only the unfolding differs.
+Both arms run at the pipeline's single precision, so nothing is cast here and there is nothing to keep in step: the same array reaches both unfolders. The Wasserstein score comes back from scipy in float64 for both, as scores do everywhere.
 
 The fit takes `mc.z`, `mc.x` and `data` — what a real measurement has — and is applied to the same `mc.z` that RAN's weights are applied to. `truth` reaches neither method and appears only in the score.
 
@@ -22,7 +22,7 @@ Past some distortion the purity binning yields fewer than two bins. That is not 
 
 #### Arguments
 
-- `pops: Populations[np.double]`: The populations for one sweep point.
+- `pops: Populations`: The populations for one sweep point.
 
 #### Returns
 
@@ -40,7 +40,7 @@ ran sweep collect --sweep-dir ...
 
 Draw fixed particle-level samples: $z_truth \sim \mathcal{N}(0,1), z_gen \sim \mathcal{N}(-1,1)$.
 
-Deliberately not generic over the float type, unlike everything downstream of it. Those take an array and carry whatever precision they were handed; this one is a source, with no argument to infer a precision from, and `Generator.normal` produces float64 whatever the caller would prefer. A `dtype` parameter could only cast after the fact, which is a narrowing. Narrowing belongs at the boundary that needs it, the way the IBU baseline does it.
+`Generator.normal` produces float64 whatever the caller would prefer, so this is one of the three places where data enters the pipeline and has to narrow to `EVENT_DTYPE`. The others are `_draw_gaussian` and `load_jet_dataset`.
 
 #### Arguments
 
@@ -49,8 +49,8 @@ Deliberately not generic over the float type, unlike everything downstream of it
 
 #### Returns
 
-- `z_truth: NDArray[np.double]`: Particle-level samples from the truth distribution.
-- `z_gen: NDArray[np.double]`: Particle-level samples from the generated distribution.
+- `z_truth: EventArray`: Particle-level samples from the truth distribution.
+- `z_gen: EventArray`: Particle-level samples from the generated distribution.
 
 ### `ran.experiments.cubic_sweep::_sweep_point`
 
@@ -67,8 +67,8 @@ The sample comes back in the (n, 1) columns the models take, so the caller does 
 
 #### Returns
 
-- `s: np.double`: The s value.
-- `pops: Populations[np.double]`: The populations of the resolved point.
+- `s: np.single`: The s value.
+- `pops: Populations`: The populations of the resolved point.
 
 ### `ran.experiments.cubic_sweep::run_ran`
 

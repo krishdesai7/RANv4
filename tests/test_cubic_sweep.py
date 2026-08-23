@@ -22,21 +22,24 @@ if TYPE_CHECKING:
 
 
 def test_response_identity_at_zero() -> None:
-    z = np.linspace(-3, 3, 100)
-    (out,) = response(np.double(0.0), z)
+    z = np.linspace(-3, 3, 100, dtype=np.single)
+    (out,) = response(np.single(0.0), z)
     np.testing.assert_array_equal(out, z)
 
 
 def test_response_monotonic_for_positive_s() -> None:
-    z = np.linspace(-3, 3, 1000)
-    (out,) = response(np.double(5.0), z)
+    z = np.linspace(-3, 3, 1000, dtype=np.single)
+    (out,) = response(np.single(5.0), z)
     assert np.all(np.diff(out) > 0)
 
 
 def test_response_maps_each_sample_in_order() -> None:
     """One array in, one array out, however many are passed at once."""
-    z1, z2 = np.linspace(-3, 3, 100), np.linspace(-1, 1, 100)
-    both = response(np.double(2.0), z1, z2)
+    z1, z2 = (
+        np.linspace(-3, 3, 100, dtype=np.single),
+        np.linspace(-1, 1, 100, dtype=np.single),
+    )
+    both = response(np.single(2.0), z1, z2)
     assert len(both) == 2
     for got, z in zip(both, (z1, z2), strict=True):
         np.testing.assert_array_equal(got, z + 2.0 * z**3)
@@ -52,8 +55,8 @@ def test_make_particles_shapes_and_means() -> None:
 
 def test_unfolded_wasserstein_uniform_weights_equals_unweighted() -> None:
     rng = np.random.default_rng(0)
-    z_truth = rng.normal(0, 1, 5000)
-    z_gen = rng.normal(-1, 1, 5000)
+    z_truth = rng.normal(0, 1, 5000).astype(np.single)
+    z_gen = rng.normal(-1, 1, 5000).astype(np.single)
     w = np.ones_like(z_gen)
     got = unfolded_wasserstein(z_truth, z_gen, w)
     expected = wasserstein_distance(z_truth, z_gen)
@@ -155,6 +158,6 @@ def test_ibu_point_scores_the_same_sample_ran_is_scored_on() -> None:
     # not measuring what the sweep claims it measures.
     if outcome.status == "completed":
         baseline = unfolded_wasserstein(
-            pops.require_truth(), pops.mc.z, np.ones(len(pops.mc.z))
+            pops.require_truth(), pops.mc.z, np.ones(len(pops.mc.z), dtype=np.single)
         )
         assert ibu_wd < baseline

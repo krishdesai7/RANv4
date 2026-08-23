@@ -34,9 +34,9 @@ Checks the shape assumptions a baseline relies on, then partitions.
 
 Returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
-Arrays maintain their dtype; a baseline that needs another dtype will cast at its own boundary with `Populations.astype`.
+Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist.
 
-That is not a detail. RAN is float64 end to end, but the baseline is float32: IBU has to match the arithmetic its published results were produced with for the comparison to mean anything. So `load_populations` hands back the float64 the dataset was generated in, and the baseline narrows for itself — IBU with `load_populations(config).astype(np.single)`. The IBU internals are generic over the floating type and carry whatever they are given; only the two population-count checks and the mean-one postcondition accumulate in float64, because those compare against exact integers and float32 stops representing those past 2^24.
+One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
 
 #### Arguments
 
@@ -135,7 +135,7 @@ Find the first candidate edge whose bin exceeds the purity threshold.
 
 #### Returns
 
-- A `T | None` containing the first candidate edge whose bin exceeds the purity threshold.
+- A `np.single | None` containing the first candidate edge whose bin exceeds the purity threshold.
 
 ### `ibu::_ibu`
 
@@ -151,7 +151,7 @@ Iterative Bayesian Unfolding.
 
 #### Returns
 
-- A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
+- A `EventArray` Unfolded truth histogram, shape (n_bins,).
 
 ### `ibu::unfold_variable`
 
@@ -162,15 +162,15 @@ Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`
 #### Arguments
 
 - `variable_name: str` The variable being unfolded, for logging and the outcome record.
-- `mc_gen: NDArray[T]` One column of `mc.z`, the generated particle level.
-- `mc_sim: NDArray[T]` One column of `mc.x`, row-aligned with `mc_gen`; together they give the response.
-- `observed: NDArray[T]` One column of `data`, the measurement.
+- `mc_gen: EventArray` One column of `mc.z`, the generated particle level.
+- `mc_sim: EventArray` One column of `mc.x`, row-aligned with `mc_gen`; together they give the response.
+- `observed: EventArray` One column of `data`, the measurement.
 - `n_iterations: int` Number of unfolding iterations.
 - `purity_threshold: float` The purity threshold for automatic binning.
 
 #### Returns
 
-- A `VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
+- A `VariableUnfolding`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
 
 ### `ibu::evaluate_runs`
 

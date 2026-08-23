@@ -2,10 +2,9 @@
 
 `ran` is a library for training and evaluating reweighting adversarial networks (RANs).
 
-Importing anything under `ran` first pins the Keras 3 backend to JAX and enables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
+Importing anything under `ran` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
 
-`ran` defaults to float64 end to end (see :mod:`ran.models`), which JAX silently downcasts to float32 unless x64 mode is on. To trade that precision for GPU throughput,
-set `JAX_ENABLE_X64=0` in the environment and switch the `dtype=` arguments in :mod:`ran.models` to `"float32"`.
+`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`ran.rantypes.constants`, with its annotation twin `EventArray` in :mod:`ran.rantypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`ran.models` follow from it. Scores are not pinned: the scipy metrics return float64 and stay there.
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
@@ -53,37 +52,37 @@ Load the dataset splits from the config.
 
 - `DatasetSplits` The loaded dataset splits.
 
-### `_normalized_histograms(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
+### `_normalized_histograms(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
 
 Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence-metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
 
 **Arguments:**
 
-- `ref: NDArray[T]` The reference data.
-- `comp: NDArray[T]` The comparison data.
-- `weights: NDArray[T] | None` The weights to use for the comparison data.
+- `ref: EventArray` The reference data.
+- `comp: EventArray` The comparison data.
+- `weights: EventArray | None` The weights to use for the comparison data.
 - `n_bins: int` The number of bins to use for the histograms.
 
 **Returns:**
 
 - `tuple[NDArray[np.double], NDArray[np.double]]` The $(p, q)$ probability histograms for each dimension of `ref`/`comp`
 
-### `_js_per_dim(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> NDArray[np.double]`
+### `_js_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
 Returns JS divergence (squared JS distance) per dimension.
 
 **Arguments:**
 
-- `ref: NDArray[T]` The reference data.
-- `comp: NDArray[T]` The comparison data.
-- `weights: NDArray[T] | None` The weights to use for the comparison data.
+- `ref: EventArray` The reference data.
+- `comp: EventArray` The comparison data.
+- `weights: EventArray | None` The weights to use for the comparison data.
 - `n_bins: int` The number of bins to use for the histograms.
 
 **Returns:**
 
 - `NDArray[np.double]` The JS divergence per dimension.
 
-### `_triangular_per_dim(ref: NDArray[T], comp: NDArray[T], weights: NDArray[T] | None = None, n_bins: int = 100) -> NDArray[np.double]`
+### `_triangular_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
 Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
@@ -93,9 +92,9 @@ where $p_i, q_i$ are histogram probability masses. The bin-width factor cancels 
 
 **Arguments:**
 
-- `ref: NDArray[T]` The reference data.
-- `comp: NDArray[T]` The comparison data.
-- `weights: NDArray[T] | None` The weights to use for the comparison data.
+- `ref: EventArray` The reference data.
+- `comp: EventArray` The comparison data.
+- `weights: EventArray | None` The weights to use for the comparison data.
 - `n_bins: int` The number of bins to use for the histograms.
 
 **Returns:**
@@ -127,13 +126,13 @@ random initialization the run-to-run spread swamps the effect being tested.
 
 ## module `plotting`
 
-### `plot_detector_level(test_dataset: ArrayDataset[np.double], g: keras.Model, save_path: Path = Path("plots/detector_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
+### `plot_detector_level(test_dataset: ArrayDataset, g: keras.Model, save_path: Path = Path("plots/detector_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
 
 Generate detector level plots.
 
 **Arguments:**
 
-- `test_dataset: ArrayDataset[np.double]` The test dataset.
+- `test_dataset: ArrayDataset` The test dataset.
 - `g: keras.Model` The generator model.
 - `save_path: Path` The path to save the plot to.
 - `var_info: list[VarInfo] | None` The per-variable plot config.
@@ -143,13 +142,13 @@ Generate detector level plots.
 
 - `None`
 
-### `plot_particle_level(test_dataset: ArrayDataset[np.double], g: keras.Model, save_path: Path = Path("plots/particle_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
+### `plot_particle_level(test_dataset: ArrayDataset, g: keras.Model, save_path: Path = Path("plots/particle_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
 
 Generate particle level plots.
 
 **Arguments:**
 
-- `test_dataset: ArrayDataset[np.double]` The test dataset.
+- `test_dataset: ArrayDataset` The test dataset.
 - `g: keras.Model` The generator model.
 - `save_path: Path` The path to save the plot to.
 - `var_info: list[VarInfo] | None` The per-variable plot config.
@@ -201,7 +200,7 @@ The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the
 
 Weighted binary cross-entropy.
 
-Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops.mean` picks a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error, which would silently undo the float64 policy this project runs on. This module no longer touches `keras.ops`, but the explicit sum-and-divide is what the guard test pins, and anything reaching for `keras.ops` again needs to know. `ops.sum` is unaffected.
+Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops.mean` picks a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error, which would silently undo the precision policy this project runs on. This module no longer touches `keras.ops`, but the explicit sum-and-divide is what the guard test pins, and anything reaching for `keras.ops` again needs to know. `ops.sum` is unaffected.
 
 **Arguments:**
 
@@ -252,7 +251,7 @@ One pass over the training split, returning the new state and mean losses.
 
 - `tuple[TrainState, float, float]` The new state and mean losses.
 
-### def `train(splits: DatasetSplits[T], dim: int, n_epochs: int, n_disc_steps: int, lr_g: float, lr_d: float, patience: int, min_delta: float, hidden_units: int, n_layers: int, seed: int | None) -> TrainResult`
+### def `train(splits: DatasetSplits, dim: int, n_epochs: int, n_disc_steps: int, lr_g: float, lr_d: float, patience: int, min_delta: float, hidden_units: int, n_layers: int, seed: int | None) -> TrainResult`
 
 Train the generator and discriminator.
 
@@ -263,7 +262,7 @@ The networks are Dense-only with no dropout or batch norm and Adam is determinis
 
 **Arguments:**
 
-- `splits: DatasetSplits[T]` The dataset splits.
+- `splits: DatasetSplits` The dataset splits.
 - `dim: int` The dimension of the data.
 - `n_epochs: int` The number of epochs to train for.
 - `n_disc_steps: int` The number of discriminator steps per generator step.
@@ -281,7 +280,7 @@ The networks are Dense-only with no dropout or batch norm and Adam is determinis
 
 ## module `workflow`
 
-### def `_prepare_gaussian[T: np.floating](config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int, *, dtype: _DTypeLike[T]) -> tuple[DatasetSplits[T], int, GaussianConfig]`
+### def `_prepare_gaussian(config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int) -> tuple[DatasetSplits, int, GaussianConfig]`
 
 Build Gaussian splits from a reloaded run's config, or from a YAML file. Returns the splits, the dimensionality, and the parsed Gaussian params. The last is so a fresh run can record them in its own config.json.
 
@@ -292,11 +291,10 @@ Build Gaussian splits from a reloaded run's config, or from a YAML file. Returns
 - `batch_size: int` The batch size to use for training.
 - `n_samples: int` The number of samples to use for training.
 - `data_seed: int` The data seed to use for training.
-- `dtype: _DTypeLike[T]` Floating type of the generated arrays. Required, and keyword-only: with one call site there is nothing to gain from a default, and without one `T` follows the argument instead of being pinned to it.
 
 **Returns:**
 
-- `tuple[DatasetSplits[T], int, GaussianConfig]` The splits, the dimensionality, and the parsed Gaussian params.
+- `tuple[DatasetSplits, int, GaussianConfig]` The splits, the dimensionality, and the parsed Gaussian params.
 
 ### `def _save_run(g: keras.Model, d: keras.Model, history: dict[str, list[float]], *, batch_size: int, n_samples: int, dim: int, dataset: str, init_seed: int, data_seed: int, gaussian_params: GaussianConfig | None, variables: frozenset[str]) -> Path`
 

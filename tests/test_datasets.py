@@ -7,6 +7,7 @@ import pytest
 import yaml
 from ran.data import RANDataset
 from ran.rantypes import (
+    EVENT_DTYPE,
     TRUTH_SENTINEL,
     ZXY,
     DatasetSplits,
@@ -91,8 +92,8 @@ class TestGenerateGaussianDataset:
             cov_true=np.array([[0.9]]),
             cov_detector=np.array([[0.5]]),
         )
-        ds = RANDataset(dtype=np.single, cache_dir=tmp_path)
-        assert_type(ds, RANDataset[np.float32])
+        ds = RANDataset(cache_dir=tmp_path)
+        assert_type(ds, RANDataset)
 
         splits = ds.generate_gaussian_dataset(params=params, n_samples=100)
 
@@ -204,8 +205,8 @@ class TestGenerateGaussianDataset:
 
 def test_splits_from_data_builds_three_nonempty_splits() -> None:
     n = 200
-    z = np.random.default_rng(0).normal(size=(2 * n, 1))
-    x = np.random.default_rng(1).normal(size=(2 * n, 1))
+    z = np.random.default_rng(0).normal(size=(2 * n, 1)).astype(np.single)
+    x = np.random.default_rng(1).normal(size=(2 * n, 1)).astype(np.single)
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
 
     splits = RANDataset(batch_size=32).splits_from_data(ZXY(Events(z, x), y))
@@ -217,7 +218,7 @@ def test_splits_from_data_builds_three_nonempty_splits() -> None:
 
 
 def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs) -> DatasetSplits:
-    z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
+    z = np.arange(2 * n, dtype=np.single).reshape(-1, 1)
     x = -z
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
     return RANDataset(batch_size=batch_size, **kwargs).splits_from_data(
@@ -280,21 +281,25 @@ class TestLabelledAndPhysicsForms:
 
     @staticmethod
     def _populations(n: int = 4) -> Populations:
-        truth = np.arange(n, dtype=np.double).reshape(-1, 1)
-        gen = np.arange(n, 2 * n, dtype=np.double).reshape(-1, 1)
+        truth = np.arange(n, dtype=np.single).reshape(-1, 1)
+        gen = np.arange(n, 2 * n, dtype=np.single).reshape(-1, 1)
         return Populations(mc=Events(gen, -gen), data=-truth, truth=truth)
 
     def test_events_reject_unaligned_rows(self) -> None:
         with pytest.raises(ValueError, match="row-aligned"):
-            Events(np.zeros((5, 1)), np.zeros((4, 1)))
+            Events(np.zeros((5, 1), dtype=np.single), np.zeros((4, 1), dtype=np.single))
 
     def test_labels_must_be_zero_or_one(self) -> None:
-        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        events = Events(
+            np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
+        )
         with pytest.raises(ValueError, match=r"zero \(MC\) or one"):
             ZXY(events, np.array([0, 1, 2], dtype=np.ubyte))
 
     def test_one_label_per_event(self) -> None:
-        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        events = Events(
+            np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
+        )
         with pytest.raises(ValueError, match="one label per event"):
             ZXY(events, np.ones(2, dtype=np.ubyte))
 
@@ -315,35 +320,41 @@ class TestLabelledAndPhysicsForms:
         assert len(labelled) == 6
 
     def test_create_stands_in_a_sentinel_for_absent_truth(self) -> None:
-        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+        mc = Events(
+            np.zeros((3, 2), dtype=np.single), np.zeros((3, 2), dtype=np.single)
+        )
 
-        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+        measured = Populations.create(mc=mc, data=np.ones((5, 2), dtype=np.single))
 
         assert not measured.has_truth
         assert measured.truth.shape == (5, 2)
         np.testing.assert_array_equal(measured.truth, TRUTH_SENTINEL)
 
-    def test_astype_changes_precision_without_losing_the_sentinel(self) -> None:
-        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
-        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+    def test_sentinel_is_exact_in_the_pinned_dtype(self) -> None:
+        """`has_truth` compares against TRUTH_SENTINEL by equality.
 
-        single = measured.astype(np.single)
+        That only works while the sentinel is exactly representable. -2**15 is,
+        in every IEEE binary format, which is why it was chosen over a value
+        that merely looks far off-manifold --- and it is what lets the pipeline
+        pin itself to float32 without `has_truth` becoming a rounding question.
+        """
+        assert np.single(TRUTH_SENTINEL) == TRUTH_SENTINEL
+        assert np.double(np.single(TRUTH_SENTINEL)) == TRUTH_SENTINEL
 
-        assert single.mc.z.dtype == np.single
-        assert single.data.dtype == np.single
-        assert single.truth.dtype == np.single
-        assert not single.has_truth
-
-    def test_astype_preserves_real_truth(self) -> None:
-        single = self._populations().astype(np.single)
-
-        assert single.has_truth
-        assert single.truth.dtype == np.single
+        mc = Events(
+            np.zeros((3, 2), dtype=EVENT_DTYPE), np.zeros((3, 2), dtype=EVENT_DTYPE)
+        )
+        measured = Populations.create(mc=mc, data=np.ones((5, 2), dtype=EVENT_DTYPE))
+        assert measured.truth.dtype == EVENT_DTYPE
+        assert not measured.has_truth
+        assert self._populations().has_truth
 
     def test_require_truth_refuses_the_sentinel(self) -> None:
-        mc = Events(np.zeros((3, 2)), np.zeros((3, 2)))
+        mc = Events(
+            np.zeros((3, 2), dtype=np.single), np.zeros((3, 2), dtype=np.single)
+        )
 
-        measured = Populations.create(mc=mc, data=np.ones((5, 2)))
+        measured = Populations.create(mc=mc, data=np.ones((5, 2), dtype=np.single))
 
         with pytest.raises(ValueError, match="no particle-level truth"):
             measured.require_truth()
@@ -367,15 +378,21 @@ class TestLabelledAndPhysicsForms:
         Training survives that only because the stand-in is an ordinary number
         -- see `test_a_missing_particle_level_cannot_poison_the_batch`.
         """
-        mc = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        mc = Events(
+            np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
+        )
 
-        labelled = Populations.create(mc=mc, data=np.ones((2, 1))).interleave()
+        labelled = Populations.create(
+            mc=mc, data=np.ones((2, 1), dtype=np.single)
+        ).interleave()
 
         assert np.all(np.isfinite(labelled.z))
         np.testing.assert_array_equal(labelled.z[labelled.y == 1], TRUTH_SENTINEL)
 
     def test_partition_rejects_a_single_class_sample(self) -> None:
-        events = Events(np.zeros((3, 1)), np.zeros((3, 1)))
+        events = Events(
+            np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
+        )
 
         with pytest.raises(ValueError, match="nonempty"):
             ZXY(events, np.zeros(3, dtype=np.ubyte)).partition()

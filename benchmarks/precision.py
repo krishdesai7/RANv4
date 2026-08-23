@@ -66,14 +66,14 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """Rebuild the model factories at `dtype` without editing the repo.
 
-    `ran.models` hardcodes "float64" at each layer. Rather than mutate the file
+    `ran.models` hardcodes "float32" at each layer. Rather than mutate the file
     (and risk leaving a benchmark's dtype committed), recompile its source with
     the literal swapped and pull the two builders out of the fresh namespace.
     """
     source: str = (REPO_ROOT / "src" / "ran" / "models.py").read_text()
     namespace: dict = {}
     exec(  # ruff: ignore[exec-builtin] -- our own source, recompiled with one literal changed
-        compile(source.replace('"float64"', f'"{dtype}"'), "ran/models.py", "exec"),
+        compile(source.replace('"float32"', f'"{dtype}"'), "ran/models.py", "exec"),
         namespace,
     )
     return (
@@ -89,21 +89,22 @@ def main() -> None:
     train_module.build_discriminator = discriminator
 
     rng = np.random.default_rng(0)
-    z_true = rng.normal(size=(N_SAMPLES, DIM))
-    z_gen = rng.normal(loc=0.5, size=(N_SAMPLES, DIM))
+    z_true = rng.normal(size=(N_SAMPLES, DIM)).astype(scalar)
+    z_gen = rng.normal(loc=0.5, size=(N_SAMPLES, DIM)).astype(scalar)
+    # `Populations` is pinned to the package dtype, so the arrays are cast on
+    # the way in rather than through a container-level `astype`.
     pops = Populations(
-        mc=Events(z=z_gen, x=z_gen + 0.5 * rng.normal(size=(N_SAMPLES, DIM))),
-        data=z_true + 0.5 * rng.normal(size=(N_SAMPLES, DIM)),
+        mc=Events(
+            z=z_gen,
+            x=(z_gen + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(scalar),
+        ),
+        data=(z_true + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(scalar),
         truth=z_true,
-    ).astype(scalar)
+    )
 
-    # The dtype is a runtime choice, so the splits carry a union the checker
-    # cannot narrow; `train` is generic over it and does the right thing either way.
     splits = cast(
         "DatasetSplits",
-        RANDataset(batch_size=1024, seed=0, dtype=scalar).splits_from_data(
-            pops.interleave()
-        ),
+        RANDataset(batch_size=1024, seed=0).splits_from_data(pops.interleave()),
     )
     result = train_module.train(
         splits,

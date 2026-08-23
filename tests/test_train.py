@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import keras
 import numpy as np
+import pytest
 from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
 from ran.data.device import DeviceSplits, train_indices
@@ -25,16 +26,24 @@ from ran.train import (
 )
 
 
-def ones(n: int) -> ndarray[tuple[int], dtype[float64]]:
+def ones(n: int) -> ndarray[tuple[int], dtype[np.single]]:
     """An all-ones mask: what the training path always passes."""
-    return np.ones(n, dtype=np.double)
+    return np.ones(n, dtype=np.single)
 
 
-def test_backend_is_jax_with_float64_enabled() -> None:
+def test_backend_is_jax_pinned_to_single_precision() -> None:
+    """The pin is a package-import side effect, so it needs a guard.
+
+    `JAX_ENABLE_X64=0` means a float64 request is silently truncated rather
+    than refused, which is exactly the kind of thing that goes unnoticed until
+    a run's numbers drift. Asserting the truncation makes the policy explicit.
+    """
     import jax.numpy as jnp
 
     assert keras.backend.backend() == "jax"
-    assert jnp.zeros(1, dtype="float64").dtype == np.float64
+    assert jnp.zeros(1).dtype == np.float32
+    with pytest.warns(UserWarning, match="float64"):
+        assert jnp.zeros(1, dtype="float64").dtype == np.float32
 
 
 class TestNormalizeWeights:
@@ -51,7 +60,7 @@ class TestNormalizeWeights:
         raw = rng.uniform(0.1, 3.0, size=256)
         y = (rng.random(256) < 0.5).astype(np.double)
         w = np.asarray(normalize_weights(raw, y, ones(raw.size)))
-        np.testing.assert_allclose(w[y == 0].sum(), (y == 0).sum(), rtol=1e-9)
+        np.testing.assert_allclose(w[y == 0].sum(), (y == 0).sum(), rtol=1e-6)
 
     def test_mc_weights_stay_proportional_to_raw_output(self) -> None:
         rng = np.random.default_rng(2)
@@ -59,7 +68,7 @@ class TestNormalizeWeights:
         y = (rng.random(128) < 0.5).astype(np.double)
         w = np.asarray(normalize_weights(raw, y, ones(raw.size)))
         ratio = w[y == 0] / raw[y == 0]
-        np.testing.assert_allclose(ratio, ratio[0], rtol=1e-9)
+        np.testing.assert_allclose(ratio, ratio[0], rtol=1e-6)
 
     def test_generator_output_on_data_rows_cannot_change_the_result(self) -> None:
         """The z_true guard: g's output on y=1 rows must not affect any weight.
@@ -88,7 +97,7 @@ def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
     instead reach every weight in the batch through the normalizing sum.
     """
     rng = np.random.default_rng(6)
-    mc_z = rng.normal(size=(6, 1))
+    mc_z = rng.normal(size=(6, 1)).astype(np.single)
     y = np.array([1.0] * 4 + [0.0] * 6)
     g = build_generator(dim=1)
 
@@ -102,23 +111,28 @@ def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
 
 
 class TestWeightedBCE:
-    def test_matches_numpy_reference_in_float64(self) -> None:
-        """Guards against float32 accumulation inside the reduction.
+    def test_matches_a_float64_reference_to_single_precision(self) -> None:
+        """The reduction must not lose more than single-precision rounding.
 
-        `keras.ops.mean` picks a float32 compute dtype for float64 input, which
-        cost ~1e-8 of relative accuracy here; the tolerance below is far tighter
-        than that, so a regression to `ops.mean` fails this test.
+        Scored against a float64 numpy reference: 512 terms accumulated well
+        stay within a few float32 ULPs of it, while a sloppily ordered or
+        narrower-than-float32 accumulation drifts further. This is the test that
+        pinned `jnp.sum(...) / n` over a mean back when `keras.ops.mean` picked
+        a float32 compute dtype for float64 input; the hazard is gone with the
+        pipeline at float32, but the reduction is still the thing being pinned.
         """
         rng = np.random.default_rng(4)
-        d_out = rng.uniform(0.01, 0.99, size=512)
-        y = (rng.random(512) < 0.5).astype(np.double)
-        w = rng.uniform(0.5, 1.5, size=512)
+        d_out = rng.uniform(0.01, 0.99, size=512).astype(np.single)
+        y = (rng.random(512) < 0.5).astype(np.single)
+        w = rng.uniform(0.5, 1.5, size=512).astype(np.single)
 
+        wide = (d_out.astype(np.double), y.astype(np.double), w.astype(np.double))
         expected = -np.mean(
-            w * y * np.log(d_out + EPS) + w * (1 - y) * np.log(1 - d_out + EPS)
+            wide[2] * wide[1] * np.log(wide[0] + EPS)
+            + wide[2] * (1 - wide[1]) * np.log(1 - wide[0] + EPS)
         )
         got = float(weighted_bce(d_out, y, w, ones(d_out.size)))
-        assert abs(got - expected) < 1e-15, f"{got!r} vs {expected!r}"
+        np.testing.assert_allclose(got, expected, rtol=1e-6)
 
     def test_perfect_classifier_scores_near_zero(self) -> None:
         y = np.array([1.0, 1.0, 0.0, 0.0])
@@ -150,7 +164,7 @@ class TestWeightedBCE:
         np.testing.assert_allclose(
             float(weighted_bce(d_out, y, w, mask)),
             float(weighted_bce(d_out[:-2], y[:-2], w[:-2], ones(6))),
-            rtol=1e-14,
+            rtol=1e-6,
         )
 
     def test_sums_divide_to_the_mean(self) -> None:
@@ -164,7 +178,7 @@ class TestWeightedBCE:
         np.testing.assert_allclose(
             float(total) / float(count),
             float(weighted_bce(d_out, y, w, ones(16))),
-            rtol=1e-15,
+            rtol=1e-6,
         )
 
     def test_summing_batches_matches_scoring_them_together(self) -> None:
@@ -180,7 +194,7 @@ class TestWeightedBCE:
         ]
         combined = sum(float(t) for t, _ in halves) / sum(float(c) for _, c in halves)
         np.testing.assert_allclose(
-            combined, float(weighted_bce(d_out, y, w, ones(10))), rtol=1e-14
+            combined, float(weighted_bce(d_out, y, w, ones(10))), rtol=1e-6
         )
 
     def test_zero_weight_events_are_ignored(self) -> None:
@@ -192,7 +206,7 @@ class TestWeightedBCE:
         w_masked[-2:] = 0.0
         full = float(weighted_bce(d_out, y, w_masked, ones(8)))
         trimmed = float(weighted_bce(d_out[:-2], y[:-2], w[:-2], ones(6))) * 6 / 8
-        np.testing.assert_allclose(full, trimmed, rtol=1e-12)
+        np.testing.assert_allclose(full, trimmed, rtol=1e-6)
 
 
 class TestTrainSteps:
@@ -225,8 +239,8 @@ class TestTrainSteps:
         batch = tuple(
             jnp.asarray(a)
             for a in (
-                rng.normal(size=(n, dim)),
-                rng.normal(size=(n, dim)),
+                rng.normal(size=(n, dim)).astype(np.single),
+                rng.normal(size=(n, dim)).astype(np.single),
                 (rng.random(n) < 0.5).astype(np.double),
                 # On the training path the mask is always all ones.
                 ones(n),
@@ -256,7 +270,7 @@ class TestTrainSteps:
         (disc_step, gen_step, _eval_step), state, batch = self._setup()
         _, d_loss = disc_step(state, *batch)
         _, g_loss = gen_step(state, *batch)
-        np.testing.assert_allclose(float(g_loss), -float(d_loss), rtol=1e-12)
+        np.testing.assert_allclose(float(g_loss), -float(d_loss), rtol=1e-6)
 
     def test_eval_step_leaves_state_untouched_and_matches_disc_loss(self) -> None:
         (disc_step, _, eval_step), state, batch = self._setup()
@@ -265,7 +279,7 @@ class TestTrainSteps:
         # up across batches and divide once.
         total, count = eval_step(state, *batch)
         np.testing.assert_allclose(
-            float(total) / float(count), float(d_loss), rtol=1e-12
+            float(total) / float(count), float(d_loss), rtol=1e-6
         )
         assert int(count) == len(batch[2])
 
@@ -274,10 +288,12 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     """A few epochs on a tiny problem: shapes, history, and a saveable model."""
     n = 512
     rng = np.random.default_rng(7)
-    z_true = rng.normal(0.0, 1.0, size=(n, 1))
-    z_gen = rng.normal(0.5, 1.0, size=(n, 1))
+    z_true = rng.normal(0.0, 1.0, size=(n, 1)).astype(np.single)
+    z_gen = rng.normal(0.5, 1.0, size=(n, 1)).astype(np.single)
     z = np.concatenate([z_true, z_gen])
-    x = np.concatenate([z_true, z_gen]) + rng.normal(0, 0.5, size=(2 * n, 1))
+    x = np.concatenate([z_true, z_gen]) + rng.normal(0, 0.5, size=(2 * n, 1)).astype(
+        np.single
+    )
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
     splits = RANDataset(batch_size=128, seed=0).splits_from_data(ZXY(Events(z, x), y))
 
@@ -289,7 +305,7 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     assert set(history) == {"train_d", "train_g", "val_d", "val_g"}
     # History values are only SupportsFloat, as the rest of the pipeline reads
     # them: `plot_losses` and `_save_run` both name a dtype to convert them.
-    curves = {k: np.array(v, dtype=np.double) for k, v in history.items()}
+    curves = {k: np.array(v, dtype=np.single) for k, v in history.items()}
     assert all(len(v) == 3 for v in curves.values())
     assert all(np.isfinite(v).all() for v in curves.values())
 
@@ -300,15 +316,15 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     # The trained values must have been written back out of the JAX pytree.
     g.save(tmp_path / "generator.keras")
     reloaded = keras.saving.load_model(tmp_path / "generator.keras")
-    np.testing.assert_allclose(np.asarray(reloaded(z_gen)), w, rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(reloaded(z_gen)), w, rtol=1e-6)
 
 
 def test_train_restores_best_weights_on_early_stop() -> None:
     """Early stopping must roll back to the best-val epoch, not the last one."""
     n = 512
     rng = np.random.default_rng(8)
-    z = rng.normal(size=(2 * n, 1))
-    x = rng.normal(size=(2 * n, 1))
+    z = rng.normal(size=(2 * n, 1)).astype(np.single)
+    x = rng.normal(size=(2 * n, 1)).astype(np.single)
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
     splits = RANDataset(batch_size=128, seed=0).splits_from_data(ZXY(Events(z, x), y))
 
@@ -326,8 +342,8 @@ class TestSeeding:
     @staticmethod
     def _splits(n: int = 384) -> DatasetSplits:
         rng = np.random.default_rng(11)
-        z = rng.normal(size=(2 * n, 1))
-        x = z + rng.normal(0, 0.3, size=(2 * n, 1))
+        z = rng.normal(size=(2 * n, 1)).astype(np.single)
+        x = z + rng.normal(0, 0.3, size=(2 * n, 1)).astype(np.single)
         y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
         return RANDataset(batch_size=128, seed=3).splits_from_data(ZXY(Events(z, x), y))
 
@@ -350,8 +366,8 @@ class TestSeeding:
         assert a.seed == b.seed == 123
         np.testing.assert_array_equal(np.asarray(a.g(probe)), np.asarray(b.g(probe)))
         np.testing.assert_allclose(
-            np.array(a.history["train_d"], dtype=np.double),
-            np.array(b.history["train_d"], dtype=np.double),
+            np.array(a.history["train_d"], dtype=np.single),
+            np.array(b.history["train_d"], dtype=np.single),
             rtol=0,
         )
 
@@ -417,8 +433,8 @@ class TestFusion:
     @staticmethod
     def _splits(n: int = 512) -> DatasetSplits:
         rng = np.random.default_rng(21)
-        z = rng.normal(size=(2 * n, 1))
-        x = z + rng.normal(0, 0.3, size=(2 * n, 1))
+        z = rng.normal(size=(2 * n, 1)).astype(np.single)
+        x = z + rng.normal(0, 0.3, size=(2 * n, 1)).astype(np.single)
         y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
         return RANDataset(batch_size=32, seed=5).splits_from_data(ZXY(Events(z, x), y))
 

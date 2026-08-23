@@ -241,10 +241,10 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files.
 - `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
-- `dtype: _DTypeLike[T] = np.double` Floating type of the returned arrays.
+There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.
 
-Overloaded like `RANDataset.__init__`, and for the same reason: a defaulted `dtype` pins `T` to `np.double` before the argument is read, so the default lives on a non-generic overload and the generic ones take `dtype` without one. Callers get `np.double` from `load_jet_dataset()` and `T` from `load_jet_dataset(dtype=...)`, whether that is a scalar type or a `np.dtype`.
+Narrowing *after* the observables are computed is deliberate, not incidental: `ran.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
 
 **Returns**:
 
-- `tuple[DatasetSplits[T], int, dict[str, tuple[T, T]]]` DatasetSplits, feature dimensionality, and standardization parameters {var_name: (mu, sigma)}.
+- `tuple[DatasetSplits, int, dict[str, tuple[T, T]]]` DatasetSplits, feature dimensionality, and standardization parameters {var_name: (mu, sigma)}.

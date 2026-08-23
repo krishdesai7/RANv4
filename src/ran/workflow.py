@@ -25,30 +25,23 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
-    from numpy._typing import _DTypeLike
-    from numpy.typing import NDArray
-
-    from .rantypes import DatasetSplits, RANModel, RunConfig
+    from .rantypes import DatasetSplits, EventArray, RANModel, RunConfig
 
 logger: Logger = logging.getLogger(__name__)
 
 
-def _prepare_gaussian[T: np.floating](
+def _prepare_gaussian(
     config: Path | None,
     saved_config: GaussianConfig | None,
     batch_size: int,
     n_samples: int,
     data_seed: int,
-    *,
-    dtype: _DTypeLike[T],
-) -> tuple[DatasetSplits[T], int, GaussianConfig]:
-    builder: RANDataset[T] = RANDataset(
-        batch_size=batch_size, seed=data_seed, dtype=dtype
-    )
+) -> tuple[DatasetSplits, int, GaussianConfig]:
+    builder: RANDataset = RANDataset(batch_size=batch_size, seed=data_seed)
     if saved_config is not None:
         gaussian_params: GaussianConfig = saved_config
         # Reload: use stored params from config.json
-        splits: DatasetSplits[T] = builder.generate_gaussian_dataset(
+        splits: DatasetSplits = builder.generate_gaussian_dataset(
             params=saved_config, n_samples=n_samples
         )
     else:
@@ -62,22 +55,19 @@ def _prepare_gaussian[T: np.floating](
     return splits, gaussian_params.dim, gaussian_params
 
 
-def _prepare_jets[T: np.floating](
+def _prepare_jets(
     n_samples: int,
     batch_size: int,
     variables: frozenset[str],
     data_seed: int,
-    *,
-    dtype: _DTypeLike[T],
-) -> tuple[DatasetSplits[T], int, list[VarInfo]]:
+) -> tuple[DatasetSplits, int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
-    std_params: dict[str, tuple[T, T]]
+    std_params: dict[str, tuple[np.single, np.single]]
     splits, dim, std_params = load_jet_dataset(
         n_samples=n_samples,
         batch_size=batch_size,
         variables=variables,
         seed=data_seed,
-        dtype=dtype,
     )
     var_info: list[VarInfo] = [
         VarInfo(
@@ -147,12 +137,12 @@ def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     return g, history
 
 
-def _load_baseline_weights[T: np.floating = np.double](
+def _load_baseline_weights(
     run_dir: Path,
     dim: int,
-) -> list[NDArray[T]] | None:
+) -> list[EventArray] | None:
     """Pick up IBU weights from the run dir, if that baseline has run."""
-    ibu_weights: list[NDArray[T]] | None = None
+    ibu_weights: list[EventArray] | None = None
     ibu_path: Path = run_dir / "ibu_weights.npz"
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
@@ -210,11 +200,10 @@ def run(
             batch_size,
             n_samples,
             data_seed,
-            dtype=np.double,
         )
     elif dataset == DatasetName.jets:
         splits, dim, var_info = _prepare_jets(
-            n_samples, batch_size, variables, data_seed, dtype=np.double
+            n_samples, batch_size, variables, data_seed
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset!r}")

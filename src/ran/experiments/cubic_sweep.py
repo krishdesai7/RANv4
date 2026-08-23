@@ -13,7 +13,12 @@ from scipy.stats import wasserstein_distance
 
 from ..baselines import unfold_variable
 from ..data import RANDataset
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, Events, Populations
+from ..rantypes import (
+    DEFAULT_PURITY_THRESHOLD,
+    EVENT_DTYPE,
+    Events,
+    Populations,
+)
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -24,7 +29,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..baselines import VariableUnfolding
-    from ..rantypes import DatasetSplits, VariableOutcome
+    from ..rantypes import DatasetSplits, EventArray, VariableOutcome
 
 logger: Logger = logging.getLogger(name=__name__)
 mpl.use(backend="Agg")
@@ -37,32 +42,33 @@ _PATIENCE: int = 5
 _IBU_ITERATIONS: int = 10
 
 
-def response[T: np.floating = np.double](
-    s: T, *zs: NDArray[T]
-) -> tuple[NDArray[T], ...]:
+def response(s: np.single, *zs: EventArray) -> tuple[EventArray, ...]:
     """Deterministic non-linear detector response r(s, z) = z + s * z**3."""
     # NumPy-stub loses specific float precision. There is no type promotion at runtime
     return tuple(z + s * z**3.0 for z in zs)  # pyrefly: ignore[bad-return]
 
 
-def _column[T: np.floating = np.double](a: NDArray[T], /) -> NDArray[T]:
+def _column(a: EventArray, /) -> EventArray:
     """Reshape a flat sample into the (n, 1) column the models expect."""
     return a.reshape(-1, 1)
 
 
-def make_particles(
-    n_samples: int, seed: int = 42
-) -> tuple[NDArray[np.double], NDArray[np.double]]:
+def make_particles(n_samples: int, seed: int = 42) -> tuple[EventArray, EventArray]:
+    """Draw the fixed particle-level samples the sweep distorts.
+
+    `Generator.normal` produces float64 whatever the caller wants, so this is
+    the boundary where the sweep's own data enters the pipeline's precision.
+    """
     rng: np.random.Generator = np.random.default_rng(seed)
-    z_truth: NDArray[np.double] = rng.normal(loc=0.0, scale=1.0, size=n_samples)
-    z_gen: NDArray[np.double] = rng.normal(loc=-1.0, scale=1.0, size=n_samples)
+    z_truth = rng.normal(loc=0.0, scale=1.0, size=n_samples).astype(EVENT_DTYPE)
+    z_gen = rng.normal(loc=-1.0, scale=1.0, size=n_samples).astype(EVENT_DTYPE)
     return z_truth, z_gen
 
 
-def unfolded_wasserstein[T: np.floating = np.double](
-    z_truth: NDArray[T],
-    z_gen: NDArray[T],
-    weights: NDArray[T],
+def unfolded_wasserstein(
+    z_truth: EventArray,
+    z_gen: EventArray,
+    weights: EventArray,
 ) -> np.double:
     """Wasserstein distance between z_truth and the weighted z_gen distribution."""
     return wasserstein_distance(
@@ -74,8 +80,10 @@ def unfolded_wasserstein[T: np.floating = np.double](
 
 def _sweep_point(
     s_index: int, n_points: int, n_samples: int, seed: int
-) -> tuple[np.double, Populations[np.double]]:
-    s: np.double = np.linspace(start=0.0, stop=20.0, num=n_points)[s_index]
+) -> tuple[np.single, Populations]:
+    s: np.single = np.linspace(start=0.0, stop=20.0, num=n_points, dtype=EVENT_DTYPE)[
+        s_index
+    ]
     z_truth, z_gen = make_particles(n_samples, seed=seed)
     x_data, x_sim = response(s, z_truth, z_gen)
     return s, Populations(
@@ -86,43 +94,46 @@ def _sweep_point(
 
 
 def _write_point(sweep_dir: Path, out: dict) -> dict:
+    """Write one point's record, coercing numpy scalars to builtins first.
+
+    `np.float64` subclasses `float`, so `json` accepted it silently while the
+    pipeline was float64. `np.float32` does not, and would raise here instead.
+    Coercing on the way out keeps the record independent of the pinned dtype.
+    """
     sweep_dir.mkdir(parents=True, exist_ok=True)
-    (sweep_dir / f"point_{out['s_index']:02d}.json").write_text(
-        data=json.dumps(obj=out, indent=2)
+    record: dict[str, Any] = {
+        k: v.item() if isinstance(v, np.generic) else v for k, v in out.items()
+    }
+    (sweep_dir / f"point_{record['s_index']:02d}.json").write_text(
+        data=json.dumps(obj=record, indent=2)
     )
-    return out
+    return record
 
 
-def _finite[T: np.floating = np.double](w: NDArray[T]) -> NDArray[T]:
+def _finite(w: EventArray) -> EventArray:
     """Zero out non-finite weights (e.g. a saturated classifier at large s)."""
     return np.where(np.isfinite(w), w, 0.0)
 
 
-def _ibu_point(pops: Populations[np.double]) -> tuple[np.double, VariableOutcome]:
+def _ibu_point(pops: Populations) -> tuple[np.double, VariableOutcome]:
     """Unfold one sweep point with IBU and score it the way RAN is scored.
 
-    IBU narrows to float32 at its own boundary, as it does under `ran baseline
-    ibu`: it has to match the arithmetic its published results were produced
-    with. The weights come back to float64 before the Wasserstein call so that
-    both arms of the sweep are *scored* by identical arithmetic and only the
-    unfolding differs.
+    Both arms now run at the pipeline's single precision, so there is no cast
+    here and nothing to keep in step: the same array reaches both unfolders.
 
     The fit uses `mc.z`, `mc.x` and `data` --- what a real measurement has ---
     and is applied to the same `mc.z` that RAN's weights are applied to.
     `truth` reaches neither method, and appears only in the score.
     """
-    single: Populations[np.single] = pops.astype(np.single)
-    unfolding: VariableUnfolding[np.single] = unfold_variable(
+    unfolding: VariableUnfolding = unfold_variable(
         variable_name="z",
-        mc_gen=single.mc.z[:, 0],
-        mc_sim=single.mc.x[:, 0],
-        observed=single.data[:, 0],
+        mc_gen=pops.mc.z[:, 0],
+        mc_sim=pops.mc.x[:, 0],
+        observed=pops.data[:, 0],
         n_iterations=_IBU_ITERATIONS,
         purity_threshold=DEFAULT_PURITY_THRESHOLD,
     )
-    weights: NDArray[np.double] = _finite(
-        unfolding.weights_for(gen=single.mc.z[:, 0]).astype(np.double)
-    )
+    weights: EventArray = _finite(unfolding.weights_for(gen=pops.mc.z[:, 0]))
     return (
         unfolded_wasserstein(
             z_truth=pops.require_truth(), z_gen=pops.mc.z, weights=weights
@@ -150,7 +161,7 @@ def run_ran(
 
     s, pops = _sweep_point(s_index, n_points, n_samples, seed)
 
-    splits: DatasetSplits[np.double] = RANDataset(
+    splits: DatasetSplits = RANDataset(
         batch_size=batch_size, seed=seed
     ).splits_from_data(pops.interleave())
     result: TrainResult = train(
@@ -163,8 +174,8 @@ def run_ran(
         seed=init_seed,
     )
 
-    raw: NDArray[np.double] = np.asarray(a=result.g(pops.mc.z)).ravel()
-    w_ran: NDArray[np.double] = _finite(w=raw * len(raw) / raw.sum())
+    raw: EventArray = np.asarray(a=result.g(pops.mc.z)).ravel()
+    w_ran: EventArray = _finite(w=raw * len(raw) / raw.sum())
 
     ran_wd: np.double = unfolded_wasserstein(
         z_truth=pops.require_truth(), z_gen=pops.mc.z, weights=w_ran

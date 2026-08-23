@@ -5,6 +5,8 @@ where batch order comes from, what the epoch drops, and why padded evaluation
 rows are inert.
 """
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -154,3 +156,55 @@ class TestDeviceSplits:
         assert isinstance(device.train, TrainSplit)
         assert isinstance(device.val, EvalSplit)
         assert isinstance(device.test, EvalSplit)
+
+
+class TestDtypeIsPinnedAtTheBoundary:
+    """The host->device seam is where `EVENT_DTYPE` stops being an annotation.
+
+    Nothing coerces at the `Populations` boundary, so a caller that builds one
+    out of raw float64 -- `benchmarks/boundary.py` did exactly this -- hands
+    float64 all the way down to here. JAX truncates it either way; what these
+    pin is that the truncation is deliberate and silent rather than incidental
+    and warned about.
+    """
+
+    @staticmethod
+    def _wide(n: int = 200, batch_size: int = 32) -> DatasetSplits:
+        """`_toy`, but float64 on host: the shape of the leak.
+
+        Both checkers reject the `Events` call below, which is the contract
+        working as designed -- and is how this would have been caught in `src`.
+        `benchmarks/**` is excluded from both, which is exactly why
+        `benchmarks/boundary.py` got to make this mistake unchallenged.
+        """
+        z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
+        y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+        return RANDataset(batch_size=batch_size, seed=4).splits_from_data(
+            # pyrefly: ignore[bad-argument-type]
+            # ty: ignore[invalid-argument-type]
+            ZXY(Events(z, -z), y)
+        )
+
+    def test_float64_host_arrays_narrow_without_warning(self) -> None:
+        splits = self._wide()
+        assert splits.train.as_arrays().z.dtype == np.double
+
+        with warnings.catch_warnings():
+            # A dtype JAX cannot honour is a UserWarning, not an error; the
+            # point of asking for EVENT_DTYPE is that it never has to refuse.
+            warnings.simplefilter("error", UserWarning)
+            device = DeviceSplits.from_splits(splits)
+
+        assert device.train.z.dtype == np.single
+        assert device.train.x.dtype == np.single
+        assert device.train.y.dtype == np.single
+
+    def test_every_eval_field_including_the_mask_is_pinned(self) -> None:
+        """`mask` multiplies into every sum, so a wider mask would silently
+        promote the reductions it guards."""
+        device = DeviceSplits.from_splits(self._wide(n=100), eval_batch_size=7)
+        for split in (device.val, device.test):
+            assert split.z.dtype == np.single
+            assert split.x.dtype == np.single
+            assert split.y.dtype == np.single
+            assert split.mask.dtype == np.single

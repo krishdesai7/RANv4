@@ -7,16 +7,24 @@ from typing import TYPE_CHECKING, NamedTuple
 import jax
 import jax.numpy as jnp
 
+from ..rantypes import EVENT_DTYPE
+
 if TYPE_CHECKING:
     from typing import Final, Self
 
-    import numpy as np
     from jaxtyping import Array, Float, Int, PRNGKeyArray
-    from numpy.typing import NDArray
 
-    from ..rantypes import ZXY, DatasetSplits
+    from ..rantypes import ZXY, DatasetSplits, EventArray
 
 DEFAULT_EVAL_BATCH_SIZE: Final[int] = 8192
+
+# This module is the one host->device seam of a run, which makes it the one
+# place where the dtype pin is worth enforcing rather than merely annotating.
+# `EVENT_DTYPE` is otherwise an author-time contract that the data sources
+# honour by narrowing; a further caller building `Populations` out of raw
+# float64 is not something the checkers would catch, and JAX truncates the
+# arrays here regardless -- loudly for the ones that name a dtype, silently for
+# the ones that do not. Naming it makes the truncation the intent.
 
 
 @partial(jax.tree_util.register_dataclass, data_fields=["z", "x", "y"], meta_fields=[])
@@ -33,9 +41,9 @@ class TrainSplit:
     @classmethod
     def from_zxy(cls, data: ZXY, /) -> Self:
         return cls(
-            z=jnp.asarray(data.z),
-            x=jnp.asarray(data.x),
-            y=jnp.asarray(data.y, dtype=data.z.dtype),
+            z=jnp.asarray(data.z, dtype=EVENT_DTYPE),
+            x=jnp.asarray(data.x, dtype=EVENT_DTYPE),
+            y=jnp.asarray(data.y, dtype=EVENT_DTYPE),
         )
 
 
@@ -61,22 +69,28 @@ class EvalSplit:
         size: int = min(batch_size, n)
         n_batches: int = -(-n // size)
         pad: int = n_batches * size - n
-        dtype: dtype[np.single] = data.z.dtype
         dim: int = data.z.shape[1]
 
-        def _pad2d(arr: NDArray[np.floating]) -> Float[Array, "nb bs d"]:
+        def _pad2d(arr: EventArray) -> Float[Array, "nb bs d"]:
             # Edge padding repeats a real row; `mask` is what keeps it out of
             # every sum, so the value only has to be finite.
             wide: Float[Array, "nb bs d"] = jnp.pad(
-                array=jnp.asarray(a=arr), pad_width=((0, pad), (0, 0)), mode="edge"
+                array=jnp.asarray(a=arr, dtype=EVENT_DTYPE),
+                pad_width=((0, pad), (0, 0)),
+                mode="edge",
             )
             return wide.reshape(n_batches, size, dim)
 
         y: Float[Array, "nb bs"] = jnp.pad(
-            array=jnp.asarray(a=data.y, dtype=dtype), pad_width=(0, pad), mode="edge"
+            array=jnp.asarray(a=data.y, dtype=EVENT_DTYPE),
+            pad_width=(0, pad),
+            mode="edge",
         )
         mask: Float[Array, "nb bs"] = jnp.concatenate(
-            arrays=[jnp.ones(shape=n, dtype=dtype), jnp.zeros(shape=pad, dtype=dtype)]
+            arrays=[
+                jnp.ones(shape=n, dtype=EVENT_DTYPE),
+                jnp.zeros(shape=pad, dtype=EVENT_DTYPE),
+            ]
         )
         return cls(
             z=_pad2d(arr=data.z),

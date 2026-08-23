@@ -282,7 +282,7 @@ ran train --load-run runs/...             → reload + re-plot with baseline ove
 ## 12. Tech Stack
 
 - **Python 3.13** + **uv** (no pip, lockfile-based)
-- **Keras 3 on the JAX backend** — training, `@jax.jit` on each disc/gen/eval step, float64 end to end
+- **Keras 3 on the JAX backend** — training, `@jax.jit` on each disc/gen/eval step, float32 end to end
 - **NumPy** — data generation and evaluation
 - **SciPy** — Wasserstein distance, Jensen-Shannon divergence
 - **Matplotlib** — publication-quality plots (serif font, ratio panels)
@@ -314,8 +314,12 @@ OmniFold is iterative (Step 1 at reco, Step 2 at particle level, repeat). RAN is
 **Q: Why normalize weights to mean=1?**
 Normalization preserves the total number of events (integral of the distribution). Without it, a generator that simply outputs large weights everywhere would trivially reduce the discriminator's ability to distinguish counts, but not the shape.
 
-**Q: Why use float64?**
-Weight ratios in physics unfolding can span several orders of magnitude, and loss precision near `log(2)` matters for early stopping decisions. float32 was showing numerical instability in early experiments.
+**Q: Why use float32?**
+The inputs do not justify anything wider: `mass` and `mult` are bit-exact through a float32 round trip and the other four observables lose exactly half a ULP, so there is no structure below float32 to preserve. The two concerns that argued for float64 were tested and did not survive it — weight normalization is stable in float32 out to a 10^24 dynamic range, and the batched reduction lands three orders of magnitude inside the early-stopping threshold, because summing per-batch then across batches is effectively pairwise summation. An ensemble of 20 paired seeds put the two precisions within ±0.5 percentage points of unfolding improvement.
+
+Earlier notes here recorded float32 "showing numerical instability". That predates the move from `keras.ops` to plain `jnp`, and `keras.ops.mean` silently selecting a float32 compute dtype was a real bug in the old code path — the instability is better explained by that than by float32 itself.
+
+The one place precision still shows: `log(1 - d + ε)` loses accuracy once the discriminator saturates past d ≈ 0.9999. That is a regime where the adversarial game has already broken down, and it degrades gracefully (the ε clamp floors it rather than producing NaN), but a loss curve read from a saturated run is less trustworthy in float32.
 
 **Q: What happens with correlated dimensions?**
 The generator takes the full `z_gen` vector as input and produces a single scalar weight per event. This means it naturally captures correlations — the weight for one event depends on all its particle-level features jointly. IBU cannot do this (it's 1D per variable). This is a key advantage of the ML approach.

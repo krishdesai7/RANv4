@@ -3,25 +3,19 @@ from __future__ import annotations
 from dataclasses import KW_ONLY, dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
-import numpy as np
-
 if TYPE_CHECKING:
     from typing import Literal
 
+    import numpy as np
     from numpy.typing import NDArray
 
     from .events import Populations
     from .types import MetricRecord
 
 
-class UnfoldingPopulations[T: np.floating = np.double](NamedTuple):
-    full: Populations[T]
-    test: Populations[T]
-
-    def astype[U: np.floating](self, dtype: type[U]) -> UnfoldingPopulations[U]:
-        return UnfoldingPopulations[U](
-            full=self.full.astype(dtype), test=self.test.astype(dtype)
-        )
+class UnfoldingPopulations(NamedTuple):
+    full: Populations
+    test: Populations
 
 
 @dataclass(frozen=True)

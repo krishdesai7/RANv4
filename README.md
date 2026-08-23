@@ -214,9 +214,15 @@ bit-identical between the clean and poisoned arms.
 
 JAX is the only backend in the build; TensorFlow is not a dependency, direct or transitive.
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=1`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
 
-The project is run in float64 precision end to end. Improved GPU throughput can be achieved by reducing precision to float32 by setting `JAX_ENABLE_X64=0` and switching the`dtype=`arguments in`src/ran/models.py`.
+### Precision
+
+The project runs in float32 end to end. The pin is a single constant, `EVENT_DTYPE` in `src/ran/rantypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/ran/models.py` follow from it.
+
+This is a measured choice, not a default. Every jet observable is float32-clean — `mass` and `mult` survive a float32 round trip bit-exactly, and the other four lose exactly half a ULP, the least a cast can cost. Across 20 paired seeds, float32 and float64 agree on unfolding improvement to within ±0.5 percentage points (equivalence test p=0.015), while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
+
+Two boundaries stay float64 deliberately: the metrics (Wasserstein, JS, triangular discriminator) come back from scipy in float64 and are not narrowed — what is pinned is the data, not the measurement of it — and `ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
 
 `src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 

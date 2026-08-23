@@ -24,37 +24,35 @@ if TYPE_CHECKING:
     from numpy._typing import _DTypeLikeFloat
     from numpy.typing import NDArray
 
-    from ..rantypes import MetricRecord, RunConfig
+    from ..rantypes import EventArray, MetricRecord, RunConfig
 
 logger: Logger = logging.getLogger(name=__name__)
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class _BinnedReweighting[T: np.floating = np.double]:
-    edges: NDArray[T]
-    bin_weights: NDArray[T]
+class _BinnedReweighting:
+    edges: EventArray
+    bin_weights: EventArray
 
-    def weights_for(self, gen: NDArray[T]) -> NDArray[T]:
+    def weights_for(self, gen: EventArray) -> EventArray:
         """Per-event weights for particle-level values `gen`, mean one."""
         return _normalize_weights(self.bin_weights[_assign_bins(gen, self.edges)])
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class VariableUnfolding[T: np.floating = np.double]:
+class VariableUnfolding:
     """One variable's reweighting, or `None` where it could not be fit."""
 
-    reweighting: _BinnedReweighting[T] | None
+    reweighting: _BinnedReweighting | None
     outcome: VariableOutcome
 
-    def weights_for(self, gen: NDArray[T]) -> NDArray[T]:
+    def weights_for(self, gen: EventArray) -> EventArray:
         if self.reweighting is None:
             return np.ones(gen.shape[0], dtype=gen.dtype)
         return self.reweighting.weights_for(gen)
 
 
-def _assign_bins[T: np.floating = np.double](
-    values: NDArray[T], edges: NDArray[T], /
-) -> NDArray[np.intp]:
+def _assign_bins(values: EventArray, edges: EventArray, /) -> NDArray[np.intp]:
     if values.ndim != 1 or not np.all(a=np.isfinite(values)):
         raise ValueError("bin values must be a finite one-dimensional array")
     if edges.ndim != 1 or edges.size < 2 or not np.all(a=np.diff(a=edges) > 0):
@@ -73,9 +71,7 @@ def _bin_counts(indices: NDArray[np.intp], n_bins: int, /) -> NDArray[np.intp]:
     return np.bincount(indices, minlength=n_bins)
 
 
-def _unfolded_to_bin_weights[T: np.floating = np.double](
-    unfolded: NDArray[T], prior: NDArray[T]
-) -> NDArray[T]:
+def _unfolded_to_bin_weights(unfolded: EventArray, prior: EventArray) -> EventArray:
     if (
         unfolded.ndim != 1
         or prior.ndim != 1
@@ -92,12 +88,12 @@ def _unfolded_to_bin_weights[T: np.floating = np.double](
     if np.any(a=(prior == 0) & (unfolded > EPS)):
         raise ValueError("unfolded mass in a zero-prior bin")
 
-    weights: NDArray[T] = np.zeros_like(a=unfolded)
+    weights: EventArray = np.zeros_like(a=unfolded)
     np.divide(unfolded, prior, out=weights, where=prior > 0)
     return weights
 
 
-def _normalize_weights[T: np.floating = np.double](weights: NDArray[T]) -> NDArray[T]:
+def _normalize_weights(weights: EventArray) -> EventArray:
     if weights.ndim != 1 or weights.size == 0:
         raise ValueError("weights must be a nonempty one-dimensional vector")
     if not np.all(a=np.isfinite(weights)):
@@ -105,11 +101,11 @@ def _normalize_weights[T: np.floating = np.double](weights: NDArray[T]) -> NDArr
     if np.any(a=weights < 0):
         raise ValueError("weights must be nonnegative")
 
-    mean: T = np.mean(a=weights)
+    mean: np.single = np.mean(a=weights)
     if not np.isfinite(mean) or mean <= 0:
         raise ValueError("weights mean must be finite and strictly positive")
 
-    normalized: NDArray[T] = np.divide(weights, mean)
+    normalized: EventArray = np.divide(weights, mean)
     if not np.all(a=np.isfinite(normalized)) or np.any(a=normalized < 0):
         raise ValueError("normalized weights must be finite and nonnegative")
     # The division runs in the caller's precision; only the check that it
@@ -119,19 +115,19 @@ def _normalize_weights[T: np.floating = np.double](weights: NDArray[T]) -> NDArr
     return normalized
 
 
-def _next_pure_edge[T: np.floating = np.double](
-    gen_sorted: NDArray[T],
-    upper_sorted: NDArray[T],
-    lower_by_upper: NDArray[T],
-    lo: T,
-    gen_max: T,
+def _next_pure_edge(
+    gen_sorted: EventArray,
+    upper_sorted: EventArray,
+    lower_by_upper: EventArray,
+    lo: np.single,
+    gen_max: np.single,
     purity_threshold: float,
     n_candidates: int = 100,
-) -> T | None:
+) -> np.single | None:
     if n_candidates <= 0:
         raise ValueError("n_candidates must be positive")
 
-    candidates: NDArray[T] = np.linspace(
+    candidates: EventArray = np.linspace(
         start=lo + 1 / n_candidates,
         stop=gen_max,
         num=n_candidates,
@@ -178,12 +174,12 @@ def _next_pure_edge[T: np.floating = np.double](
     return candidates[qualifying[0]]
 
 
-def _purity_bins[T: np.floating = np.double](
-    gen: NDArray[T],
-    sim: NDArray[T],
+def _purity_bins(
+    gen: EventArray,
+    sim: EventArray,
     purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
     max_bins: int = 50,
-) -> NDArray[T]:
+) -> EventArray:
     """Determine bin edges where purity exceeds the threshold."""
     if gen.ndim != 1 or sim.ndim != 1:
         raise ValueError("gen and sim must be one-dimensional")
@@ -195,23 +191,23 @@ def _purity_bins[T: np.floating = np.double](
         raise ValueError("max_bins must be positive")
 
     # One-time preprocessing.
-    gen_sorted: NDArray[T] = np.sort(a=gen)
+    gen_sorted: EventArray = np.sort(a=gen)
 
-    lower: NDArray[T] = np.minimum(gen, sim)
-    upper: NDArray[T] = np.maximum(gen, sim)
+    lower: EventArray = np.minimum(gen, sim)
+    upper: EventArray = np.maximum(gen, sim)
 
     upper_order: NDArray[np.intp] = np.argsort(a=upper)
-    upper_sorted: NDArray[T] = upper[upper_order]
-    lower_by_upper: NDArray[T] = lower[upper_order]
+    upper_sorted: EventArray = upper[upper_order]
+    lower_by_upper: EventArray = lower[upper_order]
 
     # max_bins bins require at most max_bins + 1 edges.
-    edges: NDArray[T] = np.empty(shape=max_bins + 1, dtype=gen.dtype)
+    edges: EventArray = np.empty(shape=max_bins + 1, dtype=gen.dtype)
     edges[0] = gen.min()
     n_edges = 1
 
-    gen_max: Final[T] = gen.max()
+    gen_max: Final[np.single] = gen.max()
     while n_edges <= max_bins and edges[n_edges - 1] < gen_max:
-        edge: T | None = _next_pure_edge(
+        edge: np.single | None = _next_pure_edge(
             gen_sorted=gen_sorted,
             upper_sorted=upper_sorted,
             lower_by_upper=lower_by_upper,
@@ -228,42 +224,42 @@ def _purity_bins[T: np.floating = np.double](
     return edges[:n_edges]
 
 
-def _build_response[T: np.floating = np.double](
+def _build_response(
     gen_bins: NDArray[np.intp],
     sim_bins: NDArray[np.intp],
     n_bins: int,
     dtype: _DTypeLikeFloat,
     /,
-) -> NDArray[T]:
+) -> EventArray:
     """Build row-normalized response matrix R[t,r] = P(reco=r | truth=t)."""
-    response: NDArray[T] = np.zeros(shape=(n_bins, n_bins), dtype=dtype)
+    response: EventArray = np.zeros(shape=(n_bins, n_bins), dtype=dtype)
     np.add.at(response, (gen_bins, sim_bins), 1)
-    row_sums: NDArray[T] = response.sum(axis=1, keepdims=True)
+    row_sums: EventArray = response.sum(axis=1, keepdims=True)
     row_sums[row_sums == 0] = 1
     response /= row_sums
     return response
 
 
-def _ibu[T: np.floating = np.double](
-    prior: NDArray[T],
-    data_hist: NDArray[T],
-    response: NDArray[T],
+def _ibu(
+    prior: EventArray,
+    data_hist: EventArray,
+    response: EventArray,
     n_iterations: int,
     strict: bool = False,
-) -> NDArray[T]:
+) -> EventArray:
 
-    posterior: NDArray[T] = prior.copy()
+    posterior: EventArray = prior.copy()
 
     for _ in range(n_iterations):
         # The NumPy-stub loses the specific floating precision
         # There is no type promotion at runtime
-        marginal: NDArray[T] = response.T @ posterior  # pyrefly: ignore[bad-assignment]
+        marginal: EventArray = response.T @ posterior  # pyrefly: ignore[bad-assignment]
         if strict and np.any(a=(marginal == 0) & (data_hist != 0)):
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
         # `out=` makes the value of the skipped entries zero.
-        likelihood: NDArray[T] = np.zeros_like(a=posterior)
+        likelihood: EventArray = np.zeros_like(a=posterior)
         np.divide(
             data_hist,
             marginal,
@@ -274,16 +270,16 @@ def _ibu[T: np.floating = np.double](
     return posterior
 
 
-def unfold_variable[T: np.floating = np.double](
+def unfold_variable(
     variable_name: str,
-    mc_gen: NDArray[T],
-    mc_sim: NDArray[T],
-    observed: NDArray[T],
+    mc_gen: EventArray,
+    mc_sim: EventArray,
+    observed: EventArray,
     n_iterations: int,
     purity_threshold: float,
-) -> VariableUnfolding[T]:
-    dtype: np.dtype[T] = mc_gen.dtype
-    bins: NDArray[T] = _purity_bins(mc_gen, mc_sim, purity_threshold)
+) -> VariableUnfolding:
+    dtype: np.dtype[np.single] = mc_gen.dtype
+    bins: EventArray = _purity_bins(mc_gen, mc_sim, purity_threshold)
     n_bins: int = bins.size - 1
     if n_bins < 2:
         logger.warning("%s: only %d bin(s), skipping", variable_name, n_bins)
@@ -301,9 +297,9 @@ def unfold_variable[T: np.floating = np.double](
     mc_sim_bins: NDArray[np.intp] = _assign_bins(mc_sim, bins)
     observed_bins: NDArray[np.intp] = _assign_bins(observed, bins)
 
-    response: NDArray[T] = _build_response(mc_gen_bins, mc_sim_bins, n_bins, dtype)
-    prior: NDArray[T] = _bin_counts(mc_gen_bins, n_bins).astype(dtype)
-    data_hist: NDArray[T] = _bin_counts(observed_bins, n_bins).astype(dtype)
+    response: EventArray = _build_response(mc_gen_bins, mc_sim_bins, n_bins, dtype)
+    prior: EventArray = _bin_counts(mc_gen_bins, n_bins).astype(dtype)
+    data_hist: EventArray = _bin_counts(observed_bins, n_bins).astype(dtype)
     # Accumulated in float64 whatever the unfolding runs in: these are exact
     # integer counts, and float32 stops representing those past 2**24, which
     # would fail the comparison on sample size alone.
@@ -320,7 +316,7 @@ def unfold_variable[T: np.floating = np.double](
             f"actual={observed_count}, expected={observed.size}"
         )
 
-    unfolded: NDArray[T] = _ibu(prior, data_hist, response, n_iterations)
+    unfolded: EventArray = _ibu(prior, data_hist, response, n_iterations)
     logger.info("%s: %d bins, %d iterations", variable_name, n_bins, n_iterations)
     return VariableUnfolding(
         reweighting=_BinnedReweighting(
@@ -342,10 +338,9 @@ def _run_and_evaluate(
     if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
         raise ValueError("purity_threshold must be finite and between zero and one")
 
-    # Single precision, at its own boundary.
-    full: Populations[np.single]
-    test: Populations[np.single]
-    full, test = load_populations(config).astype(np.single)
+    full: Populations
+    test: Populations
+    full, test = load_populations(config)
     test_truth: NDArray[np.single] = test.require_truth()
     weights: NDArray[np.single] = np.empty(
         shape=(config.dim, len(test.mc)), dtype=np.single
@@ -355,7 +350,7 @@ def _run_and_evaluate(
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
         # Fit on every split, then score the test split with the result.
-        unfolding: VariableUnfolding[np.single] = unfold_variable(
+        unfolding: VariableUnfolding = unfold_variable(
             variable_name=variable_name,
             mc_gen=full.mc.z[:, dimension],
             mc_sim=full.mc.x[:, dimension],

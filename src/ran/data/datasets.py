@@ -4,13 +4,20 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, cast, overload
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..rantypes import ZXY, DatasetSplits, Events, GaussianConfig, Populations
+from ..rantypes import (
+    EVENT_DTYPE,
+    ZXY,
+    DatasetSplits,
+    Events,
+    GaussianConfig,
+    Populations,
+)
 from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
@@ -18,8 +25,7 @@ if TYPE_CHECKING:
     from typing import Final, LiteralString, SupportsFloat
 
     from jaxtyping import Array, Float
-    from numpy._typing import _DTypeLike
-    from numpy.typing import DTypeLike, NDArray
+    from numpy.typing import NDArray
 
     from ..rantypes import Nested
 
@@ -75,7 +81,7 @@ def _draw_gaussian(
     return z_true, z_gen, x_data, x_sim
 
 
-class ArrayDataset[T: np.floating = np.double]:
+class ArrayDataset:
     """One host-resident split of (z, x, y), plus how it should be batched.
 
     This is a container, not an iterator. Batch order is drawn on device, per
@@ -86,13 +92,13 @@ class ArrayDataset[T: np.floating = np.double]:
 
     def __init__(
         self,
-        data: ZXY[T],
+        data: ZXY,
         batch_size: int = 128,
         seed: int = 42,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
-        self.data: ZXY[T] = data
+        self.data: ZXY = data
         self.batch_size: int = batch_size
         self.seed: int = seed
 
@@ -101,31 +107,19 @@ class ArrayDataset[T: np.floating = np.double]:
         return len(self.data)
 
     @property
-    def dtype(self) -> np.dtype[T]:
+    def dtype(self) -> np.dtype[np.single]:
         return self.data.dtype
 
     def __len__(self) -> int:
         """Number of batches per pass, counting a short trailing one."""
         return (self.size + self.batch_size - 1) // self.batch_size
 
-    def as_arrays(self) -> ZXY[T]:
+    def as_arrays(self) -> ZXY:
         """Return the whole split as flat labelled arrays, in stored order."""
         return self.data
 
 
-class RANDataset[T: np.floating = np.double]:
-    @overload
-    def __init__(
-        self: RANDataset[np.double],
-        batch_size: int = 128,
-        seed: int = 42,
-        cache_dir: Path = Path(".cache"),
-        val_fraction: float = 0.1,
-        test_fraction: float = 0.2,
-        dtype: _DTypeLike[np.double] = np.double,
-    ) -> None: ...
-
-    @overload
+class RANDataset:
     def __init__(
         self,
         batch_size: int = 128,
@@ -133,34 +127,11 @@ class RANDataset[T: np.floating = np.double]:
         cache_dir: Path = Path(".cache"),
         val_fraction: float = 0.1,
         test_fraction: float = 0.2,
-        *,
-        dtype: _DTypeLike[T],
-    ) -> None: ...
-
-    @overload
-    def __init__(
-        self,
-        batch_size: int,
-        seed: int,
-        cache_dir: Path,
-        val_fraction: float,
-        test_fraction: float,
-        dtype: _DTypeLike[T],
-    ) -> None: ...
-
-    def __init__(
-        self,
-        batch_size: int = 128,
-        seed: int = 42,
-        cache_dir: Path = Path(".cache"),
-        val_fraction: float = 0.1,
-        test_fraction: float = 0.2,
-        dtype: DTypeLike = np.double,
     ) -> None:
         self.batch_size: int = batch_size
         self.seed: int = seed
         self.cache_dir: Path = cache_dir
-        self.dtype: np.dtype[T] = cast("np.dtype[T]", np.dtype(dtype))
+        self.dtype: np.dtype[np.single] = np.dtype(EVENT_DTYPE)
 
         if test_fraction < 0 or test_fraction > 1:
             raise ValueError("test_fraction must be between 0 and 1")
@@ -171,8 +142,8 @@ class RANDataset[T: np.floating = np.double]:
 
         self.val_fraction: float = val_fraction
         self.test_fraction: float = test_fraction
-        self.dataset: ZXY[T] | None = None
-        self.splits: DatasetSplits[T] | None = None
+        self.dataset: ZXY | None = None
+        self.splits: DatasetSplits | None = None
 
     @staticmethod
     def _round_nested(
@@ -206,13 +177,13 @@ class RANDataset[T: np.floating = np.double]:
         cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
 
-    def _build_dataset(self, data: ZXY[T]) -> ZXY[T]:
+    def _build_dataset(self, data: ZXY) -> ZXY:
         """Shuffle so that both classes are spread across every split."""
         rng: np.random.Generator = np.random.default_rng(self.seed)
         order: NDArray[np.intp] = rng.permutation(x=len(data))
         return ZXY(Events(data.z[order], data.x[order]), data.y[order])
 
-    def _split_dataset(self, dataset: ZXY[T]) -> DatasetSplits[T]:
+    def _split_dataset(self, dataset: ZXY) -> DatasetSplits:
         n: int = len(dataset)
         n_test: int = int(n * self.test_fraction)
         n_non_test: int = n - n_test
@@ -225,7 +196,7 @@ class RANDataset[T: np.floating = np.double]:
                 "every split needs at least one event"
             )
 
-        def _slice(lo: int, hi: int) -> ArrayDataset[T]:
+        def _slice(lo: int, hi: int) -> ArrayDataset:
             return ArrayDataset(
                 data=ZXY(
                     Events(dataset.z[lo:hi], dataset.x[lo:hi]),
@@ -247,7 +218,7 @@ class RANDataset[T: np.floating = np.double]:
         *,
         params: GaussianConfig | None = None,
         n_samples: int = 10**6,
-    ) -> DatasetSplits[T]:
+    ) -> DatasetSplits:
         # Written as a nested check rather than a single XOR so that each branch
         # narrows the argument it goes on to use.
         if params is not None:
@@ -260,16 +231,16 @@ class RANDataset[T: np.floating = np.double]:
             parsed = parse_gaussian_config(config_path)
 
         # The parameters go into `_draw_gaussian` at the float64 they were parsed
-        # in, and the sample narrows to `T` once on the way out. Pre-narrowing
+        # in, and the sample narrows to `np.single` once on the way out. Pre-narrowing
         # them bought nothing -- the draw upcasts again -- and cost precision in
-        # the detector Cholesky whenever `T` was float32.
+        # the detector Cholesky whenever `np.single` was float32.
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         if cache_path.exists():
             logger.info("Loading dataset from cache: %s", cache_path)
             with np.load(file=cache_path) as cached:
-                data: ZXY[T] = ZXY(
+                data: ZXY = ZXY(
                     Events(
                         z=cached["z"].astype(dtype=self.dtype),
                         x=cached["x"].astype(dtype=self.dtype),
@@ -287,7 +258,7 @@ class RANDataset[T: np.floating = np.double]:
                 n_samples=n_samples,
             )
 
-            data: ZXY[T] = Populations(
+            data: ZXY = Populations(
                 mc=Events(
                     z=np.asarray(z_gen, dtype=self.dtype),
                     x=np.asarray(x_sim, dtype=self.dtype),
@@ -301,7 +272,7 @@ class RANDataset[T: np.floating = np.double]:
 
         return self.splits_from_data(data)
 
-    def splits_from_data(self, data: ZXY[T]) -> DatasetSplits[T]:
+    def splits_from_data(self, data: ZXY) -> DatasetSplits:
         """Shuffle one labelled sample and cut it into train/val/test."""
         self.dataset = self._build_dataset(data)
         self.splits = self._split_dataset(self.dataset)

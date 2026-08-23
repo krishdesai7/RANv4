@@ -4,6 +4,7 @@ from .configs import RunConfig as RunConfig
 from .constants import CACHE_DIR as CACHE_DIR
 from .constants import CACHE_FILENAMES as CACHE_FILENAMES
 from .constants import DEFAULT_PURITY_THRESHOLD as DEFAULT_PURITY_THRESHOLD
+from .constants import EVENT_DTYPE as EVENT_DTYPE
 from .constants import GENERATORS as GENERATORS
 from .constants import JET_OBS as JET_OBS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
@@ -26,6 +27,7 @@ from .results import UnfoldingPopulations as UnfoldingPopulations
 from .results import VariableOutcome as VariableOutcome
 from .types import DiscGradFn as DiscGradFn
 from .types import EvalStep as EvalStep
+from .types import EventArray as EventArray
 from .types import GenGradFn as GenGradFn
 from .types import GradsAndAux as GradsAndAux
 from .types import KerasVariable as KerasVariable

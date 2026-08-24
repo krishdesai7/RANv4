@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- import isolation
-import sys
-from types import ModuleType
 from typing import TYPE_CHECKING
 
 import pytest
@@ -51,24 +48,14 @@ def test_every_leaf_command_has_help(command) -> None:
     assert result.exit_code == 0
 
 
-def test_importing_cli_does_not_commit_a_keras_backend() -> None:
-    completed: subprocess.CompletedProcess[str] = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; import ran.cli; assert 'keras' not in sys.modules",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-
-
 def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> None:
+    """`ran.cli` imports `run` at module scope, so patch the name it calls.
+
+    Replacing `sys.modules["ran.workflow"]` would only work if the command
+    re-imported on every invocation, which it deliberately no longer does.
+    """
     calls = []
     configured_levels = []
-    fake_workflow = ModuleType("ran.workflow")
 
     def fake_run(
         batch_size,
@@ -99,8 +86,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
             }
         )
 
-    fake_workflow.__dict__["run"] = fake_run
-    monkeypatch.setitem(sys.modules, "ran.workflow", fake_workflow)
+    monkeypatch.setattr(cli, "run", fake_run)
     monkeypatch.setattr(
         cli, "configure_logging", lambda level: configured_levels.append(level)
     )

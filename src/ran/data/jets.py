@@ -18,6 +18,7 @@ from .datasets import DatasetSplits, RANDataset
 from .download import download_jet_data
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from logging import Logger
     from pathlib import Path
 
@@ -26,13 +27,46 @@ if TYPE_CHECKING:
 logger: Logger = logging.getLogger(name=__name__)
 
 
+def _reject_unordered(variables: Sequence[str], /) -> None:
+    """Refuse the containers that silently lose the column order.
+
+    A `set` costs nothing to iterate and everything to reproduce; a duplicate
+    name would quietly give two columns the same data under one label; an
+    unknown name would only surface as a `KeyError` deep in the load. All three
+    are cheap to catch here and expensive to debug from a metrics table.
+    """
+    if isinstance(variables, (set, frozenset)):
+        raise TypeError(
+            "variables must be an ordered sequence, not a set: column order is "
+            "recorded in config.json and has to survive into another process"
+        )
+    if len(set(variables)) != len(variables):
+        raise ValueError(f"variables contains duplicates: {list(variables)}")
+    unknown: list[str] = [v for v in variables if v not in CACHE_FILENAMES]
+    if unknown:
+        raise ValueError(
+            f"unknown jet variables {unknown}; expected from {list(CACHE_FILENAMES)}"
+        )
+    if not variables:
+        raise ValueError("variables must name at least one observable")
+
+
 def load_jet_dataset(
     n_samples: int = 500_000,
     batch_size: int = 1024,
     cache_dir: Path = CACHE_DIR,
-    variables: frozenset[str] = SUBSTRUCTURE_VARIABLES,
+    variables: Sequence[str] = SUBSTRUCTURE_VARIABLES,
     seed: int = 42,
 ) -> tuple[DatasetSplits, int, dict[str, tuple[np.single, np.single]]]:
+    """Build jet splits with column `i` taken from `variables[i]`.
+
+    `variables` is a `Sequence` and the order is load-bearing: it is the column
+    order of every array downstream, it is what `_save_run` records, and it is
+    what a later `ran evaluate` or `ran baseline ibu` must reproduce exactly to
+    label those columns --- or to feed a trained generator its own features.
+    Passing a `set` or `frozenset` here is a bug, not a convenience.
+    """
+    _reject_unordered(variables)
     # The npz caches on disk are float64, which is what the Zenodo release ships
     # and what the standardization statistics are computed in. Narrowing happens
     # once here, on the way into the pipeline.
@@ -49,7 +83,7 @@ def load_jet_dataset(
     n_features: int = len(variables)
 
     # Check available samples
-    with np.load(file=cache_dir / f"{CACHE_FILENAMES[next(iter(variables))]}.npz") as f:
+    with np.load(file=cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
         n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")

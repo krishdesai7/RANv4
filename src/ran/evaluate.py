@@ -97,7 +97,10 @@ def _load_splits(config: dict) -> DatasetSplits:
         splits, _, _ = load_jet_dataset(
             n_samples,
             batch_size,
-            variables=frozenset(config["variables"]),
+            # The recorded list, in the recorded order. Round-tripping it
+            # through a set here is what mismatched these columns against the
+            # `var_names` below --- and against the generator's own training.
+            variables=config["variables"],
             seed=data_seed,
         )
         return splits

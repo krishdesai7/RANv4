@@ -49,6 +49,27 @@ def configure(
     configure_logging(level=log_level.value)
 
 
+def _canonical_variables(chosen: list[str] | None, /) -> tuple[str, ...]:
+    """Fix the jet column order once, here, so nothing downstream has to guess.
+
+    Repeated `--var` arrives as a list in whatever order it was typed. Sorting
+    it into `SUBSTRUCTURE_VARIABLES` order means `--var w --var m` and
+    `--var m --var w` describe the same run --- same columns, same cache key,
+    same `config.json` --- rather than two runs that differ only in a permutation
+    nobody chose.
+    """
+    if not chosen:
+        return SUBSTRUCTURE_VARIABLES
+    wanted: set[str] = set(chosen)
+    return tuple(v for v in SUBSTRUCTURE_VARIABLES if v in wanted) + tuple(
+        # Unknown names pass through in order so `load_jet_dataset` is the one
+        # place that reports them, with the list of what it does accept.
+        v
+        for v in dict.fromkeys(chosen)
+        if v not in SUBSTRUCTURE_VARIABLES
+    )
+
+
 @app.command(name="train")
 def train_command(
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
@@ -68,7 +89,7 @@ def train_command(
         n_samples,
         config,
         dataset,
-        frozenset(variable or SUBSTRUCTURE_VARIABLES),
+        _canonical_variables(variable),
         load_run,
         hidden_units,
         n_layers,

@@ -2,7 +2,9 @@ from .configs import REQUIRED_KEYS as REQUIRED_KEYS
 from .configs import GaussianConfig as GaussianConfig
 from .configs import RunConfig as RunConfig
 from .constants import CACHE_DIR as CACHE_DIR
+from .constants import CACHE_ENV_VAR as CACHE_ENV_VAR
 from .constants import CACHE_FILENAMES as CACHE_FILENAMES
+from .constants import COMPILE_CACHE_DIR as COMPILE_CACHE_DIR
 from .constants import DEFAULT_PURITY_THRESHOLD as DEFAULT_PURITY_THRESHOLD
 from .constants import EVENT_DTYPE as EVENT_DTYPE
 from .constants import GENERATORS as GENERATORS

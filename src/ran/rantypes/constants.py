@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -19,7 +20,33 @@ if TYPE_CHECKING:
 # containers, the models, `JAX_ENABLE_X64` --- follows from this line.
 EVENT_DTYPE: Final[type[np.single]] = np.single
 
-CACHE_DIR: Final[Path] = Path(".cache")
+# Everything RAN can regenerate lives under one root: the dataset `.npz` caches
+# and the XLA compilation cache. `RAN_CACHE_DIR` relocates the whole tree, which
+# is what a cluster needs --- on Perlmutter `$HOME` is small, quota'd and shared
+# across nodes, `$SCRATCH` is none of those, and hardcoding either would be
+# wrong for everyone not on that machine.
+#
+# It is deliberately its own variable rather than a read of `XDG_CACHE_HOME`.
+# That one is already set (or defaults to `~/.cache`) on most Linux systems, so
+# deriving from it would silently move every existing checkout's cache the first
+# time this version ran, orphaning the ~2GB of Zenodo jet data already on disk.
+# A project-local `.cache/` stays the default because `.gitignore` covers it.
+#
+# Read once, at import: the module-level constant is what the `cache_dir=`
+# defaults below bind to, and those bind at import either way.
+CACHE_ENV_VAR: Final[LiteralString] = "RAN_CACHE_DIR"
+CACHE_DIR: Final[Path] = Path(os.environ.get(CACHE_ENV_VAR) or ".cache").expanduser()
+
+# XLA keys its persistent cache on lowered HLO plus the jaxlib and backend
+# versions, so a stale entry is a miss rather than a wrong answer -- upgrading
+# JAX or changing an architecture costs a recompile, never a wrong number.
+#
+# It is unbounded by default (`jax_compilation_cache_max_size` is -1), but a run
+# adds only a few MB and only for a shape/config it has not seen, so it plateaus
+# rather than grows. Set that config if a shared directory needs a ceiling; it
+# also turns on the file lock, which is otherwise absent.
+COMPILE_CACHE_DIR: Final[Path] = CACHE_DIR / "jax"
+
 RUN_DIR: Final[Path] = Path("runs")
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")

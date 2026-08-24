@@ -26,6 +26,14 @@ A validated view of a run's `config.json`. `source` is the raw dict, kept becaus
 
 Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the default purity threshold, and the stand-in for an absent particle level.
 
+### Constants: `CACHE_ENV_VAR`, `CACHE_DIR`, `COMPILE_CACHE_DIR`
+
+Everything RAN can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `RAN_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
+
+It is deliberately not derived from `XDG_CACHE_HOME`. That variable is already set, or defaults to `~/.cache`, on most Linux systems — deriving from it would silently move every existing checkout's cache and orphan the jet data already on disk.
+
+`~` is expanded, and an empty value falls back to the default rather than being taken as the current directory: a SLURM `--export` forwarding an unset variable delivers `""`, not absence. The value is read once, at import, because the `cache_dir=` defaults throughout `ran.data` bind to `CACHE_DIR` at import either way.
+
 ### Constant: `LOG_RHO_FLOOR: Final[float]`
 
 Soft drop grooms some jets down to a single prong, leaving $m_{sd} = 0$ and $\ln(\rho) = \ln\left(\frac{m_{sd}^2}{p_T^2}\right) = -\infty$. Those jets take this value instead, which is both the bottom of the plotted range below and the reason it can be: no jet with a groomed mass reaches it.

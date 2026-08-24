@@ -13,12 +13,13 @@ from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
 from ran.data.device import DeviceSplits, train_indices
 from ran.models import build_generator
-from ran.rantypes import TRUTH_SENTINEL, ZXY, Events
+from ran.rantypes import COMPILE_CACHE_DIR, TRUTH_SENTINEL, ZXY, Events
 from ran.train import (
     EPS,
     TrainResult,
     TrainState,
     _make_steps,
+    _use_compilation_cache,
     bce_sums,
     normalize_weights,
     train,
@@ -476,3 +477,64 @@ class TestFusion:
         assert padded.val.n_batches > exact.val.n_batches
         assert int(padded.val.mask.sum()) == n_val
         assert int(exact.val.mask.sum()) == n_val
+
+
+@pytest.mark.usefixtures("restored")
+class TestCompilationCache:
+    """XLA compile is the largest single term in a short run.
+
+    `benchmarks/boundary.py` on an A100 measures 4.60s of compile against 0.034s
+    per epoch, so a 100-epoch run spends half its wall clock in the compiler.
+    The cache is keyed on lowered HLO and lives on disk, so it survives across
+    processes -- which is where it pays, since an ensemble is N interpreters
+    compiling one architecture N times.
+
+    Two things here are easy to get wrong silently, so both are pinned.
+    """
+
+    @pytest.fixture
+    def restored(self):
+        """`jax.config` is process-global; put it back however the test left it."""
+        prior: tuple[object, object] = (
+            jax.config.jax_compilation_cache_dir,
+            jax.config.jax_persistent_cache_min_compile_time_secs,
+        )
+        jax.config.update("jax_compilation_cache_dir", None)
+        yield
+        jax.config.update("jax_compilation_cache_dir", prior[0])
+        jax.config.update("jax_persistent_cache_min_compile_time_secs", prior[1])
+
+    def test_the_threshold_drops_to_zero(self, monkeypatch) -> None:
+        """JAX's 1.0s default leaves RAN's cache *empty*, not merely sparse.
+
+        A run compiles a few dozen executables totalling ~4.6s and not one of
+        them clears a second on its own, so the stock threshold caches nothing
+        and reports nothing about having done so.
+        """
+        monkeypatch.delenv("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", raising=False)
+
+        _use_compilation_cache()
+
+        assert jax.config.jax_compilation_cache_dir == str(COMPILE_CACHE_DIR.resolve())
+        threshold = jax.config.jax_persistent_cache_min_compile_time_secs
+        assert threshold == pytest.approx(0.0)
+
+    def test_a_caller_who_already_chose_a_directory_keeps_it(self, tmp_path) -> None:
+        """`JAX_COMPILATION_CACHE_DIR` is JAX's own knob and predates this one."""
+        jax.config.update("jax_compilation_cache_dir", str(tmp_path))
+
+        _use_compilation_cache()
+
+        assert jax.config.jax_compilation_cache_dir == str(tmp_path)
+
+    def test_a_caller_who_chose_a_threshold_keeps_it(self, monkeypatch) -> None:
+        """Someone who set the threshold high did so to keep a shared cache
+        small; adopting our directory should not also override that."""
+        monkeypatch.setenv("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "2.0")
+        jax.config.update("jax_persistent_cache_min_compile_time_secs", 2.0)
+
+        _use_compilation_cache()
+
+        assert jax.config.jax_compilation_cache_dir == str(COMPILE_CACHE_DIR.resolve())
+        threshold = jax.config.jax_persistent_cache_min_compile_time_secs
+        assert threshold == pytest.approx(2.0)

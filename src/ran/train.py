@@ -19,6 +19,7 @@ readable tracebacks and host-side logging. Reach for it when a run goes wrong.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
@@ -32,10 +33,11 @@ from jaxtyping import Array, Float, Int, jaxtyped
 from .data.device import DeviceSplits, gather, train_indices
 from .models import build_discriminator, build_generator
 
-# `Variables` annotates the `@jaxtyped(beartype)` closures below, and beartype
-# resolves those strings at decoration time -- so it cannot hide under
-# TYPE_CHECKING.
-from .rantypes import Variables  # ruff: ignore[typing-only-first-party-import]
+# `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
+# annotates the `@jaxtyped(beartype)` closures below, and beartype resolves
+# those strings at decoration time -- so it cannot hide under TYPE_CHECKING
+# either.
+from .rantypes import COMPILE_CACHE_DIR, Variables
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -471,6 +473,41 @@ def _run(carry: RunCarry, epoch, still_running, *, fused: bool) -> RunCarry:
     return carry
 
 
+def _use_compilation_cache() -> None:
+    """Point XLA's persistent cache at :data:`COMPILE_CACHE_DIR`.
+
+    Compilation is the largest single term in a short run. ``benchmarks/boundary.py``
+    on an A100 measures 4.60s of compile against 0.034s per epoch, so a 100-epoch
+    run spends half its wall clock in XLA and only a third of it training. The
+    cache keys on lowered HLO rather than on Python identity --- the fresh
+    ``jax.jit(lambda ...)`` in :func:`_run` hits it regardless --- and it lives on
+    disk, which is where it pays: an ensemble is N separate interpreters
+    compiling the same architecture N times over.
+
+    Two settings, not one. JAX's default ``min_compile_time_secs`` of 1.0s leaves
+    RAN's cache *entirely empty*, because the run compiles a few dozen
+    executables that total 4.6s and no single one of them clears a second. The
+    threshold is what separates a populated cache from a silent no-op.
+
+    Whatever the caller configured wins, so ``JAX_COMPILATION_CACHE_DIR`` --- or a
+    ``jax.config.update`` before :func:`train` --- still overrides this, and an
+    unwritable directory costs a warning from JAX rather than the run.
+
+    The path is resolved before it is handed over. JAX opens the cache once and
+    keeps the string, so the default's leading ``.`` would follow any later
+    ``chdir`` and turn every write into a ``FileNotFoundError`` --- which JAX
+    also reports as a warning rather than an error, so the run would go on
+    quietly recompiling. Resolving pins it to the directory the datasets came
+    from.
+    """
+    if jax.config.jax_compilation_cache_dir is not None:
+        return
+    jax.config.update("jax_compilation_cache_dir", str(COMPILE_CACHE_DIR.resolve()))
+    if "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS" not in os.environ:
+        jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
+    logger.debug("XLA compilation cache: %s", COMPILE_CACHE_DIR.resolve())
+
+
 def _unpack_history(history: Float[Array, "epochs 4"]) -> dict[str, list[float]]:
     rows: np.ndarray = np.asarray(history)
     return {key: rows[:, i].tolist() for i, key in enumerate(_HISTORY_KEYS)}
@@ -491,6 +528,8 @@ def train(
     *,
     fused: bool = True,
 ) -> TrainResult:
+    _use_compilation_cache()
+
     if seed is None:
         # No-argument SeedSequence always fills `entropy` with int drawn from OS.
         seed = cast(typ=int, val=np.random.SeedSequence().entropy) % 2**31

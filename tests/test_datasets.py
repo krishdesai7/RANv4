@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, assert_type
+import importlib
+from pathlib import Path
+from typing import assert_type
 
 import numpy as np
 import pytest
@@ -15,10 +17,8 @@ from ran.rantypes import (
     GaussianConfig,
     Populations,
     Split,
+    constants,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_config(params: dict, tmp_path: Path) -> Path:
@@ -410,3 +410,56 @@ class TestLabelledAndPhysicsForms:
         everything = _toy_splits(n=200).select(Split.ALL)
 
         np.testing.assert_array_equal(everything.x, -everything.z)
+
+
+class TestCacheDirIsRelocatable:
+    """`RAN_CACHE_DIR` moves the whole regenerable tree at once.
+
+    The default is wrong in both directions on a cluster: `$HOME` is quota'd and
+    shared across nodes, and a checkout's `.cache/` may sit on a filesystem the
+    compute nodes cannot write to. One variable moves the Zenodo npz caches and
+    the XLA compilation cache together -- which is the reason they share a root
+    rather than each carrying their own knob.
+
+    These reload the module because `CACHE_DIR` is resolved at import; that is
+    deliberate, since the `cache_dir=` defaults throughout `ran.data` bind to it
+    at import too.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore(self):
+        yield
+        importlib.reload(constants)
+
+    @staticmethod
+    def _with(env: str | None, monkeypatch) -> Path:
+        if env is None:
+            monkeypatch.delenv(constants.CACHE_ENV_VAR, raising=False)
+        else:
+            monkeypatch.setenv(constants.CACHE_ENV_VAR, env)
+        return importlib.reload(constants).CACHE_DIR
+
+    def test_unset_gives_the_project_local_default(self, monkeypatch) -> None:
+        assert self._with(None, monkeypatch) == Path(".cache")
+
+    def test_both_caches_move_together(self, monkeypatch, tmp_path) -> None:
+        root: Path = tmp_path / "scratch"
+        monkeypatch.setenv(constants.CACHE_ENV_VAR, str(root))
+        reloaded = importlib.reload(constants)
+
+        assert root == reloaded.CACHE_DIR
+        assert root / "jax" == reloaded.COMPILE_CACHE_DIR
+
+    def test_a_tilde_expands(self, monkeypatch) -> None:
+        """A SLURM `--export` carries the string through without a shell to
+        expand it, so `~/ran-cache` would otherwise become a literal directory
+        named `~`."""
+        expected: Path = Path.home() / "ran-cache"
+
+        assert self._with("~/ran-cache", monkeypatch) == expected
+
+    def test_empty_falls_back_rather_than_meaning_cwd(self, monkeypatch) -> None:
+        """An unset variable forwarded by `--export` arrives as empty, not
+        absent. `Path("")` is `Path(".")`, so taking it literally would scatter
+        the cache into whatever directory each job happened to start in."""
+        assert self._with("", monkeypatch) == Path(".cache")

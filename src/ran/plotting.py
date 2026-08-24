@@ -334,11 +334,13 @@ def plot_losses(
     )
     val_d: NDArray[np.double] = np.array(object=history["val_d"], dtype=np.double)
     train_g: NDArray[np.double] = np.array(object=history["train_g"], dtype=np.double)
-    val_g: NDArray[np.double] = np.array(object=history["val_g"], dtype=np.double)
     ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
-    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
-    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw=3, alpha=0.5)
+    # One validation curve, because there is one validation number: `eval_step`
+    # scores both networks with a single weighted BCE, so a "Val G" line would
+    # be this one drawn twice. Older runs carry a `val_g` key holding exactly
+    # that copy --- it is deliberately not read.
+    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.axhline(
         y=np.log(2),
         color="gray",

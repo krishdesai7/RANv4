@@ -17,7 +17,6 @@ dependencies = [
     "keras>=3.15.1",
     "matplotlib>=3.11.1",
     "numpy>=2.5.2",
-    "omnifold>=0.1.36",
     "pyyaml>=6.0.3",
     "scipy>=1.18.1",
     "typer>=0.27.1",
@@ -84,9 +83,14 @@ search-path = ["src"]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
+# Benchmarks rebind `ran.models` builders to the same functions recompiled at
+# another dtype. That is the measurement, and no checker can follow it. They are
+# still linted and formatted; they are just not part of the typed surface.
+project-excludes = ["benchmarks/**"]
 
 
-[tool.ty]
+[tool.ty.src]
+exclude = ["benchmarks/**"]
 
 
 [tool.ruff]
@@ -135,6 +139,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
+# Benchmarks report to a terminal and are read by a human running them by hand;
+# routing that through the logging config would bury the numbers.
+"benchmarks/**.py" = ["T20"]
 # package __init__ is the backend bootstrap: must set KERAS_BACKEND and
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]

@@ -1,23 +1,18 @@
 # Baselines
 
-This directory contains the baselines for the RAN project.
+This directory contains the comparison baselines for the RAN project.
 
-Comparison baselines: **IBU** and **OmniFold**.
-
-Only the backend-agnostic helpers from `._shared` are re-exported. The two baseline modules are deliberately _not_ exported externally, because they need different Keras backends and there is one backend per interpreter. `.omnifold` hard-sets `KERAS_BACKEND=tensorflow` at import and must be the entry point of its own process, while `.ibu` reaches `ran.train`, which loads only on JAX. Re-exporting both would make each unimportable via the other and would leak the losing backend into every subprocess. Import the desired module directly
+Comparison baseline: **IBU**
 
 ```python
     from ran.baselines.ibu import evaluate_runs
-    from ran.baselines.omnifold import omnifold_unfold
 ```
 
 ## Shared
 
-Module `._shared` contains the data handling shared by the IBU and OmniFold baselines.
+Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics RAN is scored by.
 
-Both methods attempt the same task: to generate weights to reweight Generation based on the relationship between Data and Simulation, and thus both baselines provide the same inputs and then score the result. So they need the same run config, the same event populations, and the same metric record. Only the unfolding method differs.
-
-This module must stay free of `keras` at import time. `ran.baselines.omnifold` pins `KERAS_BACKEND=tensorflow` before importing keras, and it imports from here; pulling keras in transitively would fix the backend to jax first and break OmniFold. `ran.evaluate` is safe to import for the same reason, namely that it defers its own keras import into the two functions that need it.
+A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. IBU is currently the only caller; the split is what makes adding a second one a matter of writing an unfolder.
 
 ### `_shared::parse_run_config`
 
@@ -33,15 +28,15 @@ Validate a run's config.json into a RunConfig.
 
 ### `_shared::_partitioned`
 
-Checks the shape assumptions the baselines rely on, then partitions.
+Checks the shape assumptions a baseline relies on, then partitions.
 
 ### `_shared::prepare_populations`
 
-Returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
+Returns an `UnfoldingPopulations`, which unpacks as `(fit, test)`. Both are `Populations`, and they are disjoint. `fit` is train+val and supplies the response (`fit.mc.z` and `fit.mc.x`, paired per event) and the measurement (`fit.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
-Arrays maintain their dtype; a baseline that needs another dtype will cast at its own boundary with `Populations.astype`.
+Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist.
 
-That is not a detail. RAN is float64 end to end, but both baselines are float32: OmniFold trains under TensorFlow, and IBU has to match the arithmetic its published results were produced with for the comparison to mean anything. So `load_populations` hands back the float64 the dataset was generated in, and each baseline narrows for itself — OmniFold in `_as2d`, IBU with `load_populations(config).astype(np.single)`. The IBU internals are generic over the floating type and carry whatever they are given; only the two population-count checks and the mean-one postcondition accumulate in float64, because those compare against exact integers and float32 stops representing those past 2^24.
+One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
 
 #### Arguments
 
@@ -50,7 +45,7 @@ That is not a detail. RAN is float64 end to end, but both baselines are float32:
 
 #### Returns
 
-- An `UnfoldingPopulations` object containing the full and test populations.
+- An `UnfoldingPopulations` object containing the fit (train+val) and test populations.
 
 ### `_shared::load_populations`
 
@@ -62,7 +57,7 @@ Rebuild the run's dataset and split it into the baseline populations.
 
 #### Returns
 
-- An `UnfoldingPopulations` object containing the full and test populations.
+- An `UnfoldingPopulations` object containing the fit (train+val) and test populations.
 
 ### `_shared::evaluate_dimension`
 
@@ -90,13 +85,15 @@ ran baseline ibu --run-dir runs/2026-...
 ran baseline ibu --run-dir runs # all runs
 ```
 
-IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN and <span style="font-variant: small-caps;">OmniFold</span>.
+IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN.
 
 ## `class _BinnedReweighting`
 
 A per-bin correction, learned from one population and applied to another.
 
-IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on every split and applied to the test split, so the sample it scores is not the sample it learned from.
+IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on train+val and applied to the held-out test split, so the sample it scores is genuinely not the sample it learned from.
+
+That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied, since `ran.train` never reads the test split. A comparison is only a comparison if both sides see the same events.
 
 ### `ibu::_assign_bins`
 
@@ -140,7 +137,7 @@ Find the first candidate edge whose bin exceeds the purity threshold.
 
 #### Returns
 
-- A `T | None` containing the first candidate edge whose bin exceeds the purity threshold.
+- A `np.single | None` containing the first candidate edge whose bin exceeds the purity threshold.
 
 ### `ibu::_ibu`
 
@@ -156,26 +153,26 @@ Iterative Bayesian Unfolding.
 
 #### Returns
 
-- A `NDArray[T]` Unfolded truth histogram, shape (n_bins,).
+- A `EventArray` Unfolded truth histogram, shape (n_bins,).
 
-### `ibu::_unfold_variable`
+### `ibu::unfold_variable`
 
-Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `_VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
+Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`, `mc.x` and `data`; those three are what a real measurement has, and `truth` is deliberately not among them. Returns a `VariableUnfolding`, which pairs the reweighting with a `VariableOutcome` recording whether the fit happened. Where purity binning yields fewer than two bins there is nothing to fit, so the reweighting is `None` and `weights_for` returns ones.
 
 `mc_gen` and `mc_sim` are one column of a `Populations`' `mc.z` and `mc.x`; they are row-aligned and together give the response. `observed` is the same column of its `data`. No part of `truth` belongs here.
 
 #### Arguments
 
 - `variable_name: str` The variable being unfolded, for logging and the outcome record.
-- `mc_gen: NDArray[T]` One column of `mc.z`, the generated particle level.
-- `mc_sim: NDArray[T]` One column of `mc.x`, row-aligned with `mc_gen`; together they give the response.
-- `observed: NDArray[T]` One column of `data`, the measurement.
+- `mc_gen: EventArray` One column of `mc.z`, the generated particle level.
+- `mc_sim: EventArray` One column of `mc.x`, row-aligned with `mc_gen`; together they give the response.
+- `observed: EventArray` One column of `data`, the measurement.
 - `n_iterations: int` Number of unfolding iterations.
 - `purity_threshold: float` The purity threshold for automatic binning.
 
 #### Returns
 
-- A `_VariableUnfolding[T]`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
+- A `VariableUnfolding`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
 
 ### `ibu::evaluate_runs`
 
@@ -187,57 +184,3 @@ Run IBU baseline on completed RAN runs.
 - `force: bool = False` Recompute even if metrics_ibu.json exists.
 - `n_iterations: int = 10` Number of IBU iterations.
 - `purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD` Purity threshold for automatic binning.
-
-## <span style="font-variant: small-caps;">OmniFold</span>
-
-<span style="font-variant: small-caps;">OmniFold</span> baseline to compare with RAN. It is a deep learning-based unfolding method that uses a Bayesian approach to unfold the data.
-
-It is implemented in the [**`omnifold.py`**](omnifold.py) file.
-Usage:
-
-```zsh
-ran baseline omnifold --run-dir runs/2026-...
-ran baseline omnifold --run-dir runs # all runs
-```
-
-RAN itself runs on the JAX backend, but the third-party `omnifold` package does not: its `weighted_binary_crossentropy` calls raw `tf.gather` on the label tensor, which raises `TracerArrayConversionError` the moment JAX traces it. So this module pins the backend back to TensorFlow.
-
-A process gets one Keras backend, set at first `keras` import, so invoke the <span style="font-variant: small-caps;">OmniFold</span> baseline in its own process with `ran baseline omnifold`; never import it from a module that has already touched JAX. The cubic sweep keeps the two sides in separate subcommands for exactly this reason.
-
-### `ran.baselines.omnifold::omnifold_unfold`
-
-Trains <span style="font-variant: small-caps;">OmniFold</span> on in-memory arrays and return mean-normalized gen weights.
-
-Trains on (data reco = `x_data`, MC reco = `x_sim`, MC gen = `z_gen`), then reweights `z_target` (defaults to `z_gen`) through the gen-level model. Returns a 1D weight array, normalized so its mean is 1.
-
-`out_dir` is where the `omnifold` library scatters its own bookkeeping: `MultiFold` opens `log_<name>.txt` in `log_folder` and dumps a checkpoint per iteration/step into `weights_folder`, both defaulting to the process cwd. It is keyword-only and has no default on purpose -- every caller must say where those land, or concurrent callers sharing a cwd silently overwrite each other's files (the sweep runs up to 24 points at once from one working directory). Give each concurrent call its own directory.
-
-#### Arguments
-
-- `x_data: ArrayLike` The data reco.
-- `x_sim: ArrayLike` The MC reco.
-- `z_gen: ArrayLike` The MC gen.
-- `z_target: ArrayLike | None = None` The MC gen to reweight.
-- `niter: int = 3` Number of iterations.
-- `epochs: int = 50` Number of epochs.
-- `batch_size: int = 512` Batch size.
-- `out_dir: Path` The output directory.
-
-#### Returns
-
-- A `NDArray[np.single]` containing the per-event weights.
-
-### `omnifold::evaluate_runs`
-
-Run <span style="font-variant: small-caps;">OmniFold</span> baseline on completed runs.
-
-#### Arguments
-
-- `run_dir: Path` Path to a single run or directory of runs.
-- `force: bool = False` Recompute even if metrics_omnifold.json exists.
-- `niter: int = 3` Number of OmniFold iterations.
-- `epochs: int = 50` Number of epochs.
-
-#### Returns
-
-- A `dict[str, MetricRecord]` containing the metrics.

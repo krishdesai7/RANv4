@@ -6,6 +6,10 @@ from typing import Annotated
 import numpy as np
 import typer
 
+from .baselines import evaluate_runs as ibu_evaluate_runs
+from .evaluate import evaluate_runs
+from .experiments import run_ran
+from .leakage import run_leakage_check
 from .logging_config import configure_logging
 from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
@@ -15,6 +19,7 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
+from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -44,12 +49,35 @@ def configure(
     configure_logging(level=log_level.value)
 
 
+def _canonical_variables(chosen: list[str] | None, /) -> tuple[str, ...]:
+    """Fix the jet column order once, here, so nothing downstream has to guess.
+
+    Repeated `--var` arrives as a list in whatever order it was typed. Sorting
+    it into `SUBSTRUCTURE_VARIABLES` order means `--var w --var m` and
+    `--var m --var w` describe the same run --- same columns, same cache key,
+    same `config.json` --- rather than two runs that differ only in a permutation
+    nobody chose.
+    """
+    if not chosen:
+        return SUBSTRUCTURE_VARIABLES
+    wanted: set[str] = set(chosen)
+    return tuple(v for v in SUBSTRUCTURE_VARIABLES if v in wanted) + tuple(
+        # Unknown names pass through in order so `load_jet_dataset` is the one
+        # place that reports them, with the list of what it does accept.
+        v
+        for v in dict.fromkeys(chosen)
+        if v not in SUBSTRUCTURE_VARIABLES
+    )
+
+
 @app.command(name="train")
 def train_command(
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
     n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
     config: Path | None = None,
-    dataset: DatasetName = DatasetName.gaussian,
+    dataset: Annotated[
+        DatasetName, typer.Option("--dataset", "-D")
+    ] = DatasetName.gaussian,
     variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
     load_run: Annotated[Path | None, typer.Option("--load-run", "-r")] = None,
     hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
@@ -58,14 +86,12 @@ def train_command(
     seed: int | None = None,
     data_seed: int = 42,
 ) -> None:
-    from .workflow import run
-
     run(
         batch_size,
         n_samples,
         config,
         dataset,
-        frozenset(variable or SUBSTRUCTURE_VARIABLES),
+        _canonical_variables(variable),
         load_run,
         hidden_units,
         n_layers,
@@ -77,21 +103,7 @@ def train_command(
 
 @app.command(name="evaluate")
 def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
-    from .evaluate import evaluate_runs
-
     evaluate_runs(run_dir, force)
-
-
-@baseline_app.command(name="omnifold")
-def omnifold_command(
-    run_dir: Path = RUN_DIR,
-    force: bool = False,
-    niter: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
-    epochs: Annotated[int, typer.Option("--epochs", "-e", min=1)] = 50,
-) -> None:
-    from .baselines.omnifold import evaluate_runs
-
-    evaluate_runs(run_dir, force, niter, epochs)
 
 
 @baseline_app.command(name="ibu")
@@ -101,14 +113,11 @@ def ibu_command(
     n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 10,
     purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
 ) -> None:
-    from .baselines.ibu import evaluate_runs
-
-    purity_threshold = np.double(purity_threshold)
-    evaluate_runs(
+    ibu_evaluate_runs(
         run_dir,
         force,
         n_iterations,
-        purity_threshold,
+        purity_threshold=np.double(purity_threshold),
     )
 
 
@@ -123,8 +132,6 @@ def sweep_ran_command(
     ran_epochs: Annotated[int, typer.Option("--ran-epochs", "-e", min=1)] = 100,
     init_seed: Annotated[int | None, typer.Option("--init-seed", "-I")] = None,
 ) -> None:
-    from .experiments.cubic_sweep import run_ran
-
     run_ran(
         s_index,
         sweep_dir,
@@ -134,33 +141,6 @@ def sweep_ran_command(
         batch_size,
         ran_epochs,
         init_seed,
-    )
-
-
-@sweep_app.command(name="omnifold")
-def sweep_omnifold_command(
-    s_index: Annotated[int, typer.Option("--s-index", "-s", min=0)],
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-    seed: int = 42,
-    omnifold_niter: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
-    omnifold_epochs: Annotated[int, typer.Option("--epochs", "-e", min=1)] = 50,
-    omnifold_batch_size: Annotated[
-        int, typer.Option("--batch-size", "-b", min=1)
-    ] = 512,
-) -> None:
-    from .experiments.cubic_sweep import run_omnifold
-
-    run_omnifold(
-        s_index,
-        sweep_dir,
-        n_samples,
-        n_points,
-        seed,
-        omnifold_niter,
-        omnifold_epochs,
-        omnifold_batch_size,
     )
 
 
@@ -181,6 +161,4 @@ def leakage_check_command(
     seed: int = 42,
     init_seed: int = 0,
 ) -> None:
-    from .leakage import run_leakage_check
-
     run_leakage_check(poison, sentinel, seed, init_seed)

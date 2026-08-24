@@ -2,10 +2,6 @@
 
 Records, constants and aliases shared across the package.
 
-These live apart from the code that uses them because a process gets a single Keras backend, fixed at the first `keras` import, so `ran.cli` and `ran.baselines._shared` have to stay importable without committing to one. They cannot reach into `ran.train` (JAX) or `ran.baselines.omnifold` (TensorFlow) for a shared declaration, so the
-declaration must live here instead. Nothing in this package imports keras or jax
-at runtime.
-
 Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.train`.
 
 ## module: `configs`
@@ -30,6 +26,14 @@ A validated view of a run's `config.json`. `source` is the raw dict, kept becaus
 
 Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the default purity threshold, and the stand-in for an absent particle level.
 
+### Constants: `CACHE_ENV_VAR`, `CACHE_DIR`, `COMPILE_CACHE_DIR`
+
+Everything RAN can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `RAN_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
+
+It is deliberately not derived from `XDG_CACHE_HOME`. That variable is already set, or defaults to `~/.cache`, on most Linux systems — deriving from it would silently move every existing checkout's cache and orphan the jet data already on disk.
+
+`~` is expanded, and an empty value falls back to the default rather than being taken as the current directory: a SLURM `--export` forwarding an unset variable delivers `""`, not absence. The value is read once, at import, because the `cache_dir=` defaults throughout `ran.data` bind to `CACHE_DIR` at import either way.
+
 ### Constant: `LOG_RHO_FLOOR: Final[float]`
 
 Soft drop grooms some jets down to a single prong, leaving $m_{sd} = 0$ and $\ln(\rho) = \ln\left(\frac{m_{sd}^2}{p_T^2}\right) = -\infty$. Those jets take this value instead, which is both the bottom of the plotted range below and the reason it can be: no jet with a groomed mass reaches it.
@@ -46,7 +50,7 @@ $-2^{15}$ is that number: absurd on sight for any standardized observable, exact
 
 ## module: `enums`
 
-CLI choice enums. `ran.cli` imports these while it is still backend-free, which is why they live in this module rather than beside the code they select for.
+CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `ran.data` implements, and `LogLevel` one that `ran.logging_config` does.
 
 ## module: `events`
 
@@ -62,13 +66,12 @@ A corresponding pair of (particle-level `z`, detector-level `x`) for one set of 
 
 #### Fields
 
-- `z: NDArray[T]`: The particle-level features.
-- `x: NDArray[T]`: The detector-level features.
+- `z: EventArray`: The particle-level features.
+- `x: EventArray`: The detector-level features.
 
 #### Methods
 
-- `concatenate(parts: Sequence[Events[T]]) -> Events[T]`: Concatenate a sequence of events.
-- `astype[U: np.floating](self, dtype: type[U]) -> Events[U]`: Cast the event arrays to a different dtype.
+- `concatenate(parts: Sequence[Events]) -> Events`: Concatenate a sequence of events.
 
 ### `class Populations`
 
@@ -80,9 +83,9 @@ The physics view of a labelled sample.
 
 #### Fields
 
-- `mc: Events[T]`: The simulation.
-- `data: NDArray[T]`: The natural measurement.
-- `truth: NDArray[T]`: The particle-level answer key.
+- `mc: Events`: The simulation.
+- `data: EventArray`: The natural measurement.
+- `truth: EventArray`: The particle-level answer key.
 
 #### Properties
 
@@ -92,7 +95,7 @@ Any metric computed against a sentinel `truth` is meaningless but finite, so unf
 
 #### Methods
 
-##### `create(mc: Events[T], data: NDArray[T], truth: NDArray[T] | None = None) -> Populations[T]`
+##### `create(mc: Events, data: EventArray, truth: EventArray | None = None) -> Populations`
 
 Build a sample, filling `truth` with `ran.rantypes.constants.TRUTH_SENTINEL` if there is none.
 
@@ -102,41 +105,33 @@ A real measurement has no answer key. Filling the field rather than dropping it 
 
 **Arguments:**
 
-- `mc: Events[T]`: The simulation.
-- `data: NDArray[T]`: The natural measurement.
-- `truth: NDArray[T] | None = None`: The particle-level answer key. If `None`, `TRUTH_SENTINEL` is used.
+- `mc: Events`: The simulation.
+- `data: EventArray`: The natural measurement.
+- `truth: EventArray | None = None`: The particle-level answer key. If `None`, `TRUTH_SENTINEL` is used.
 
 **Returns:**
 
-- `Populations[T]`: The sample.
-
-##### `astype[U: np.floating](self, dtype: type[U]) -> Populations[U]`
-
-The same sample at another precision. RAN operates by default at float64 precision end to end, but allows casting to other dtypes if required. Any method that requires a precision distinct from float64 must cast at its own boundary rather than enforcing a shared precision for the entire pipeline. `ran.rantypes.constants.TRUTH_SENTINEL` is exact in every IEEE binary format, so `has_truth` answers the same question on either side of this call.
-
-**Arguments:**
-
-- `dtype: type[U]`: The dtype to cast the sample to.
+- `Populations`: The sample.
 
 **Returns:**
 
-- `Populations[U]`: The sample at the new precision.
+- `Populations`: The sample at the new precision.
 
-##### `require_truth() -> NDArray[T]`
+##### `require_truth() -> EventArray`
 
 Returns `truth` if available or raises a `ValueError` if there is none. Scoring against the sentinel yields a finite, meaningless number instead of an obvious failure, so the particle-level comparisons ask for the answer key through here rather than reading the field.
 
 **Returns:**
 
-- `NDArray[T]`: The particle-level answer key.
+- `EventArray`: The particle-level answer key.
 
-##### `interleave() -> ZXY[T]`
+##### `interleave() -> ZXY`
 
 Stack into the labelled transport form, nature rows first. The resulting row order is an artifact of stacking rather than anything meaningful, so callers shuffle before splitting.
 
 **Returns:**
 
-- `ZXY[T]`: The stacked events.
+- `ZXY`: The stacked events.
 
 ### `class ZXY`
 
@@ -144,15 +139,15 @@ Events labelled by provenance: y = 1 for nature, y = 0 for MC. The form in which
 
 #### Fields
 
-- `events: Events[T]`: The events.
+- `events: Events`: The events.
 - `y: NDArray[np.ubyte]`: The labels.
 
 #### Properties
 
-- `z: NDArray[T]`: The particle-level features.
-- `x: NDArray[T]`: The detector-level features.
+- `z: EventArray`: The particle-level features.
+- `x: EventArray`: The detector-level features.
 
-### `DatasetSplits::select(which: Split = Split.ALL) -> ZXY[T]`
+### `DatasetSplits::select(which: Split = Split.ALL) -> ZXY`
 
 Concatenate the requested splits into one labelled sample. The split a row came from is not recorded on the result: it is a property of the query, not of the events, and nothing downstream of this call can act on it.
 
@@ -162,7 +157,7 @@ Concatenate the requested splits into one labelled sample. The split a row came 
 
 **Returns:**
 
-- `ZXY[T]`: The concatenated events.
+- `ZXY`: The concatenated events.
 
 ## module: `results`
 
@@ -170,9 +165,9 @@ Concatenate the requested splits into one labelled sample. The split a row came 
 
 The input to an unfolding run: a sample to unfold with, and a sample to score on.
 
-`full` spans every split and supplies the response (`full.mc`) and the measurement (`full.data`). `test` is the held-out split alone, which is where the metrics are computed.
+`fit` is train+val and supplies the response (`fit.mc`) and the measurement (`fit.data`). `test` is the held-out split alone, which is where the metrics are computed. The two are disjoint on purpose: fitting on every event and then scoring a subset of them is the convention in the unfolding literature, and it scores an estimator on data it has already seen.
 
 #### Fields
 
-- `full: Populations[T]`: The sample to unfold with.
-- `test: Populations[T]`: The sample to score on.
+- `fit: Populations`: The sample to unfold with (train+val).
+- `test: Populations`: The sample to score on.

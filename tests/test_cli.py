@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- import isolation
-import sys
-from types import ModuleType
 from typing import TYPE_CHECKING
 
 import pytest
@@ -30,8 +27,8 @@ def test_registered_command_trees_are_exact() -> None:
         "sweep",
         "leakage-check",
     }
-    assert _command_names(baseline_app) == {"omnifold", "ibu"}
-    assert _command_names(sweep_app) == {"ran", "omnifold", "collect"}
+    assert _command_names(baseline_app) == {"ibu"}
+    assert _command_names(sweep_app) == {"ran", "collect"}
 
 
 @pytest.mark.parametrize(
@@ -39,10 +36,8 @@ def test_registered_command_trees_are_exact() -> None:
     [
         ("train",),
         ("evaluate",),
-        ("baseline", "omnifold"),
         ("baseline", "ibu"),
         ("sweep", "ran"),
-        ("sweep", "omnifold"),
         ("sweep", "collect"),
         ("leakage-check",),
     ],
@@ -53,24 +48,14 @@ def test_every_leaf_command_has_help(command) -> None:
     assert result.exit_code == 0
 
 
-def test_importing_cli_does_not_commit_a_keras_backend() -> None:
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; import ran.cli; assert 'keras' not in sys.modules",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-
-
 def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> None:
+    """`ran.cli` imports `run` at module scope, so patch the name it calls.
+
+    Replacing `sys.modules["ran.workflow"]` would only work if the command
+    re-imported on every invocation, which it deliberately no longer does.
+    """
     calls = []
     configured_levels = []
-    fake_workflow = ModuleType("ran.workflow")
 
     def fake_run(
         batch_size,
@@ -101,8 +86,7 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
             }
         )
 
-    fake_workflow.__dict__["run"] = fake_run
-    monkeypatch.setitem(sys.modules, "ran.workflow", fake_workflow)
+    monkeypatch.setattr(cli, "run", fake_run)
     monkeypatch.setattr(
         cli, "configure_logging", lambda level: configured_levels.append(level)
     )
@@ -128,10 +112,12 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
 
     assert result.exit_code == 0
     assert calls[0]["dataset"] is cli.DatasetName.jets
-    assert calls[0]["variables"] == frozenset(("m", "w"))
+    # A tuple in canonical order, not a set: these names index columns, and
+    # `--var w --var m` must describe the same run as `--var m --var w`.
+    assert calls[0]["variables"] == ("m", "w")
     # Paths stay Paths: `workflow.run` is typed `load_run: Path | None` and
     # opens them directly. Only typer's own wrappers get converted; the
-    # DatasetName enum remains an enum, and repeated --var becomes a frozenset.
+    # DatasetName enum remains an enum, and repeated --var becomes a tuple.
     assert calls[0]["load_run"] == tmp_path
     assert calls[0]["seed"] == 7
     # LogLevel is a StrEnum of auto() members, so its values are the lowercase

@@ -3,25 +3,29 @@ from __future__ import annotations
 from dataclasses import KW_ONLY, dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
-import numpy as np
-
 if TYPE_CHECKING:
     from typing import Literal
 
+    import numpy as np
     from numpy.typing import NDArray
 
     from .events import Populations
     from .types import MetricRecord
 
 
-class UnfoldingPopulations[T: np.floating = np.double](NamedTuple):
-    full: Populations[T]
-    test: Populations[T]
+class UnfoldingPopulations(NamedTuple):
+    """What a baseline may fit on, and what it is scored on --- kept apart.
 
-    def astype[U: np.floating](self, dtype: type[U]) -> UnfoldingPopulations[U]:
-        return UnfoldingPopulations[U](
-            full=self.full.astype(dtype), test=self.test.astype(dtype)
-        )
+    `fit` is train+val; `test` is the held-out split. They are disjoint, and
+    deliberately so: it is conventional in the unfolding literature to fit the
+    response and iterate the prior on every event and then quote metrics on a
+    subset of those same events, which scores an estimator on data it has
+    already seen. Naming the two populations separately is what stops that from
+    being the path of least resistance here.
+    """
+
+    fit: Populations
+    test: Populations
 
 
 @dataclass(frozen=True)

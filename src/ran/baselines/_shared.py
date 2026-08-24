@@ -16,9 +16,7 @@ from ..rantypes import DatasetName, RunConfig, Split, UnfoldingPopulations
 if TYPE_CHECKING:
     from typing import Any
 
-    from numpy.typing import NDArray
-
-    from ..rantypes import ZXY, DatasetSplits, MetricRecord, Populations
+    from ..rantypes import ZXY, DatasetSplits, EventArray, MetricRecord, Populations
 
 
 def _positive_int(value: object, key: str) -> int:
@@ -83,9 +81,7 @@ def parse_run_config(raw: object) -> RunConfig:
     )
 
 
-def _partitioned[T: np.floating](
-    data: ZXY[T], expected_dim: int, label: str, /
-) -> Populations[T]:
+def _partitioned(data: ZXY, expected_dim: int, label: str, /) -> Populations:
     if data.z.ndim != 2 or data.x.ndim != 2 or data.z.shape != data.x.shape:
         raise ValueError(
             f"{label}: z and x must be identically shaped two-dimensional arrays"
@@ -102,16 +98,23 @@ def _partitioned[T: np.floating](
         raise ValueError(f"{label}: {error}") from error
 
 
-def prepare_populations[T: np.floating](
-    splits: DatasetSplits[T], expected_dim: int
-) -> UnfoldingPopulations[T]:
+def prepare_populations(
+    splits: DatasetSplits, expected_dim: int
+) -> UnfoldingPopulations:
+    # Train+val, not `Split.ALL`. A baseline fitted on every event and then
+    # scored on the test split would be scored on data it had already used ---
+    # and would be handed information RAN is denied, since `train` never reads
+    # the test split (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`).
+    # The comparison is only a comparison if both sides see the same events.
     return UnfoldingPopulations(
-        full=_partitioned(splits.select(Split.ALL), expected_dim, "every split"),
+        fit=_partitioned(
+            splits.select(Split.TRAIN | Split.VAL), expected_dim, "train and val splits"
+        ),
         test=_partitioned(splits.select(Split.TEST), expected_dim, "test split"),
     )
 
 
-def load_populations(config: RunConfig) -> UnfoldingPopulations[np.double]:
+def load_populations(config: RunConfig) -> UnfoldingPopulations:
     """The run's dataset as populations, at the float64 RAN generated it in.
 
     Baselines that need another precision call `astype` at their own boundary.
@@ -121,10 +124,10 @@ def load_populations(config: RunConfig) -> UnfoldingPopulations[np.double]:
     )
 
 
-def evaluate_dimension[T: np.floating](
-    reference: NDArray[T],
-    comparison: NDArray[T],
-    weights: NDArray[T],
+def evaluate_dimension(
+    reference: EventArray,
+    comparison: EventArray,
+    weights: EventArray,
 ) -> MetricRecord:
     wasserstein_before: float = _wd_per_dim(ref=reference, comp=comparison)[0]
     wasserstein_after: float = _wd_per_dim(

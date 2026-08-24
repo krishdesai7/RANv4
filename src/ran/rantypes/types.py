@@ -2,18 +2,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, TypedDict
 
+import numpy as np
+
 # `Variables` is used as a runtime annotation by the `@jaxtyped(beartype)`
 # functions in `ran.train`, and beartype has to evaluate the alias to check
-# it -- so `JaxArray` cannot hide under TYPE_CHECKING. Importing `jax` here is
-# safe: `ran.rantypes.types` cannot be imported without `ran.__init__` running
-# first, so JAX_ENABLE_X64 is already set, and jax does not fix the Keras
-# backend that `ran.baselines.omnifold` pins to tensorflow.
+# it -- so `JaxArray` cannot hide under TYPE_CHECKING.
 from jax import Array as JaxArray
 
 if TYPE_CHECKING:
     from os import PathLike
 
-    from numpy.typing import ArrayLike
+    from numpy.typing import ArrayLike, NDArray
 
     from ..train import TrainState
 
@@ -168,3 +167,12 @@ class MetricRecord(TypedDict):
 # Data
 # ---------------------------------
 type Nested[T] = T | list[Nested[T]]
+
+# Every event array in the pipeline. The dtype is pinned in
+# `ran.rantypes.constants.EVENT_DTYPE`; this is its annotation-space twin, so
+# changing precision is two lines rather than a sweep through the package.
+#
+# Scores are deliberately not this type: Wasserstein, JS and the triangular
+# discriminator come back from scipy as float64 and stay there. What is pinned
+# is the data, not the measurement taken of it.
+type EventArray = NDArray[np.single]

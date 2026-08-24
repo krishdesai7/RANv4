@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from ..data import ArrayDataset
+    from .types import EventArray
 
 
 class Split(Flag):
@@ -27,9 +28,9 @@ class Split(Flag):
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class Events[T: np.floating = np.double]:
-    z: NDArray[T]
-    x: NDArray[T]
+class Events:
+    z: EventArray
+    x: EventArray
 
     def __post_init__(self) -> None:
         if self.z.shape[0] != self.x.shape[0]:
@@ -39,7 +40,7 @@ class Events[T: np.floating = np.double]:
             )
 
     @property
-    def dtype(self) -> np.dtype[T]:
+    def dtype(self) -> np.dtype[np.single]:
         return self.z.dtype
 
     def __len__(self) -> int:
@@ -54,15 +55,12 @@ class Events[T: np.floating = np.double]:
             x=np.concatenate([part.x for part in parts], axis=0),
         )
 
-    def astype[U: np.floating](self, dtype: type[U]) -> Events[U]:
-        return Events[U](z=self.z.astype(dtype), x=self.x.astype(dtype))
-
 
 @dataclass(frozen=True, eq=False, slots=True)
-class Populations[T: np.floating = np.double]:
-    mc: Events[T]
-    data: NDArray[T]
-    truth: NDArray[T]
+class Populations:
+    mc: Events
+    data: EventArray
+    truth: EventArray
 
     def __post_init__(self) -> None:
         if self.data.shape[0] != self.truth.shape[0]:
@@ -79,9 +77,9 @@ class Populations[T: np.floating = np.double]:
     @classmethod
     def create(
         cls,
-        mc: Events[T],
-        data: NDArray[T],
-        truth: NDArray[T] | None = None,
+        mc: Events,
+        data: EventArray,
+        truth: EventArray | None = None,
     ) -> Self:
         if truth is None:
             truth = np.full(
@@ -93,14 +91,7 @@ class Populations[T: np.floating = np.double]:
     def has_truth(self) -> bool:
         return not np.all(a=self.truth == TRUTH_SENTINEL)
 
-    def astype[U: np.floating](self, dtype: type[U]) -> Populations[U]:
-        return Populations[U](
-            mc=self.mc.astype(dtype),
-            data=self.data.astype(dtype),
-            truth=self.truth.astype(dtype),
-        )
-
-    def require_truth(self) -> NDArray[T]:
+    def require_truth(self) -> EventArray:
         if not self.has_truth:
             raise ValueError(
                 "this sample has no particle-level truth to score against: it "
@@ -108,9 +99,9 @@ class Populations[T: np.floating = np.double]:
             )
         return self.truth
 
-    def interleave(self) -> ZXY[T]:
-        return ZXY[T](
-            Events[T](
+    def interleave(self) -> ZXY:
+        return ZXY(
+            Events(
                 z=np.concatenate([self.truth, self.mc.z], axis=0),
                 x=np.concatenate([self.data, self.mc.x], axis=0),
             ),
@@ -124,8 +115,8 @@ class Populations[T: np.floating = np.double]:
 
 
 @dataclass(frozen=True, eq=False, slots=True)
-class ZXY[T: np.floating = np.double]:
-    events: Events[T]
+class ZXY:
+    events: Events
     y: NDArray[np.ubyte]
 
     def __post_init__(self) -> None:
@@ -141,15 +132,15 @@ class ZXY[T: np.floating = np.double]:
         return self.y.shape[0]
 
     @property
-    def z(self) -> NDArray[T]:
+    def z(self) -> EventArray:
         return self.events.z
 
     @property
-    def x(self) -> NDArray[T]:
+    def x(self) -> EventArray:
         return self.events.x
 
     @property
-    def dtype(self) -> np.dtype[T]:
+    def dtype(self) -> np.dtype[np.single]:
         return self.events.dtype
 
     @classmethod
@@ -157,28 +148,28 @@ class ZXY[T: np.floating = np.double]:
         if not parts:
             raise ValueError("cannot concatenate an empty sequence of labelled events")
         return cls(
-            events=Events[T].concatenate([part.events for part in parts]),
+            events=Events.concatenate([part.events for part in parts]),
             y=np.concatenate([part.y for part in parts], axis=0),
         )
 
-    def partition(self) -> Populations[T]:
+    def partition(self) -> Populations:
         """Separate the labelled events into the four physics populations."""
         mc: NDArray[np.bool] = self.y == 0
         nature: NDArray[np.bool] = ~mc
         return Populations(
-            mc=Events[T](self.events.z[mc], self.events.x[mc]),
+            mc=Events(self.events.z[mc], self.events.x[mc]),
             data=self.events.x[nature],
             truth=self.events.z[nature],
         )
 
 
-class DatasetSplits[T: np.floating = np.double](NamedTuple):
-    train: ArrayDataset[T]
-    val: ArrayDataset[T]
-    test: ArrayDataset[T]
+class DatasetSplits(NamedTuple):
+    train: ArrayDataset
+    val: ArrayDataset
+    test: ArrayDataset
 
-    def select(self, which: Split = Split.ALL, /) -> ZXY[T]:
-        chosen: list[ZXY[T]] = [
+    def select(self, which: Split = Split.ALL, /) -> ZXY:
+        chosen: list[ZXY] = [
             split.as_arrays()
             for flag, split in (
                 (Split.TRAIN, self.train),
@@ -189,4 +180,4 @@ class DatasetSplits[T: np.floating = np.double](NamedTuple):
         ]
         if not chosen:
             raise ValueError("select needs at least one split")
-        return ZXY[T].concatenate(parts=chosen)
+        return ZXY.concatenate(parts=chosen)

@@ -296,7 +296,7 @@ Build Gaussian splits from a reloaded run's config, or from a YAML file. Returns
 
 - `tuple[DatasetSplits, int, GaussianConfig]` The splits, the dimensionality, and the parsed Gaussian params.
 
-### `def _save_run(g: keras.Model, d: keras.Model, history: dict[str, list[float]], *, batch_size: int, n_samples: int, dim: int, dataset: str, init_seed: int, data_seed: int, gaussian_params: GaussianConfig | None, variables: frozenset[str]) -> Path`
+### `def _save_run(g: keras.Model, d: keras.Model, history: dict[str, list[float]], *, batch_size: int, n_samples: int, dim: int, dataset: str, init_seed: int, data_seed: int, gaussian_params: GaussianConfig | None, variables: tuple[str, ...]) -> Path`
 
 Write models, history and config to a fresh timestamped run directory.
 
@@ -314,13 +314,13 @@ Gaussian params are stored as covariance matrices so runs are self-contained and
 - `init_seed: int` The initial seed to use for training.
 - `data_seed: int` The data seed to use for training.
 - `gaussian_params: GaussianConfig | None` The Gaussian configuration.
-- `variables: frozenset[str]` The variables to use for training.
+- `variables: tuple[str, ...]` The variables to use for training, in column order.
 
 **Returns:**
 
 - `Path` The path to the run directory.
 
-### `def run(batch_size: int, n_samples: int, config: Path | None, dataset: DatasetName, variables: frozenset[str], load_run: Path | None, hidden_units: int, n_layers: int, patience: int, seed: int | None, data_seed: int) -> None`
+### `def run(batch_size: int, n_samples: int, config: Path | None, dataset: DatasetName, variables: tuple[str, ...], load_run: Path | None, hidden_units: int, n_layers: int, patience: int, seed: int | None, data_seed: int) -> None`
 
 Main entry point.
 
@@ -330,7 +330,7 @@ Main entry point.
 - `n_samples: int` The number of samples to use for training.
 - `config: Path | None` The path to the configuration file to use for training.
 - `dataset: DatasetName` The dataset to use for training.
-- `variables: frozenset[str]` The variables to use for training.
+- `variables: tuple[str, ...]` The variables to use for training, in column order.
 - `load_run: Path | None` The path to the run to load.
 - `hidden_units: int` The number of hidden units in the networks.
 - `n_layers: int` The number of layers in the networks.

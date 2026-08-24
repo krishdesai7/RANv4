@@ -18,16 +18,28 @@
 # 0 --- so three of the four would sit idle while JAX preallocated ~75% of each.
 # `shared` lets the job take a quarter of a node and be charged for a quarter of
 # a node, and small jobs backfill into gaps a whole-node request cannot reach.
-# The CPU and memory requests are the matching quarter of a Perlmutter GPU node
-# (4x A100, 64 physical cores, 256GB): oversubscribing either is what makes the
-# scheduler fall back to allocating the whole thing.
+#
+# `-c 32` is mandatory, not a preference: the gpu_shared queue requires exactly
+# 32 logical cores per GPU (a quarter of the node's 128) and rejects anything
+# else. There is deliberately no `--mem` line. The scheduler converts a memory
+# request into an equivalent core count and enforces the larger of the two, so
+# `--mem=64G` was silently a request for 38 cores and bounced off that rule ---
+# the ceiling that goes with 32 cores is only ~54GB. Omitting it lets memory
+# come out proportional to the cores, which is both correct and not a number
+# that has to be rederived when the node spec changes.
+#
+# ~54GB is far more than the run needs: 1M events x 6 observables is ~105MB on
+# device (z, x and y across all three splits) and well under a gigabyte on host.
 #SBATCH --qos=shared
 #SBATCH --constraint=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=64G
+#
+# `-C gpu` is the 40GB A100, of which Perlmutter has ~1200 nodes; `-C gpu&hbm80g`
+# would get the 80GB part but from a pool of ~200, so it would cost queue time
+# to buy headroom this job is four hundred times clear of already.
 #
 # 30 minutes, not 2 hours. Measured on an A100 (`benchmarks/boundary.py`, same
 # 500k x 6D shape): 4.6s to compile, 0.034s per epoch. Scaled to the parameters

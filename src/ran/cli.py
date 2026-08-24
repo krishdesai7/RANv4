@@ -75,7 +75,9 @@ def train_command(
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
     n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
     config: Path | None = None,
-    dataset: DatasetName = DatasetName.gaussian,
+    dataset: Annotated[
+        DatasetName, typer.Option("--dataset", "-D")
+    ] = DatasetName.gaussian,
     variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
     load_run: Annotated[Path | None, typer.Option("--load-run", "-r")] = None,
     hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,

@@ -49,7 +49,7 @@
 # It assumes the jet cache is already warm. A cold cache pulls 3.3GB from Zenodo
 # (Pythia26 1.55GB + Herwig 1.75GB) inside the job and will not fit --- warm it
 # on a login node first, see the note in CLAUDE.md.
-#SBATCH --time=00:30:00
+#SBATCH --time=00:15:00
 #SBATCH --account=m3246_g
 #SBATCH --job-name=ran_e2e
 #SBATCH --output=slurm-%j.log

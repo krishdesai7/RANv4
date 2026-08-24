@@ -391,7 +391,9 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `n_samples: int = 500_000` Number of events to use per class (data and MC).
 - `batch_size: int = 1024` Batch size for the returned splits.
 - `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files. Defaults to `.cache`, relocatable with `RAN_CACHE_DIR`.
-- `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
+- `variables: Sequence[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use, **in column order**.
+
+  The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, that order is what `_save_run` records in `config.json`, and it is what a later `ran evaluate` or `ran baseline ibu` must reproduce to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
   There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.
 

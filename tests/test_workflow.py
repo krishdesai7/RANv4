@@ -88,7 +88,7 @@ def _reload(run_dir: Path) -> None:
         n_samples=32,
         config=None,
         dataset=DatasetName.gaussian,
-        variables=frozenset(),
+        variables=(),
         load_run=run_dir,
         hidden_units=4,
         n_layers=1,

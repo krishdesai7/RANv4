@@ -51,8 +51,23 @@ RUN_DIR: Final[Path] = Path("runs")
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17
-SUBSTRUCTURE_VARIABLES: Final[frozenset[LiteralString]] = frozenset(
-    ("m", "M", "w", "tau21", "zg", "sdm")
+# A tuple, emphatically not a `frozenset`. These names select *columns*, and
+# `load_jet_dataset` fills column `i` from the `i`-th name --- so the container
+# holding them is an ordering, and a set has none. It used to be a frozenset,
+# whose iteration order depends on the per-process randomized hashes of the
+# strings inside it: `ran train` built its columns in one order and recorded
+# that order in `config.json`, then `ran baseline ibu` and `ran evaluate`
+# rebuilt the same dataset in a *different* order in their own processes and
+# labelled it with the recorded one. Same six observables, six wrong names ---
+# and worse, a generator trained on one column order evaluated against another.
+# The order here matches `JET_OBS` below.
+SUBSTRUCTURE_VARIABLES: Final[tuple[LiteralString, ...]] = (
+    "m",
+    "M",
+    "w",
+    "tau21",
+    "zg",
+    "sdm",
 )
 
 # Cache-safe filenames: avoid case collisions on case-insensitive filesystems

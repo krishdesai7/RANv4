@@ -58,7 +58,7 @@ def _prepare_gaussian(
 def _prepare_jets(
     n_samples: int,
     batch_size: int,
-    variables: frozenset[str],
+    variables: tuple[str, ...],
     data_seed: int,
 ) -> tuple[DatasetSplits, int, list[VarInfo]]:
     """Build jet splits plus the per-variable metadata the plots need."""
@@ -94,7 +94,7 @@ def _save_run(
     init_seed: int,
     data_seed: int,
     gaussian_params: GaussianConfig | None,
-    variables: frozenset[str],
+    variables: tuple[str, ...],
 ) -> Path:
     run_dir: Path = Path("runs") / datetime.now(tz=UTC).strftime(
         format="%Y-%m-%dT%H%M%SZ"
@@ -156,7 +156,7 @@ def run(
     n_samples: int,
     config: Path | None,
     dataset: DatasetName,
-    variables: frozenset[str],
+    variables: tuple[str, ...],
     load_run: Path | None,
     hidden_units: int,
     n_layers: int,
@@ -187,7 +187,7 @@ def run(
         # Runs predating seed recording used the then-hardcoded default of 42.
         data_seed: int = saved_config.data_seed
         if dataset == DatasetName.jets:
-            variables = frozenset(saved_config.variable_names)
+            variables = tuple(saved_config.variable_names)
         else:
             saved_gaussian_config = gaussian_config_from_run_config(
                 saved_config.source["gaussian_params"], dim

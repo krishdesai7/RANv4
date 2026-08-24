@@ -112,10 +112,12 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
 
     assert result.exit_code == 0
     assert calls[0]["dataset"] is cli.DatasetName.jets
-    assert calls[0]["variables"] == frozenset(("m", "w"))
+    # A tuple in canonical order, not a set: these names index columns, and
+    # `--var w --var m` must describe the same run as `--var m --var w`.
+    assert calls[0]["variables"] == ("m", "w")
     # Paths stay Paths: `workflow.run` is typed `load_run: Path | None` and
     # opens them directly. Only typer's own wrappers get converted; the
-    # DatasetName enum remains an enum, and repeated --var becomes a frozenset.
+    # DatasetName enum remains an enum, and repeated --var becomes a tuple.
     assert calls[0]["load_run"] == tmp_path
     assert calls[0]["seed"] == 7
     # LogLevel is a StrEnum of auto() members, so its values are the lowercase

@@ -18,7 +18,7 @@ weights/
 #runs/
 
 # Logs
-#*.log
+*.log
 *.out
 .DS_Store
 

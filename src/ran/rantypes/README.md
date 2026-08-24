@@ -165,9 +165,9 @@ Concatenate the requested splits into one labelled sample. The split a row came 
 
 The input to an unfolding run: a sample to unfold with, and a sample to score on.
 
-`full` spans every split and supplies the response (`full.mc`) and the measurement (`full.data`). `test` is the held-out split alone, which is where the metrics are computed.
+`fit` is train+val and supplies the response (`fit.mc`) and the measurement (`fit.data`). `test` is the held-out split alone, which is where the metrics are computed. The two are disjoint on purpose: fitting on every event and then scoring a subset of them is the convention in the unfolding literature, and it scores an estimator on data it has already seen.
 
 #### Fields
 
-- `full: Populations`: The sample to unfold with.
+- `fit: Populations`: The sample to unfold with (train+val).
 - `test: Populations`: The sample to score on.

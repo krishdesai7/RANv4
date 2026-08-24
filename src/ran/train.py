@@ -69,7 +69,16 @@ if keras.backend.backend() != "jax":
 
 EPS: float = keras.config.epsilon()
 
-_HISTORY_KEYS: tuple[str, ...] = ("train_d", "train_g", "val_d", "val_g")
+# Three columns, not four. Every column is the weighted BCE on the same scale ---
+# `_make_pass` negates `g_loss` back before recording it, so `train_g` is the BCE
+# at the generator's batch rather than the objective g descends. What separates
+# the columns is therefore *where* the BCE was measured, and validation measures
+# it in exactly one place: `eval_step` runs once per epoch and both networks are
+# scored by that number. A "val_g" column could only be `val_d` again, which is
+# literally what it used to hold --- two identical curves on `losses.pdf`. Runs
+# predating this wrote that fourth key; nothing reads it, and `val_d` keeps both
+# its name and its meaning, so old `history.npz` files still load.
+_HISTORY_KEYS: tuple[str, ...] = ("train_d", "train_g", "val_d")
 
 
 class TrainResult(NamedTuple):
@@ -104,7 +113,7 @@ class RunCarry(NamedTuple):
     wait: Int[Array, ""]
     epoch: Int[Array, ""]
     key: PRNGKeyArray
-    history: Float[Array, "epochs 4"]
+    history: Float[Array, "epochs metrics"]
 
 
 @jaxtyped(typechecker=beartype)
@@ -388,12 +397,11 @@ def _make_epoch(
         wait: Int[Array, ""],
     ) -> None:
         logger.info(
-            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val D: %.4f  G: %.4f  (patience %d/%d)",
+            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f  (patience %d/%d)",
             int(epoch) + 1,
             n_epochs,
             float(train_d),
             float(train_g),
-            float(val_d),
             float(val_d),
             int(wait),
             patience,
@@ -413,9 +421,9 @@ def _make_epoch(
                 state,
             ),
         )
-        # d and g are scored by the same number: g's loss is the negation of the
-        # BCE d minimizes, so one forward pass answers for both.
-        row = jnp.stack([train_d, train_g, val_d, val_d])
+        # One validation forward pass answers for both networks --- see
+        # `_HISTORY_KEYS` --- so it is recorded once.
+        row = jnp.stack([train_d, train_g, val_d])
         jax.debug.callback(
             _log,
             carry.epoch,
@@ -508,7 +516,7 @@ def _use_compilation_cache() -> None:
     logger.debug("XLA compilation cache: %s", COMPILE_CACHE_DIR.resolve())
 
 
-def _unpack_history(history: Float[Array, "epochs 4"]) -> dict[str, list[float]]:
+def _unpack_history(history: Float[Array, "epochs metrics"]) -> dict[str, list[float]]:
     rows: np.ndarray = np.asarray(history)
     return {key: rows[:, i].tolist() for i, key in enumerate(_HISTORY_KEYS)}
 
@@ -591,7 +599,10 @@ def train(
     _assign(d.trainable_variables, values=best.d_trainable)
     _assign(d.non_trainable_variables, values=best.d_non_trainable)
 
+    # Held-out, and held out: this runs after `_run` has returned, on the state
+    # already selected by `best_val` on the *validation* split. It is logged and
+    # nothing else --- it reaches neither the returned models nor the history.
     test: float = float(jax.jit(evaluate)(best, data.test))
-    logger.info("Test  D: %.4f  G: %.4f  (init seed %d)", test, test, seed)
+    logger.info("Test: %.4f  (init seed %d)", test, seed)
 
     return TrainResult(g, d, _unpack_history(final.history[:n_run]), seed)

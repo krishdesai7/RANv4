@@ -338,9 +338,9 @@ def _run_and_evaluate(
     if not np.isfinite(purity_threshold) or not 0 <= purity_threshold <= 1:
         raise ValueError("purity_threshold must be finite and between zero and one")
 
-    full: Populations
+    fit: Populations
     test: Populations
-    full, test = load_populations(config)
+    fit, test = load_populations(config)
     test_truth: NDArray[np.single] = test.require_truth()
     weights: NDArray[np.single] = np.empty(
         shape=(config.dim, len(test.mc)), dtype=np.single
@@ -349,12 +349,14 @@ def _run_and_evaluate(
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
-        # Fit on every split, then score the test split with the result.
+        # Fit on train+val, then score the held-out test split with the result,
+        # so the sample scored is genuinely not the sample fitted --- see
+        # `UnfoldingPopulations`.
         unfolding: VariableUnfolding = unfold_variable(
             variable_name=variable_name,
-            mc_gen=full.mc.z[:, dimension],
-            mc_sim=full.mc.x[:, dimension],
-            observed=full.data[:, dimension],
+            mc_gen=fit.mc.z[:, dimension],
+            mc_sim=fit.mc.x[:, dimension],
+            observed=fit.data[:, dimension],
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
         )

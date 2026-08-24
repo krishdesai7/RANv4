@@ -101,8 +101,15 @@ def _partitioned(data: ZXY, expected_dim: int, label: str, /) -> Populations:
 def prepare_populations(
     splits: DatasetSplits, expected_dim: int
 ) -> UnfoldingPopulations:
+    # Train+val, not `Split.ALL`. A baseline fitted on every event and then
+    # scored on the test split would be scored on data it had already used ---
+    # and would be handed information RAN is denied, since `train` never reads
+    # the test split (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`).
+    # The comparison is only a comparison if both sides see the same events.
     return UnfoldingPopulations(
-        full=_partitioned(splits.select(Split.ALL), expected_dim, "every split"),
+        fit=_partitioned(
+            splits.select(Split.TRAIN | Split.VAL), expected_dim, "train and val splits"
+        ),
         test=_partitioned(splits.select(Split.TEST), expected_dim, "test split"),
     )
 

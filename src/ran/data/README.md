@@ -327,7 +327,7 @@ Pull one batch out of the flat split, fused into the first matrix multiplication
 
 One-time download of jet substructure data from Zenodo (record 3548091).
 
-Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to .cache/, and deletes the raw downloads
+Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to `CACHE_DIR` (`.cache/`, or wherever `RAN_CACHE_DIR` points), and deletes the raw downloads
 
 ### Degenerate jets
 
@@ -378,7 +378,7 @@ Fetch every shard for one generator and concatenate the keys needed. Appends eac
 
 Load jet substructure data for RAN training.
 
-Checks `.cache/` for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `RANDataset`.
+Checks `CACHE_DIR` (`.cache/`, or wherever `RAN_CACHE_DIR` points) for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `RANDataset`.
 
 ### `ran.data.jets::load_jet_dataset`
 
@@ -390,7 +390,7 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 
 - `n_samples: int = 500_000` Number of events to use per class (data and MC).
 - `batch_size: int = 1024` Batch size for the returned splits.
-- `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files.
+- `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files. Defaults to `.cache`, relocatable with `RAN_CACHE_DIR`.
 - `variables: frozenset[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use.
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
   There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.

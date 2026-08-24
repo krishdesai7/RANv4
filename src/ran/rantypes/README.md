@@ -50,7 +50,7 @@ $-2^{15}$ is that number: absurd on sight for any standardized observable, exact
 
 ## module: `enums`
 
-CLI choice enums. `ran.cli` imports these while it is still backend-free, which is why they live in this module rather than beside the code they select for.
+CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `ran.data` implements, and `LogLevel` one that `ran.logging_config` does.
 
 ## module: `events`
 

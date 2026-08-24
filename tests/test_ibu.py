@@ -120,13 +120,38 @@ def test_saturating_counts_conserve_observed_population() -> None:
 
 
 def test_prepare_data_names_response_and_test_populations() -> None:
-    full, test = shared.prepare_populations(_splits(), expected_dim=1)
+    fit, test = shared.prepare_populations(_splits(), expected_dim=1)
 
-    assert full.mc.z.shape == (5, 1)
-    assert full.mc.x.shape == (5, 1)
-    assert full.data.shape == (5, 1)
+    # Train (2 MC + 2 nature) plus val (1 + 1) --- the test split's 2 + 2 are
+    # excluded, which is the whole point of the field being called `fit`.
+    assert fit.mc.z.shape == (3, 1)
+    assert fit.mc.x.shape == (3, 1)
+    assert fit.data.shape == (3, 1)
     assert test.mc.z.shape == (2, 1)
     assert test.data.shape == (2, 1)
+
+
+def test_the_fit_population_contains_no_test_event() -> None:
+    """The claim the metrics rest on, checked by value rather than by count.
+
+    Fitting on every split and scoring a subset of it is the convention in the
+    unfolding literature; it is also how this code behaved until the populations
+    were split in two, so it is worth a test that fails loudly if `Split.ALL`
+    ever comes back.
+    """
+    splits = _splits()
+    fit, test = shared.prepare_populations(splits, expected_dim=1)
+
+    def z_values(pops) -> set[float]:
+        both = np.concatenate([pops.mc.z.ravel(), pops.data.ravel()])
+        return {float(v) for v in both}
+
+    fitted, held_out = z_values(fit), z_values(test)
+
+    assert fitted.isdisjoint(held_out)
+    # And accounts for every row: fit is exactly train+val, test exactly test.
+    assert len(fit.mc) + len(fit.data) == splits.train.size + splits.val.size
+    assert len(test.mc) + len(test.data) == splits.test.size
 
 
 def test_prepare_data_rejects_configured_dimension_mismatch() -> None:

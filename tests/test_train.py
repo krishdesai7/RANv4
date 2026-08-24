@@ -13,7 +13,7 @@ from numpy import dtype, float64, ndarray
 from ran.data.datasets import DatasetSplits, RANDataset
 from ran.data.device import DeviceSplits, train_indices
 from ran.models import build_generator
-from ran.rantypes import COMPILE_CACHE_DIR, TRUTH_SENTINEL, ZXY, Events
+from ran.rantypes import COMPILE_CACHE_DIR, TRUTH_SENTINEL, ZXY, Events, Split
 from ran.train import (
     EPS,
     TrainResult,
@@ -303,7 +303,10 @@ def test_train_runs_and_returns_usable_models(tmp_path) -> None:
     )
 
     assert isinstance(seed, int)
-    assert set(history) == {"train_d", "train_g", "val_d", "val_g"}
+    # Three keys: the validation BCE scores both networks, so recording a
+    # fourth "val_g" could only duplicate `val_d` --- which is what it used
+    # to do, and what put two identical curves on `losses.pdf`.
+    assert set(history) == {"train_d", "train_g", "val_d"}
     # History values are only SupportsFloat, as the rest of the pipeline reads
     # them: `plot_losses` and `_save_run` both name a dtype to convert them.
     curves = {k: np.array(v, dtype=np.single) for k, v in history.items()}
@@ -457,7 +460,7 @@ class TestFusion:
         }
         fused = train(splits, fused=True, **kwargs)
         eager = train(splits, fused=False, **kwargs)
-        for key in ("train_d", "train_g", "val_d", "val_g"):
+        for key in ("train_d", "train_g", "val_d"):
             np.testing.assert_allclose(
                 fused.history[key], eager.history[key], rtol=1e-10
             )
@@ -538,3 +541,91 @@ class TestCompilationCache:
         assert jax.config.jax_compilation_cache_dir == str(COMPILE_CACHE_DIR.resolve())
         threshold = jax.config.jax_persistent_cache_min_compile_time_secs
         assert threshold == pytest.approx(2.0)
+
+
+class TestTrainingNeverSeesTheTestSplit:
+    """The split boundaries are disjoint slices, but that is a property of
+    `_split_dataset`; this pins the property callers actually care about.
+
+    `train` does transfer the test split to device --- `DeviceSplits.from_splits`
+    moves all three at once --- and does read it, once, after `_run` has already
+    returned, to log a held-out number. The claim worth testing is therefore not
+    "test is absent" but "test cannot influence the result": corrupt it beyond
+    recognition and every returned model weight and history value must be
+    bit-identical.
+    """
+
+    @staticmethod
+    def _splits(n: int = 600) -> DatasetSplits:
+        rng = np.random.default_rng(0)
+        z = rng.normal(size=(2 * n, 2)).astype(np.single)
+        x = (z + 0.3 * rng.normal(size=z.shape)).astype(np.single)
+        y = np.concatenate(
+            [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
+        ).astype(np.ubyte)
+        return RANDataset(batch_size=64, seed=1).splits_from_data(ZXY(Events(z, x), y))
+
+    @staticmethod
+    def _poison(splits: DatasetSplits, which: str) -> DatasetSplits:
+        """Replace every feature of one split with a value no real event has.
+
+        `as_arrays()` hands back a view, not a copy, so this reaches whatever
+        `train` goes on to read --- which is the whole point, and what
+        `test_the_poison_reaches_training_at_all` exists to prove.
+        """
+        arrays = getattr(splits, which).as_arrays()
+        arrays.z[:] = -1234.0
+        arrays.x[:] = 4321.0
+        return splits
+
+    @staticmethod
+    def _variables(result: TrainResult) -> list[ndarray]:
+        """Every array `train` writes back, generator and discriminator alike.
+
+        `trainable_variables` rather than `get_weights()`: it is what the
+        `RANModel` protocol declares, and it is precisely what `_assign` restores
+        the best state into.
+        """
+        return [
+            np.asarray(v)
+            for model in (result.g, result.d)
+            for v in (*model.trainable_variables, *model.non_trainable_variables)
+        ]
+
+    @staticmethod
+    def _run(splits: DatasetSplits) -> TrainResult:
+        return train(
+            splits, dim=2, hidden_units=8, n_layers=1, seed=5, patience=99, n_epochs=4
+        )
+
+    def test_the_splits_do_not_overlap(self) -> None:
+        """The precondition, checked directly rather than assumed."""
+        splits = self._splits()
+        sizes = (splits.train.size, splits.val.size, splits.test.size)
+
+        assert sum(sizes) == len(splits.select(Split.ALL))
+        assert min(sizes) > 0
+
+    def test_corrupting_test_changes_no_weight_and_no_history_value(self) -> None:
+        clean = self._run(self._splits())
+        poisoned = self._run(self._poison(self._splits(), "test"))
+
+        for a, b in zip(self._variables(clean), self._variables(poisoned), strict=True):
+            np.testing.assert_array_equal(a, b)
+
+        assert clean.history.keys() == poisoned.history.keys()
+        for key in clean.history:
+            np.testing.assert_array_equal(clean.history[key], poisoned.history[key])
+
+    def test_the_poison_reaches_training_at_all(self) -> None:
+        """The negative control, without which the test above is vacuous.
+
+        If `_poison` mutated a copy, corrupting *any* split would look clean and
+        the leakage test would pass for the wrong reason. Val is the tell: it is
+        read every epoch for early stopping, so garbage there has to move the
+        `val_d` column.
+        """
+        clean = self._run(self._splits())
+        poisoned = self._run(self._poison(self._splits(), "val"))
+
+        assert not np.array_equal(clean.history["val_d"], poisoned.history["val_d"])

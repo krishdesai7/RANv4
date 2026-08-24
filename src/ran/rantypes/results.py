@@ -14,7 +14,17 @@ if TYPE_CHECKING:
 
 
 class UnfoldingPopulations(NamedTuple):
-    full: Populations
+    """What a baseline may fit on, and what it is scored on --- kept apart.
+
+    `fit` is train+val; `test` is the held-out split. They are disjoint, and
+    deliberately so: it is conventional in the unfolding literature to fit the
+    response and iterate the prior on every event and then quote metrics on a
+    subset of those same events, which scores an estimator on data it has
+    already seen. Naming the two populations separately is what stops that from
+    being the path of least resistance here.
+    """
+
+    fit: Populations
     test: Populations
 
 

@@ -32,7 +32,7 @@ Checks the shape assumptions a baseline relies on, then partitions.
 
 ### `_shared::prepare_populations`
 
-Returns an `UnfoldingPopulations`, which unpacks as `(full, test)`. Both are `Populations`. `full` spans every split and supplies the response (`full.mc.z` and `full.mc.x`, paired per event) and the measurement (`full.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
+Returns an `UnfoldingPopulations`, which unpacks as `(fit, test)`. Both are `Populations`, and they are disjoint. `fit` is train+val and supplies the response (`fit.mc.z` and `fit.mc.x`, paired per event) and the measurement (`fit.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
 Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist.
 
@@ -45,7 +45,7 @@ One thing still does widen: the two population-count checks and the mean-one pos
 
 #### Returns
 
-- An `UnfoldingPopulations` object containing the full and test populations.
+- An `UnfoldingPopulations` object containing the fit (train+val) and test populations.
 
 ### `_shared::load_populations`
 
@@ -57,7 +57,7 @@ Rebuild the run's dataset and split it into the baseline populations.
 
 #### Returns
 
-- An `UnfoldingPopulations` object containing the full and test populations.
+- An `UnfoldingPopulations` object containing the fit (train+val) and test populations.
 
 ### `_shared::evaluate_dimension`
 
@@ -91,7 +91,9 @@ IBU performs 1D per-variable unfolding with purity-based automatic binning. It b
 
 A per-bin correction, learned from one population and applied to another.
 
-IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on every split and applied to the test split, so the sample it scores is not the sample it learned from.
+IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on train+val and applied to the held-out test split, so the sample it scores is genuinely not the sample it learned from.
+
+That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied, since `ran.train` never reads the test split. A comparison is only a comparison if both sides see the same events.
 
 ### `ibu::_assign_bins`
 

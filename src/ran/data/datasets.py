@@ -3,23 +3,31 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, cast, overload
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..rantypes import ZXY, DatasetSplits, Events, GaussianConfig, Populations
+from ..rantypes import (
+    CACHE_DIR,
+    EVENT_DTYPE,
+    ZXY,
+    DatasetSplits,
+    Events,
+    GaussianConfig,
+    Populations,
+)
 from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
     from logging import Logger
+    from pathlib import Path
     from typing import Final, LiteralString, SupportsFloat
 
-    from jaxtyping import Array, Float
-    from numpy._typing import _DTypeLike
-    from numpy.typing import DTypeLike, NDArray
+    from jax import Array
+    from jaxtyping import Float
+    from numpy.typing import NDArray
 
     from ..rantypes import Nested
 
@@ -48,53 +56,37 @@ def _draw_gaussian(
 ) -> tuple[
     Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"], Float[Array, "n d"]
 ]:
-    """Draw the four Gaussian populations: (z_true, z_gen, x_data, x_sim).
+    k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), num=4)
 
-    Pinned to CPU. Generation runs once and is then npz-cached, so there is
-    nothing to gain from the accelerator --- and this function is reachable from
-    ``ran.baselines._shared`` on a cache miss, which runs inside the
-    TensorFlow-pinned OmniFold process. Letting JAX take a device there would
-    have it preallocate the GPU out from under TensorFlow.
+    z_true: Float[Array, "n d"] = jax.random.multivariate_normal(
+        k_true, mu_true, cov_true, (n_samples,), method="svd"
+    )
+    z_gen: Float[Array, "n d"] = jax.random.multivariate_normal(
+        k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
+    )
 
-    No ``check_valid`` equivalent is needed: ``parse_gaussian_config`` has already
-    asserted positive-definiteness with a Cholesky factorization.
-    """
-    with jax.default_device(jax.devices("cpu")[0]):
-        k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), 4)
+    chol_det: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector))
+    smear: Float[Array, "d d"] = chol_det.T
 
-        z_true = jax.random.multivariate_normal(
-            k_true, mu_true, cov_true, (n_samples,), method="svd"
-        )
-        z_gen = jax.random.multivariate_normal(
-            k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
-        )
-
-        chol_det = jnp.linalg.cholesky(jnp.asarray(cov_detector))
-        smear = chol_det.T
-
-        x_data = z_true + jax.random.normal(k_data, z_true.shape) @ smear
-        x_sim = z_gen + jax.random.normal(k_sim, z_gen.shape) @ smear
+    x_data: Float[Array, "n d"] = (
+        z_true + jax.random.normal(key=k_data, shape=z_true.shape) @ smear
+    )
+    x_sim: Float[Array, "n d"] = (
+        z_gen + jax.random.normal(key=k_sim, shape=z_gen.shape) @ smear
+    )
     return z_true, z_gen, x_data, x_sim
 
 
-class ArrayDataset[T: np.floating = np.double]:
-    """One host-resident split of (z, x, y), plus how it should be batched.
-
-    This is a container, not an iterator. Batch order is drawn on device, per
-    epoch, by ``ran.device.train_indices`` --- so ``batch_size`` and ``seed`` are
-    carried here as the split's own parameters and read by
-    ``DeviceSplits.from_splits``, but nothing iterates this object.
-    """
-
+class ArrayDataset:
     def __init__(
         self,
-        data: ZXY[T],
+        data: ZXY,
         batch_size: int = 128,
         seed: int = 42,
     ) -> None:
         if batch_size < 1:
             raise ValueError("batch_size must be >= 1")
-        self.data: ZXY[T] = data
+        self.data: ZXY = data
         self.batch_size: int = batch_size
         self.seed: int = seed
 
@@ -103,66 +95,29 @@ class ArrayDataset[T: np.floating = np.double]:
         return len(self.data)
 
     @property
-    def dtype(self) -> np.dtype[T]:
+    def dtype(self) -> np.dtype[np.single]:
         return self.data.dtype
 
     def __len__(self) -> int:
-        """Number of batches per pass, counting a short trailing one."""
         return (self.size + self.batch_size - 1) // self.batch_size
 
-    def as_arrays(self) -> ZXY[T]:
-        """Return the whole split as flat labelled arrays, in stored order."""
+    def as_arrays(self) -> ZXY:
         return self.data
 
 
-class RANDataset[T: np.floating = np.double]:
-    @overload
-    def __init__(
-        self: RANDataset[np.double],
-        batch_size: int = 128,
-        seed: int = 42,
-        cache_dir: Path = Path(".cache"),
-        val_fraction: float = 0.1,
-        test_fraction: float = 0.2,
-        dtype: _DTypeLike[np.double] = np.double,
-    ) -> None: ...
-
-    @overload
+class RANDataset:
     def __init__(
         self,
         batch_size: int = 128,
         seed: int = 42,
-        cache_dir: Path = Path(".cache"),
+        cache_dir: Path = CACHE_DIR,
         val_fraction: float = 0.1,
         test_fraction: float = 0.2,
-        *,
-        dtype: _DTypeLike[T],
-    ) -> None: ...
-
-    @overload
-    def __init__(
-        self,
-        batch_size: int,
-        seed: int,
-        cache_dir: Path,
-        val_fraction: float,
-        test_fraction: float,
-        dtype: _DTypeLike[T],
-    ) -> None: ...
-
-    def __init__(
-        self,
-        batch_size: int = 128,
-        seed: int = 42,
-        cache_dir: Path = Path(".cache"),
-        val_fraction: float = 0.1,
-        test_fraction: float = 0.2,
-        dtype: DTypeLike = np.double,
     ) -> None:
         self.batch_size: int = batch_size
         self.seed: int = seed
         self.cache_dir: Path = cache_dir
-        self.dtype: np.dtype[T] = cast("np.dtype[T]", np.dtype(dtype))
+        self.dtype: np.dtype[np.single] = np.dtype(EVENT_DTYPE)
 
         if test_fraction < 0 or test_fraction > 1:
             raise ValueError("test_fraction must be between 0 and 1")
@@ -173,8 +128,8 @@ class RANDataset[T: np.floating = np.double]:
 
         self.val_fraction: float = val_fraction
         self.test_fraction: float = test_fraction
-        self.dataset: ZXY[T] | None = None
-        self.splits: DatasetSplits[T] | None = None
+        self.dataset: ZXY | None = None
+        self.splits: DatasetSplits | None = None
 
     @staticmethod
     def _round_nested(
@@ -196,9 +151,8 @@ class RANDataset[T: np.floating = np.double]:
             "n_samples": n_samples,
             "seed": self.seed,
             "rng": _RNG_VERSION,
-            # Without this a float32 and a float64 run share one file, and
-            # whichever ran first decides the precision on disk.
-            "dtype": str(self.dtype),
+            # Without this a float32 and a float64 run share one file
+            "dtype": str(object=self.dtype),
         }
         return hashlib.sha256(
             data=json.dumps(obj=key_data, sort_keys=True).encode(encoding="utf-8")
@@ -208,13 +162,13 @@ class RANDataset[T: np.floating = np.double]:
         cache_key: str = self._cache_key(parsed, n_samples)
         return self.cache_dir / f"gaussian_{cache_key}.npz"
 
-    def _build_dataset(self, data: ZXY[T]) -> ZXY[T]:
+    def _build_dataset(self, data: ZXY) -> ZXY:
         """Shuffle so that both classes are spread across every split."""
         rng: np.random.Generator = np.random.default_rng(self.seed)
         order: NDArray[np.intp] = rng.permutation(x=len(data))
         return ZXY(Events(data.z[order], data.x[order]), data.y[order])
 
-    def _split_dataset(self, dataset: ZXY[T]) -> DatasetSplits[T]:
+    def _split_dataset(self, dataset: ZXY) -> DatasetSplits:
         n: int = len(dataset)
         n_test: int = int(n * self.test_fraction)
         n_non_test: int = n - n_test
@@ -227,7 +181,7 @@ class RANDataset[T: np.floating = np.double]:
                 "every split needs at least one event"
             )
 
-        def _slice(lo: int, hi: int) -> ArrayDataset[T]:
+        def _slice(lo: int, hi: int) -> ArrayDataset:
             return ArrayDataset(
                 data=ZXY(
                     Events(dataset.z[lo:hi], dataset.x[lo:hi]),
@@ -249,7 +203,7 @@ class RANDataset[T: np.floating = np.double]:
         *,
         params: GaussianConfig | None = None,
         n_samples: int = 10**6,
-    ) -> DatasetSplits[T]:
+    ) -> DatasetSplits:
         # Written as a nested check rather than a single XOR so that each branch
         # narrows the argument it goes on to use.
         if params is not None:
@@ -262,16 +216,15 @@ class RANDataset[T: np.floating = np.double]:
             parsed = parse_gaussian_config(config_path)
 
         # The parameters go into `_draw_gaussian` at the float64 they were parsed
-        # in, and the sample narrows to `T` once on the way out. Pre-narrowing
-        # them bought nothing -- the draw upcasts again -- and cost precision in
-        # the detector Cholesky whenever `T` was float32.
+        # in, and the sample narrows to `np.single` once on the way out because the draw
+        # upcasts again and costs precision in the Cholesky whenever `np.single`
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         if cache_path.exists():
             logger.info("Loading dataset from cache: %s", cache_path)
             with np.load(file=cache_path) as cached:
-                data: ZXY[T] = ZXY(
+                data: ZXY = ZXY(
                     Events(
                         z=cached["z"].astype(dtype=self.dtype),
                         x=cached["x"].astype(dtype=self.dtype),
@@ -289,13 +242,13 @@ class RANDataset[T: np.floating = np.double]:
                 n_samples=n_samples,
             )
 
-            data: ZXY[T] = Populations(
+            data: ZXY = Populations(
                 mc=Events(
-                    z=np.asarray(z_gen, dtype=self.dtype),
-                    x=np.asarray(x_sim, dtype=self.dtype),
+                    z=np.asarray(a=z_gen, dtype=self.dtype),
+                    x=np.asarray(a=x_sim, dtype=self.dtype),
                 ),
-                data=np.asarray(x_data, dtype=self.dtype),
-                truth=np.asarray(z_true, dtype=self.dtype),
+                data=np.asarray(a=x_data, dtype=self.dtype),
+                truth=np.asarray(a=z_true, dtype=self.dtype),
             ).interleave()
 
             np.savez_compressed(file=cache_path, z=data.z, x=data.x, y=data.y)
@@ -303,8 +256,8 @@ class RANDataset[T: np.floating = np.double]:
 
         return self.splits_from_data(data)
 
-    def splits_from_data(self, data: ZXY[T]) -> DatasetSplits[T]:
+    def splits_from_data(self, data: ZXY) -> DatasetSplits:
         """Shuffle one labelled sample and cut it into train/val/test."""
-        self.dataset = self._build_dataset(data)
-        self.splits = self._split_dataset(self.dataset)
+        self.dataset: ZXY = self._build_dataset(data)
+        self.splits: DatasetSplits = self._split_dataset(self.dataset)
         return self.splits

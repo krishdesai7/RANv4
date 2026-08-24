@@ -2,7 +2,7 @@
 
 The two-optimizer min-max game does not fit ``Model.fit``, so this is hand-rolled
 --- but it is not a Python loop over batches. The dataset is moved to device once
-(:mod:`ran.device`), one epoch is a ``lax.scan`` over grouped batch indices, and
+(:mod:`ran.data.device`), one epoch is a ``lax.scan`` over grouped batch indices, and
 the epoch loop with its early stopping is a ``lax.while_loop``, so a whole run
 compiles to one program and the batch gathers fuse into the first ``Dense``.
 
@@ -19,6 +19,7 @@ readable tracebacks and host-side logging. Reach for it when a run goes wrong.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
@@ -29,20 +30,21 @@ from beartype import beartype
 from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
-from .device import DeviceSplits, gather, train_indices
+from .data.device import DeviceSplits, gather, train_indices
 from .models import build_discriminator, build_generator
 
-# `Variables` annotates the `@jaxtyped(beartype)` closures below, and beartype
-# resolves those strings at decoration time -- so it cannot hide under
-# TYPE_CHECKING.
-from .rantypes import Variables  # ruff: ignore[typing-only-first-party-import]
+# `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
+# annotates the `@jaxtyped(beartype)` closures below, and beartype resolves
+# those strings at decoration time -- so it cannot hide under TYPE_CHECKING
+# either.
+from .rantypes import COMPILE_CACHE_DIR, Variables
 
 if TYPE_CHECKING:
     from logging import Logger
 
     from jaxtyping import PRNGKeyArray
 
-    from .device import EvalSplit, TrainSplit
+    from .data.device import EvalSplit, TrainSplit
     from .rantypes import (
         DatasetSplits,
         DiscGradFn,
@@ -67,7 +69,16 @@ if keras.backend.backend() != "jax":
 
 EPS: float = keras.config.epsilon()
 
-_HISTORY_KEYS: tuple[str, ...] = ("train_d", "train_g", "val_d", "val_g")
+# Three columns, not four. Every column is the weighted BCE on the same scale ---
+# `_make_pass` negates `g_loss` back before recording it, so `train_g` is the BCE
+# at the generator's batch rather than the objective g descends. What separates
+# the columns is therefore *where* the BCE was measured, and validation measures
+# it in exactly one place: `eval_step` runs once per epoch and both networks are
+# scored by that number. A "val_g" column could only be `val_d` again, which is
+# literally what it used to hold --- two identical curves on `losses.pdf`. Runs
+# predating this wrote that fourth key; nothing reads it, and `val_d` keeps both
+# its name and its meaning, so old `history.npz` files still load.
+_HISTORY_KEYS: tuple[str, ...] = ("train_d", "train_g", "val_d")
 
 
 class TrainResult(NamedTuple):
@@ -102,7 +113,7 @@ class RunCarry(NamedTuple):
     wait: Int[Array, ""]
     epoch: Int[Array, ""]
     key: PRNGKeyArray
-    history: Float[Array, "epochs 4"]
+    history: Float[Array, "epochs metrics"]
 
 
 @jaxtyped(typechecker=beartype)
@@ -386,12 +397,11 @@ def _make_epoch(
         wait: Int[Array, ""],
     ) -> None:
         logger.info(
-            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val D: %.4f  G: %.4f  (patience %d/%d)",
+            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f  (patience %d/%d)",
             int(epoch) + 1,
             n_epochs,
             float(train_d),
             float(train_g),
-            float(val_d),
             float(val_d),
             int(wait),
             patience,
@@ -411,9 +421,9 @@ def _make_epoch(
                 state,
             ),
         )
-        # d and g are scored by the same number: g's loss is the negation of the
-        # BCE d minimizes, so one forward pass answers for both.
-        row = jnp.stack([train_d, train_g, val_d, val_d])
+        # One validation forward pass answers for both networks --- see
+        # `_HISTORY_KEYS` --- so it is recorded once.
+        row = jnp.stack([train_d, train_g, val_d])
         jax.debug.callback(
             _log,
             carry.epoch,
@@ -471,7 +481,42 @@ def _run(carry: RunCarry, epoch, still_running, *, fused: bool) -> RunCarry:
     return carry
 
 
-def _unpack_history(history: Float[Array, "epochs 4"]) -> dict[str, list[float]]:
+def _use_compilation_cache() -> None:
+    """Point XLA's persistent cache at :data:`COMPILE_CACHE_DIR`.
+
+    Compilation is the largest single term in a short run. ``benchmarks/boundary.py``
+    on an A100 measures 4.60s of compile against 0.034s per epoch, so a 100-epoch
+    run spends half its wall clock in XLA and only a third of it training. The
+    cache keys on lowered HLO rather than on Python identity --- the fresh
+    ``jax.jit(lambda ...)`` in :func:`_run` hits it regardless --- and it lives on
+    disk, which is where it pays: an ensemble is N separate interpreters
+    compiling the same architecture N times over.
+
+    Two settings, not one. JAX's default ``min_compile_time_secs`` of 1.0s leaves
+    RAN's cache *entirely empty*, because the run compiles a few dozen
+    executables that total 4.6s and no single one of them clears a second. The
+    threshold is what separates a populated cache from a silent no-op.
+
+    Whatever the caller configured wins, so ``JAX_COMPILATION_CACHE_DIR`` --- or a
+    ``jax.config.update`` before :func:`train` --- still overrides this, and an
+    unwritable directory costs a warning from JAX rather than the run.
+
+    The path is resolved before it is handed over. JAX opens the cache once and
+    keeps the string, so the default's leading ``.`` would follow any later
+    ``chdir`` and turn every write into a ``FileNotFoundError`` --- which JAX
+    also reports as a warning rather than an error, so the run would go on
+    quietly recompiling. Resolving pins it to the directory the datasets came
+    from.
+    """
+    if jax.config.jax_compilation_cache_dir is not None:
+        return
+    jax.config.update("jax_compilation_cache_dir", str(COMPILE_CACHE_DIR.resolve()))
+    if "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS" not in os.environ:
+        jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
+    logger.debug("XLA compilation cache: %s", COMPILE_CACHE_DIR.resolve())
+
+
+def _unpack_history(history: Float[Array, "epochs metrics"]) -> dict[str, list[float]]:
     rows: np.ndarray = np.asarray(history)
     return {key: rows[:, i].tolist() for i, key in enumerate(_HISTORY_KEYS)}
 
@@ -491,6 +536,8 @@ def train(
     *,
     fused: bool = True,
 ) -> TrainResult:
+    _use_compilation_cache()
+
     if seed is None:
         # No-argument SeedSequence always fills `entropy` with int drawn from OS.
         seed = cast(typ=int, val=np.random.SeedSequence().entropy) % 2**31
@@ -552,7 +599,10 @@ def train(
     _assign(d.trainable_variables, values=best.d_trainable)
     _assign(d.non_trainable_variables, values=best.d_non_trainable)
 
+    # Held-out, and held out: this runs after `_run` has returned, on the state
+    # already selected by `best_val` on the *validation* split. It is logged and
+    # nothing else --- it reaches neither the returned models nor the history.
     test: float = float(jax.jit(evaluate)(best, data.test))
-    logger.info("Test  D: %.4f  G: %.4f  (init seed %d)", test, test, seed)
+    logger.info("Test: %.4f  (init seed %d)", test, seed)
 
     return TrainResult(g, d, _unpack_history(final.history[:n_run]), seed)

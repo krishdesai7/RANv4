@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch the cubic-response RAN-vs-OmniFold sweep as ONE packed multi-node job.
+# Launch the cubic-response RAN-vs-IBU sweep as ONE packed multi-node job.
 # Run on the login node:  bash scripts/submit_sweep.sh
 # (Do NOT sbatch this file itself; it computes the sweep dir and submits the job.)
 #
@@ -44,23 +44,22 @@ cd "${PROJECT_DIR}"
 # Each point is one srun step pinned to a single GPU. --exact lets multiple steps
 # share the allocation simultaneously (without it the first step grabs whole
 # nodes and the rest block). --gpus-per-task=1 sets CUDA_VISIBLE_DEVICES per step
-# so TensorFlow in each point sees exactly one GPU. ~16 cores / 56G per A100.
+# so JAX in each point sees exactly one GPU -- which matters, because JAX
+# preallocates most of the memory on every device it can see. ~16 cores / 56G per A100.
 step="srun --exact --nodes=1 --ntasks=1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56G"
 
 for i in $(seq 0 $((N_POINTS - 1))); do
-  # RAN (JAX) and OmniFold (TensorFlow) cannot share a process -- one Keras
-  # backend per interpreter -- so each point is two sequential subcommands in
-  # one GPU step. Capture the log so a crash in one point is easy to find and
-  # never sinks the others (collect tolerates missing point files).
+  # Capture the log so a crash in one point is easy to find and
+  # never sinks the others (collect tolerates missing point files). Each point
+  # runs both methods, so a point file is complete or absent, never half.
   $step bash -c "
       uv run ran sweep ran \
-          --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
-      uv run ran sweep omnifold \
           --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
     " > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
 
   # Throttle to GPUS_TOTAL concurrent steps; start the next as soon as one frees
-  # a GPU (dynamic, so an uneven 25-over-16 split wastes no idle GPU time).
+  # a GPU (dynamic, so an uneven N_POINTS-over-GPUS_TOTAL split wastes no idle
+  # GPU time when NODES is lowered below the single-wave setting).
   # `|| true`: a point that crashes must not abort the sweep under set -e — it
   # just leaves its point file missing, and collect tolerates the gap.
   while (( $(jobs -rp | wc -l) >= GPUS_TOTAL )); do
@@ -70,7 +69,7 @@ for i in $(seq 0 $((N_POINTS - 1))); do
 done
 wait || true  # let the final wave of points finish (ignore individual failures)
 
-# Join the per-method point files into results.npz + wasserstein_vs_s.pdf (runs
+# Join the per-point files into results.npz + wasserstein_vs_s.pdf (runs
 # on the head node of the allocation; resilience to gaps is built into collect).
 uv run ran sweep collect --sweep-dir="${SWEEP_DIR}" --n-points="${N_POINTS}"
 EOF

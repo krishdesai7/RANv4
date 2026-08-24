@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
-    from .rantypes import Populations, RANModel, VarInfo
+    from .rantypes import EventArray, Populations, RANModel, VarInfo
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -42,8 +42,8 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 class _PanelSpec(NamedTuple):
     """Everything that varies between the panels of one figure."""
 
-    nature: NDArray[np.double]
-    mc: NDArray[np.double]
+    nature: EventArray
+    mc: EventArray
     bins: NDArray[np.double]
     xlabel: str
     title: str
@@ -61,7 +61,7 @@ class _LevelStyle(NamedTuple):
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
-def _collect_data(dataset: ArrayDataset[np.double]) -> Populations[np.double]:
+def _collect_data(dataset: ArrayDataset) -> Populations:
     """Return the split as the four physics populations, each (n, dim)."""
     return dataset.as_arrays().partition()
 
@@ -69,16 +69,15 @@ def _collect_data(dataset: ArrayDataset[np.double]) -> Populations[np.double]:
 def _hist_ratio_panel(
     ax: Axes,
     ax_r: Axes,
-    x_nature: NDArray[np.double],
-    x_mc: NDArray[np.double],
-    w_ran: NDArray[np.double],
+    x_nature: EventArray,
+    x_mc: EventArray,
+    w_ran: EventArray,
     bins: Sequence[float] | int,
     nature_label: str,
     mc_label: str,
     xlabel: str,
     title: str,
-    w_omnifold: NDArray[np.double] | None = None,
-    w_ibu: NDArray[np.double] | None = None,
+    w_ibu: EventArray | None = None,
 ) -> None:
     h_nature: tuple = ax.hist(
         x_nature,
@@ -138,31 +137,6 @@ def _hist_ratio_panel(
         linestyle="--",
         alpha=0.35,
     )
-
-    if w_omnifold is not None:
-        h_of: tuple = ax.hist(
-            x_mc,
-            bins=h_nature[1],
-            weights=w_omnifold,
-            histtype="step",
-            color="red",
-            linestyle="--",
-            linewidth=4,
-            alpha=0.35,
-            label="OmniFold",
-        )
-        ratio_of: NDArray[np.double] = np.full_like(
-            a=h_of[0], fill_value=np.nan, dtype=np.double
-        )
-        ratio_of[safe] = h_of[0][safe] / h_nature[0][safe]
-        ax_r.plot(
-            centres,
-            ratio_of,
-            color="red",
-            marker="d",
-            linestyle="--",
-            alpha=0.35,
-        )
 
     if w_ibu is not None:
         h_ibu: tuple = ax.hist(
@@ -227,8 +201,8 @@ _PARTICLE = _LevelStyle(
 def _panel_spec(
     i: int,
     dim: int,
-    nature: NDArray[np.double],
-    mc: NDArray[np.double],
+    nature: EventArray,
+    mc: EventArray,
     var_info: list[VarInfo] | None,
     style: _LevelStyle,
 ) -> _PanelSpec:
@@ -245,12 +219,12 @@ def _panel_spec(
             title=f"{cfg['xlabel']} ({style.level} level)",
         )
 
-    nature_i: NDArray[np.double] = nature[:, i]
-    mc_i: NDArray[np.double] = mc[:, i]
-    lo: np.double = (
+    nature_i: EventArray = nature[:, i]
+    mc_i: EventArray = mc[:, i]
+    lo: np.single = (
         min(nature_i.min(), mc_i.min()) if style.bins_span_both else nature_i.min()
     )
-    hi: np.double = (
+    hi: np.single = (
         max(nature_i.max(), mc_i.max()) if style.bins_span_both else nature_i.max()
     )
     return _PanelSpec(
@@ -267,14 +241,13 @@ def _panel_spec(
 
 
 def _plot_level(
-    nature: NDArray[np.double],
-    mc: NDArray[np.double],
-    w: NDArray[np.double],
+    nature: EventArray,
+    mc: EventArray,
+    w: EventArray,
     style: _LevelStyle,
     save_path: str | Path,
     var_info: list[VarInfo] | None,
-    omnifold_weights: NDArray[np.double] | None,
-    ibu_weights: list[NDArray[np.double]] | None,
+    ibu_weights: list[EventArray] | None,
 ) -> None:
     """Draw one stacked hist+ratio panel per dimension and save the figure."""
     dim: int = nature.shape[1]
@@ -301,21 +274,19 @@ def _plot_level(
             mc_label=style.mc_label,
             xlabel=panel.xlabel,
             title=panel.title,
-            w_omnifold=omnifold_weights,
             w_ibu=ibu_weights[i] if ibu_weights is not None else None,
         )
     _save_fig(figure, save_path=Path(save_path))
 
 
 def plot_detector_level(
-    test_dataset: ArrayDataset[np.double],
+    test_dataset: ArrayDataset,
     g: RANModel,
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: NDArray[np.double] | None = None,
-    ibu_weights: list[NDArray[np.double]] | None = None,
+    ibu_weights: list[EventArray] | None = None,
 ) -> None:
-    test: Populations[np.double] = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.data,
@@ -324,20 +295,18 @@ def plot_detector_level(
         style=_DETECTOR,
         save_path=save_path,
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
 
 
 def plot_particle_level(
-    test_dataset: ArrayDataset[np.double],
+    test_dataset: ArrayDataset,
     g: RANModel,
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    omnifold_weights: NDArray[np.double] | None = None,
-    ibu_weights: list[NDArray[np.double]] | None = None,
+    ibu_weights: list[EventArray] | None = None,
 ) -> None:
-    test: Populations[np.double] = _collect_data(test_dataset)
+    test: Populations = _collect_data(test_dataset)
 
     _plot_level(
         nature=test.require_truth(),
@@ -346,7 +315,6 @@ def plot_particle_level(
         style=_PARTICLE,
         save_path=save_path,
         var_info=var_info,
-        omnifold_weights=omnifold_weights,
         ibu_weights=ibu_weights,
     )
 
@@ -366,11 +334,13 @@ def plot_losses(
     )
     val_d: NDArray[np.double] = np.array(object=history["val_d"], dtype=np.double)
     train_g: NDArray[np.double] = np.array(object=history["train_g"], dtype=np.double)
-    val_g: NDArray[np.double] = np.array(object=history["val_g"], dtype=np.double)
     ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
-    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
-    ax.plot(epochs, val_g, label="Val G", color="C1", ls="--", lw=3, alpha=0.5)
+    # One validation curve, because there is one validation number: `eval_step`
+    # scores both networks with a single weighted BCE, so a "Val G" line would
+    # be this one drawn twice. Older runs carry a `val_g` key holding exactly
+    # that copy --- it is deliberately not read.
+    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
     ax.axhline(
         y=np.log(2),
         color="gray",

@@ -167,18 +167,9 @@ This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences
 
 ### Baseline Comparisons
 
-Run [OmniFold](https://github.com/ViniciusMikuni/omnifold) or IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
+Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
 
 ```bash
-# OmniFold — single run
-ran baseline omnifold --run-dir runs/2026-03-14T061023Z
-
-# OmniFold — all runs
-ran baseline omnifold
-
-# Customize OmniFold iterations/epochs
-ran baseline omnifold --run-dir runs/2026-03-14T061023Z --niter 5 --epochs 100
-
 # IBU — single run
 ran baseline ibu --run-dir runs/2026-03-14T061023Z
 
@@ -186,16 +177,19 @@ ran baseline ibu --run-dir runs/2026-03-14T061023Z
 ran baseline ibu
 ```
 
-Results are saved to `metrics_omnifold.json` / `metrics_ibu.json` in each run directory using the same metric format as RAN.
+Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
 
 ### Cubic-Response Sweep
 
-Run each step as its own process so RAN's JAX backend and OmniFold's TensorFlow backend never share an interpreter:
+Sweeps the strength $s$ of a cubic detector response $r(s, z) = z + s z^3$ and
+records how well each method unfolds it. Each point trains RAN and unfolds the
+same populations with IBU in one pass, writing both into `point_NN.json`;
+`collect` joins them into `results.npz` and `wasserstein_vs_s.pdf`.
 
 ```bash
 ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
-ran sweep omnifold --s-index 0 --sweep-dir runs/cubic-sweep
 ran sweep collect --sweep-dir runs/cubic-sweep
+bash scripts/submit_sweep.sh   # every point at once on SLURM
 ```
 
 ### Leakage Verification
@@ -218,10 +212,17 @@ bit-identical between the clean and poisoned arms.
 
 ## Backend
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=1`. **Any `ran.*` import must come before `import keras`.** The backend is fixed at the
-first keras import. `src/ran/train.py` raises a clear error if the backend has been incorrectly initialized.
+JAX is the only backend in the build; TensorFlow is not a dependency, direct or transitive.
 
-The project is run in float64 precision end to end. Improved GPU throughput can be achieved by reducing precision to float32 by setting `JAX_ENABLE_X64=0` and switching the`dtype=`arguments in`src/ran/models.py`.
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
+
+### Precision
+
+The project runs in float32 end to end. The pin is a single constant, `EVENT_DTYPE` in `src/ran/rantypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/ran/models.py` follow from it.
+
+This is a measured choice, not a default. Every jet observable is float32-clean — `mass` and `mult` survive a float32 round trip bit-exactly, and the other four lose exactly half a ULP, the least a cast can cost. Across 20 paired seeds, float32 and float64 agree on unfolding improvement to within ±0.5 percentage points (equivalence test p=0.015), while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
+
+Two boundaries stay float64 deliberately: the metrics (Wasserstein, JS, triangular discriminator) come back from scipy in float64 and are not narrowed — what is pinned is the data, not the measurement of it — and `ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
 
 `src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
@@ -229,20 +230,14 @@ The project is run in float64 precision end to end. Improved GPU throughput can 
 - Updates are applied through `stateless_call`/`stateless_apply`
 - Each step is a single jitted function.
 - Values are written back into the Keras models at the end, so the returned objects are ordinary saveable `keras.Model`s.
-- Loss math is written in backend-agnostic `keras.ops`.
-- Only the gradient transform and `jit` are native JAX.
+- Loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace; `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX, so backend-agnostic `keras.ops` bought nothing this module could still use.
 
-It is important to flag two potentially unexpected behaviours that may lead to bugs:
+One unexpected behaviour is worth flagging, because it is the reason the reduction is written the way it is:
 
 - **`keras.ops.mean` is not float64-safe.**
   - For float64 input, it selects a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error.
-  - This is why RAN's `src/ran/train.py` reduces with `ops.sum(...) / n` instead of `ops.mean(...)`;
-  - `tests/test_train.py` guards this behaviour.
-  - `ops.sum` is unaffected.
-- **`omnifold` cannot run on JAX.**
-  - Its `weighted_binary_crossentropy` calls raw `tf.gather`, which raises `TracerArrayConversionError` under JAX tracing.
-  - Therefore, `src/ran/baselines/omnifold.py` pins `KERAS_BACKEND=tensorflow` at import and must be the entry point of its own process.
-  - This is why RAN does not allow `omnifold` to be imported from a module that has already touched JAX, and why the cubic sweep splits into separate `sweep ran` / `sweep omnifold` subcommands.
+  - `src/ran/train.py` no longer touches `keras.ops`, but it still reduces with `jnp.sum(...) / n` rather than a mean, and `tests/test_train.py` guards the accuracy either way.
+  - Anything that reaches for `keras.ops` again needs to know. `ops.sum` is unaffected.
 
 ## Seeding
 
@@ -286,13 +281,13 @@ RANv4/
 │   │   ├── config.py             YAML config parsing, sigma promotion
 │   │   ├── datasets.py           DatasetSplits, RANDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
+│   │   ├── device.py             Device-resident training form (TrainSplit/EvalSplit)
 │   │   └── download.py           One-time Zenodo data download
 │   ├── baselines/
-│   │   ├── _shared.py            Run config and populations shared by both (keras-free)
-│   │   ├── omnifold.py           OmniFold comparison baseline (pins TensorFlow)
+│   │   ├── _shared.py            Run config and populations a baseline needs, minus the unfolder
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
 │   ├── experiments/
-│   │   └── cubic_sweep.py        Cubic-response RAN-vs-OmniFold sweep
+│   │   └── cubic_sweep.py        Cubic-response RAN-vs-IBU sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -313,8 +308,8 @@ RANv4/
 └── .cache/                       Cached datasets
 ```
 
-`src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with
-module-level detail.
+`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
+`src/ran/experiments/` carry their own `README.md` with module-level detail.
 
 ## Datasets
 
@@ -348,7 +343,6 @@ Each run produces a timestamped directory under `runs/` containing:
 - **`particle_level.pdf`** -- Same comparison at particle level
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
-- **`metrics_omnifold.json`** -- Same metrics from OmniFold baseline (if run)
 - **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
 
 ## Training Hyperparameters
@@ -393,4 +387,3 @@ cognitive complexity of 10.
 - [`Matplotlib`](https://matplotlib.org/) >= 3.11.1
 - [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
 - [`PyYAML`](https://pyyaml.org/) >= 6.0.3
-- [`OmniFold`](https://github.com/ViniciusMikuni/omnifold) >= 0.1.36

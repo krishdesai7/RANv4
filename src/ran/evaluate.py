@@ -27,7 +27,14 @@ if TYPE_CHECKING:
     from jax import Array as JaxArray
     from numpy.typing import NDArray
 
-    from .rantypes import ZXY, DatasetSplits, GaussianConfig, Populations, RANModel
+    from .rantypes import (
+        ZXY,
+        DatasetSplits,
+        EventArray,
+        GaussianConfig,
+        Populations,
+        RANModel,
+    )
 
 
 logger: Logger = logging.getLogger(name=__name__)
@@ -54,7 +61,7 @@ def apply_to_runs(
             log.warning("%s: failed", d.name, exc_info=True)
 
 
-def _load_splits(config: dict, dtype=np.double) -> DatasetSplits[np.double]:
+def _load_splits(config: dict) -> DatasetSplits:
     dataset: DatasetName = DatasetName(
         value=config.get("dataset", DatasetName.gaussian.value)
     )
@@ -82,7 +89,7 @@ def _load_splits(config: dict, dtype=np.double) -> DatasetSplits[np.double]:
                 },
                 dim,
             )
-        return RANDataset(batch_size, data_seed, dtype=dtype).generate_gaussian_dataset(
+        return RANDataset(batch_size, data_seed).generate_gaussian_dataset(
             params=params,
             n_samples=n_samples,
         )
@@ -90,21 +97,22 @@ def _load_splits(config: dict, dtype=np.double) -> DatasetSplits[np.double]:
         splits, _, _ = load_jet_dataset(
             n_samples,
             batch_size,
-            variables=frozenset(config["variables"]),
+            # The recorded list, in the recorded order. Round-tripping it
+            # through a set here is what mismatched these columns against the
+            # `var_names` below --- and against the generator's own training.
+            variables=config["variables"],
             seed=data_seed,
         )
         return splits
     raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
-def _collect_test_data[T: np.floating = np.double](test_ds: ArrayDataset[T]) -> ZXY[T]:
+def _collect_test_data(test_ds: ArrayDataset) -> ZXY:
     """Return the test split as one flat labelled sample."""
     return test_ds.as_arrays()
 
 
-def _get_weights(
-    g: RANModel, z_gen: NDArray, chunk_size: int = 10_000
-) -> NDArray[np.double]:
+def _get_weights(g: RANModel, z_gen: NDArray, chunk_size: int = 10_000) -> EventArray:
     """Compute normalized generator weights, mean 1, as host NumPy.
 
     Chunked because it is the intermediate activations, not the output, that set
@@ -119,48 +127,48 @@ def _get_weights(
         for start in range(0, n, chunk_size)
     ]
     raw: JaxArray = jnp.concatenate(chunks)
-    return np.asarray(a=raw / (jnp.sum(raw) / n), dtype=np.double)
+    return np.asarray(a=raw / (jnp.sum(raw) / n))
 
 
 def _dim(x: NDArray, /) -> int:
     return x.shape[1] if x.ndim > 1 else 1
 
 
-def _wd_per_dim[T: np.floating = np.double](
-    ref: NDArray[T],
-    comp: NDArray[T],
-    weights: NDArray[T] | None = None,
+def _wd_per_dim(
+    ref: EventArray,
+    comp: EventArray,
+    weights: EventArray | None = None,
 ) -> NDArray[np.double]:
     """1D Wasserstein distance per dimension using sorted-CDF fast path."""
     dim: int = _dim(ref)
-    result: NDArray[np.double] = np.empty(shape=dim, dtype=np.double)
+    result: NDArray[np.double] = np.empty(shape=dim)
     if dim > 1:
         for i in range(dim):
-            r: NDArray[T] = ref[:, i]
-            c: NDArray[T] = comp[:, i]
+            r: EventArray = ref[:, i]
+            c: EventArray = comp[:, i]
             result[i] = wasserstein_distance(r, c, v_weights=weights)
     else:
         result[0] = wasserstein_distance(ref.ravel(), comp.ravel(), v_weights=weights)
     return result
 
 
-def _normalized_histograms[T: np.floating = np.double](
-    ref: NDArray[T],
-    comp: NDArray[T],
-    weights: NDArray[T] | None = None,
+def _normalized_histograms(
+    ref: EventArray,
+    comp: EventArray,
+    weights: EventArray | None = None,
     n_bins: int = 100,
 ) -> Iterator[tuple[NDArray[np.double], NDArray[np.double]]]:
     # A flat 1D sample is one feature, not `dim` scalar features, so it is
     # treated as a single column -- but only when both sides agree on that;
     # a 1D/2D mismatch stays an error rather than silently reshaping one side.
-    ref_2d: NDArray[T] = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
-    comp_2d: NDArray[T] = (
+    ref_2d: EventArray = ref.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else ref
+    comp_2d: EventArray = (
         comp.reshape(-1, 1) if ref.ndim == 1 and comp.ndim == 1 else comp
     )
     dim: int = _dim(ref_2d)
     for i in range(dim):
-        r: NDArray[T] = ref_2d[:, i]
-        c: NDArray[T] = comp_2d[:, i]
+        r: EventArray = ref_2d[:, i]
+        c: EventArray = comp_2d[:, i]
 
         bins: NDArray[np.double] = np.linspace(
             start=min(r.min(), c.min()), stop=max(r.max(), c.max()), num=n_bins + 1
@@ -168,14 +176,16 @@ def _normalized_histograms[T: np.floating = np.double](
         # weights=None is np.histogram's own default, so the unweighted and
         # weighted cases need no branch here.
         h_ref: NDArray[np.intp] = np.histogram(a=r, bins=bins)[0]
-        h_comp: NDArray[np.intp | T] = np.histogram(a=c, bins=bins, weights=weights)[0]
+        h_comp: NDArray[np.intp | np.single] = np.histogram(
+            a=c, bins=bins, weights=weights
+        )[0]
         yield h_ref / (h_ref.sum() or 1.0), np.divide(h_comp, h_comp.sum() or 1.0)
 
 
-def _js_per_dim[T: np.floating = np.double](
-    ref: NDArray[T],
-    comp: NDArray[T],
-    weights: NDArray[T] | None = None,
+def _js_per_dim(
+    ref: EventArray,
+    comp: EventArray,
+    weights: EventArray | None = None,
     n_bins: int = 100,
 ) -> NDArray[np.double]:
     return np.array(
@@ -186,10 +196,10 @@ def _js_per_dim[T: np.floating = np.double](
     )
 
 
-def _triangular_per_dim[T: np.floating = np.double](
-    ref: NDArray[T],
-    comp: NDArray[T],
-    weights: NDArray[T] | None = None,
+def _triangular_per_dim(
+    ref: EventArray,
+    comp: EventArray,
+    weights: EventArray | None = None,
     n_bins: int = 100,
 ) -> NDArray[np.double]:
     """Triangular discriminator (Vincze-LeCam divergence) per dimension.
@@ -200,7 +210,7 @@ def _triangular_per_dim[T: np.floating = np.double](
     cancels analytically, so this works directly on normalized histograms.
     """
     dim: int = _dim(ref)
-    result: NDArray[np.double] = np.empty(shape=dim, dtype=np.double)
+    result: NDArray[np.double] = np.empty(shape=dim)
     for i, (p, q) in enumerate(_normalized_histograms(ref, comp, weights, n_bins)):
         denom: NDArray[np.double] = p + q
         mask: NDArray[np.bool] = denom > 0
@@ -222,9 +232,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
         return json.loads(out_path.read_text())
 
     # Imported here, not at module scope, so this module stays keras-free on
-    # import. ran.baselines.omnifold depends on that: it must pin
-    # KERAS_BACKEND=tensorflow before anything pulls keras in, and it imports
-    # from this module.
+    # import.
     import keras
 
     config = json.loads((run_dir / "config.json").read_text())

@@ -41,11 +41,11 @@ def build_generator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
 ) -> RANModel:
     """g(z): nominal-level events -> per-event weights."""
-    inputs = _keras_input(shape=(dim,), dtype="float64")
+    inputs = _keras_input(shape=(dim,), dtype="float32")
     x = inputs
     for _ in range(n_layers):
-        x = _keras_dense(hidden_units, activation="relu", dtype="float64")(x)
-    x = _keras_dense(1, activation="softplus", dtype="float64")(x)
+        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(x)
+    x = _keras_dense(1, activation="softplus", dtype="float32")(x)
     return _keras_model(inputs, x, name="generator")
 
 
@@ -53,9 +53,9 @@ def build_discriminator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
 ) -> RANModel:
     """d(x): reco-level events -> data vs MC probability."""
-    inputs = _keras_input(shape=(dim,), dtype="float64")
+    inputs = _keras_input(shape=(dim,), dtype="float32")
     x = inputs
     for _ in range(n_layers):
-        x = _keras_dense(hidden_units, activation="relu", dtype="float64")(x)
-    x = _keras_dense(1, activation="sigmoid", dtype="float64")(x)
+        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(x)
+    x = _keras_dense(1, activation="sigmoid", dtype="float32")(x)
     return _keras_model(inputs, x, name="discriminator")

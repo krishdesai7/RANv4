@@ -6,7 +6,7 @@ default:
     @printf '  %-26s %s\n' '      validate'     '# Run all local, read-only validation.'
     @printf '  %-26s %s\n' '        format *args' '# Check formatting without modifying files.'
     @printf '  %-26s %s\n' '        lint'        '# Run Ruff lint checks.'
-    @printf '  %-26s %s\n' '        type-check'  '# Run Pyrefly type checks.'
+    @printf '  %-26s %s\n' '        typecheck'  '# Run Pyrefly type checks.'
     @printf '  %-26s %s\n' '        complexity'   '# Run complexity checks.'
     @printf '  %-26s %s\n' '        test *args'  '# Run tests, optionally forwarding arguments to pytest.'
     @printf '  %-26s %s\n' '      audit'        '# Audit locked dependencies for known vulnerabilities.'
@@ -48,7 +48,7 @@ validate:
     uv sync --locked
     just format
     just lint
-    just type-check
+    just typecheck
     just complexity
     just test
 

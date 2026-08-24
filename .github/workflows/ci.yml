@@ -31,8 +31,9 @@ jobs:
         run: uv format --check --diff
 
       - name: Type check
-        run: uv run --locked pyrefly check --min-severity info
-             uv check --locked
+        run: |
+         uv run --locked pyrefly check --min-severity info
+         uv check --locked
 
       - name: Complexity check
         run: uv run --locked complexipy --suggest-refactors

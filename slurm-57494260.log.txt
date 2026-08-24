@@ -1,0 +1,394 @@
+RAN_CACHE_DIR = <unset: using ./.cache>
+[08/23/26 18:22:21] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/23/26 18:22:33] INFO     Epoch   1/100  D: 0.6911  G: 0.6908  | Val: 0.6925 
+                             (patience 0/100)                                   
+                    INFO     Epoch   2/100  D: 0.6927  G: 0.6924  | Val: 0.6928 
+                             (patience 0/100)                                   
+                    INFO     Epoch   3/100  D: 0.6926  G: 0.6924  | Val: 0.6925 
+                             (patience 1/100)                                   
+                    INFO     Epoch   4/100  D: 0.6926  G: 0.6924  | Val: 0.6926 
+                             (patience 2/100)                                   
+[08/23/26 18:22:34] INFO     Epoch   5/100  D: 0.6926  G: 0.6922  | Val: 0.6926 
+                             (patience 3/100)                                   
+                    INFO     Epoch   6/100  D: 0.6927  G: 0.6925  | Val: 0.6925 
+                             (patience 4/100)                                   
+                    INFO     Epoch   7/100  D: 0.6926  G: 0.6924  | Val: 0.6927 
+                             (patience 5/100)                                   
+                    INFO     Epoch   8/100  D: 0.6926  G: 0.6924  | Val: 0.6925 
+                             (patience 6/100)                                   
+                    INFO     Epoch   9/100  D: 0.6925  G: 0.6922  | Val: 0.6926 
+                             (patience 7/100)                                   
+                    INFO     Epoch  10/100  D: 0.6926  G: 0.6924  | Val: 0.6928 
+                             (patience 8/100)                                   
+[08/23/26 18:22:35] INFO     Epoch  11/100  D: 0.6925  G: 0.6923  | Val: 0.6927 
+                             (patience 9/100)                                   
+                    INFO     Epoch  12/100  D: 0.6927  G: 0.6925  | Val: 0.6926 
+                             (patience 10/100)                                  
+                    INFO     Epoch  13/100  D: 0.6926  G: 0.6924  | Val: 0.6926 
+                             (patience 11/100)                                  
+                    INFO     Epoch  14/100  D: 0.6925  G: 0.6923  | Val: 0.6926 
+                             (patience 12/100)                                  
+                    INFO     Epoch  15/100  D: 0.6926  G: 0.6923  | Val: 0.6928 
+                             (patience 13/100)                                  
+[08/23/26 18:22:36] INFO     Epoch  16/100  D: 0.6925  G: 0.6923  | Val: 0.6926 
+                             (patience 14/100)                                  
+                    INFO     Epoch  17/100  D: 0.6926  G: 0.6924  | Val: 0.6926 
+                             (patience 15/100)                                  
+                    INFO     Epoch  18/100  D: 0.6926  G: 0.6924  | Val: 0.6928 
+                             (patience 16/100)                                  
+                    INFO     Epoch  19/100  D: 0.6926  G: 0.6924  | Val: 0.6916 
+                             (patience 17/100)                                  
+                    INFO     Epoch  20/100  D: 0.6926  G: 0.6923  | Val: 0.6929 
+                             (patience 0/100)                                   
+[08/23/26 18:22:37] INFO     Epoch  21/100  D: 0.6926  G: 0.6923  | Val: 0.6929 
+                             (patience 1/100)                                   
+                    INFO     Epoch  22/100  D: 0.6926  G: 0.6924  | Val: 0.6929 
+                             (patience 2/100)                                   
+                    INFO     Epoch  23/100  D: 0.6925  G: 0.6924  | Val: 0.6930 
+                             (patience 3/100)                                   
+                    INFO     Epoch  24/100  D: 0.6925  G: 0.6924  | Val: 0.6931 
+                             (patience 0/100)                                   
+                    INFO     Epoch  25/100  D: 0.6926  G: 0.6923  | Val: 0.6926 
+                             (patience 1/100)                                   
+                    INFO     Epoch  26/100  D: 0.6926  G: 0.6924  | Val: 0.6929 
+                             (patience 2/100)                                   
+[08/23/26 18:22:38] INFO     Epoch  27/100  D: 0.6926  G: 0.6924  | Val: 0.6925 
+                             (patience 3/100)                                   
+                    INFO     Epoch  28/100  D: 0.6925  G: 0.6923  | Val: 0.6929 
+                             (patience 4/100)                                   
+                    INFO     Epoch  29/100  D: 0.6926  G: 0.6924  | Val: 0.6929 
+                             (patience 5/100)                                   
+                    INFO     Epoch  30/100  D: 0.6926  G: 0.6923  | Val: 0.6929 
+                             (patience 6/100)                                   
+                    INFO     Epoch  31/100  D: 0.6925  G: 0.6923  | Val: 0.6928 
+                             (patience 7/100)                                   
+[08/23/26 18:22:39] INFO     Epoch  32/100  D: 0.6926  G: 0.6924  | Val: 0.6930 
+                             (patience 8/100)                                   
+                    INFO     Epoch  33/100  D: 0.6926  G: 0.6924  | Val: 0.6928 
+                             (patience 9/100)                                   
+                    INFO     Epoch  34/100  D: 0.6925  G: 0.6923  | Val: 0.6926 
+                             (patience 10/100)                                  
+                    INFO     Epoch  35/100  D: 0.6926  G: 0.6924  | Val: 0.6927 
+                             (patience 11/100)                                  
+                    INFO     Epoch  36/100  D: 0.6925  G: 0.6922  | Val: 0.6928 
+                             (patience 12/100)                                  
+                    INFO     Epoch  37/100  D: 0.6925  G: 0.6923  | Val: 0.6928 
+                             (patience 13/100)                                  
+[08/23/26 18:22:40] INFO     Epoch  38/100  D: 0.6925  G: 0.6922  | Val: 0.6930 
+                             (patience 14/100)                                  
+                    INFO     Epoch  39/100  D: 0.6925  G: 0.6922  | Val: 0.6930 
+                             (patience 15/100)                                  
+                    INFO     Epoch  40/100  D: 0.6925  G: 0.6923  | Val: 0.6927 
+                             (patience 16/100)                                  
+                    INFO     Epoch  41/100  D: 0.6925  G: 0.6923  | Val: 0.6928 
+                             (patience 17/100)                                  
+                    INFO     Epoch  42/100  D: 0.6924  G: 0.6921  | Val: 0.6929 
+                             (patience 18/100)                                  
+[08/23/26 18:22:41] INFO     Epoch  43/100  D: 0.6925  G: 0.6922  | Val: 0.6933 
+                             (patience 0/100)                                   
+                    INFO     Epoch  44/100  D: 0.6925  G: 0.6922  | Val: 0.6931 
+                             (patience 1/100)                                   
+                    INFO     Epoch  45/100  D: 0.6924  G: 0.6922  | Val: 0.6928 
+                             (patience 2/100)                                   
+                    INFO     Epoch  46/100  D: 0.6925  G: 0.6922  | Val: 0.6927 
+                             (patience 3/100)                                   
+                    INFO     Epoch  47/100  D: 0.6924  G: 0.6923  | Val: 0.6926 
+                             (patience 4/100)                                   
+                    INFO     Epoch  48/100  D: 0.6925  G: 0.6923  | Val: 0.6929 
+                             (patience 5/100)                                   
+[08/23/26 18:22:42] INFO     Epoch  49/100  D: 0.6925  G: 0.6923  | Val: 0.6931 
+                             (patience 6/100)                                   
+                    INFO     Epoch  50/100  D: 0.6924  G: 0.6922  | Val: 0.6930 
+                             (patience 7/100)                                   
+                    INFO     Epoch  51/100  D: 0.6925  G: 0.6922  | Val: 0.6931 
+                             (patience 8/100)                                   
+                    INFO     Epoch  52/100  D: 0.6924  G: 0.6922  | Val: 0.6931 
+                             (patience 9/100)                                   
+                    INFO     Epoch  53/100  D: 0.6924  G: 0.6920  | Val: 0.6933 
+                             (patience 10/100)                                  
+[08/23/26 18:22:43] INFO     Epoch  54/100  D: 0.6924  G: 0.6921  | Val: 0.6930 
+                             (patience 11/100)                                  
+                    INFO     Epoch  55/100  D: 0.6924  G: 0.6921  | Val: 0.6929 
+                             (patience 12/100)                                  
+                    INFO     Epoch  56/100  D: 0.6924  G: 0.6922  | Val: 0.6930 
+                             (patience 13/100)                                  
+                    INFO     Epoch  57/100  D: 0.6923  G: 0.6920  | Val: 0.6933 
+                             (patience 14/100)                                  
+                    INFO     Epoch  58/100  D: 0.6923  G: 0.6920  | Val: 0.6931 
+                             (patience 15/100)                                  
+[08/23/26 18:22:44] INFO     Epoch  59/100  D: 0.6924  G: 0.6920  | Val: 0.6930 
+                             (patience 16/100)                                  
+                    INFO     Epoch  60/100  D: 0.6923  G: 0.6920  | Val: 0.6929 
+                             (patience 17/100)                                  
+                    INFO     Epoch  61/100  D: 0.6923  G: 0.6920  | Val: 0.6929 
+                             (patience 18/100)                                  
+                    INFO     Epoch  62/100  D: 0.6923  G: 0.6919  | Val: 0.6934 
+                             (patience 0/100)                                   
+                    INFO     Epoch  63/100  D: 0.6923  G: 0.6919  | Val: 0.6931 
+                             (patience 1/100)                                   
+                    INFO     Epoch  64/100  D: 0.6923  G: 0.6920  | Val: 0.6930 
+                             (patience 2/100)                                   
+[08/23/26 18:22:45] INFO     Epoch  65/100  D: 0.6923  G: 0.6921  | Val: 0.6930 
+                             (patience 3/100)                                   
+                    INFO     Epoch  66/100  D: 0.6923  G: 0.6920  | Val: 0.6932 
+                             (patience 4/100)                                   
+                    INFO     Epoch  67/100  D: 0.6922  G: 0.6919  | Val: 0.6934 
+                             (patience 5/100)                                   
+                    INFO     Epoch  68/100  D: 0.6922  G: 0.6919  | Val: 0.6932 
+                             (patience 6/100)                                   
+                    INFO     Epoch  69/100  D: 0.6923  G: 0.6919  | Val: 0.6931 
+                             (patience 7/100)                                   
+[08/23/26 18:22:46] INFO     Epoch  70/100  D: 0.6922  G: 0.6919  | Val: 0.6927 
+                             (patience 8/100)                                   
+                    INFO     Epoch  71/100  D: 0.6921  G: 0.6918  | Val: 0.6932 
+                             (patience 9/100)                                   
+                    INFO     Epoch  72/100  D: 0.6922  G: 0.6918  | Val: 0.6931 
+                             (patience 10/100)                                  
+                    INFO     Epoch  73/100  D: 0.6922  G: 0.6918  | Val: 0.6932 
+                             (patience 11/100)                                  
+                    INFO     Epoch  74/100  D: 0.6921  G: 0.6918  | Val: 0.6929 
+                             (patience 12/100)                                  
+                    INFO     Epoch  75/100  D: 0.6920  G: 0.6917  | Val: 0.6931 
+                             (patience 13/100)                                  
+[08/23/26 18:22:47] INFO     Epoch  76/100  D: 0.6922  G: 0.6919  | Val: 0.6933 
+                             (patience 14/100)                                  
+                    INFO     Epoch  77/100  D: 0.6921  G: 0.6917  | Val: 0.6934 
+                             (patience 15/100)                                  
+                    INFO     Epoch  78/100  D: 0.6921  G: 0.6917  | Val: 0.6932 
+                             (patience 16/100)                                  
+                    INFO     Epoch  79/100  D: 0.6921  G: 0.6917  | Val: 0.6931 
+                             (patience 17/100)                                  
+                    INFO     Epoch  80/100  D: 0.6921  G: 0.6917  | Val: 0.6933 
+                             (patience 18/100)                                  
+[08/23/26 18:22:48] INFO     Epoch  81/100  D: 0.6921  G: 0.6917  | Val: 0.6933 
+                             (patience 19/100)                                  
+                    INFO     Epoch  82/100  D: 0.6921  G: 0.6916  | Val: 0.6929 
+                             (patience 20/100)                                  
+                    INFO     Epoch  83/100  D: 0.6920  G: 0.6916  | Val: 0.6932 
+                             (patience 21/100)                                  
+                    INFO     Epoch  84/100  D: 0.6920  G: 0.6916  | Val: 0.6931 
+                             (patience 22/100)                                  
+                    INFO     Epoch  85/100  D: 0.6920  G: 0.6916  | Val: 0.6933 
+                             (patience 23/100)                                  
+[08/23/26 18:22:49] INFO     Epoch  86/100  D: 0.6920  G: 0.6917  | Val: 0.6934 
+                             (patience 24/100)                                  
+                    INFO     Epoch  87/100  D: 0.6920  G: 0.6916  | Val: 0.6933 
+                             (patience 25/100)                                  
+                    INFO     Epoch  88/100  D: 0.6920  G: 0.6916  | Val: 0.6928 
+                             (patience 26/100)                                  
+                    INFO     Epoch  89/100  D: 0.6919  G: 0.6915  | Val: 0.6933 
+                             (patience 27/100)                                  
+                    INFO     Epoch  90/100  D: 0.6920  G: 0.6916  | Val: 0.6934 
+                             (patience 28/100)                                  
+                    INFO     Epoch  91/100  D: 0.6920  G: 0.6915  | Val: 0.6935 
+                             (patience 29/100)                                  
+[08/23/26 18:22:50] INFO     Epoch  92/100  D: 0.6919  G: 0.6915  | Val: 0.6935 
+                             (patience 30/100)                                  
+                    INFO     Epoch  93/100  D: 0.6919  G: 0.6914  | Val: 0.6934 
+                             (patience 31/100)                                  
+                    INFO     Epoch  94/100  D: 0.6919  G: 0.6913  | Val: 0.6932 
+                             (patience 32/100)                                  
+                    INFO     Epoch  95/100  D: 0.6919  G: 0.6916  | Val: 0.6933 
+                             (patience 33/100)                                  
+                    INFO     Epoch  96/100  D: 0.6919  G: 0.6915  | Val: 0.6934 
+                             (patience 34/100)                                  
+[08/23/26 18:22:51] INFO     Epoch  97/100  D: 0.6919  G: 0.6913  | Val: 0.6935 
+                             (patience 0/100)                                   
+                    INFO     Epoch  98/100  D: 0.6918  G: 0.6913  | Val: 0.6935 
+                             (patience 1/100)                                   
+                    INFO     Epoch  99/100  D: 0.6919  G: 0.6914  | Val: 0.6934 
+                             (patience 2/100)                                   
+                    INFO     Epoch 100/100  D: 0.6918  G: 0.6913  | Val: 0.6934 
+                             (patience 3/100)                                   
+[08/23/26 18:22:52] INFO     Test: 0.6936  (init seed 742535234)                
+                    INFO     Saved run to runs/2026-08-24T012252Z               
+[08/23/26 18:22:57] INFO     Saved runs/2026-08-24T012252Z/detector_level.pdf   
+[08/23/26 18:22:58] INFO     Saved runs/2026-08-24T012252Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-24T012252Z/losses.pdf           
+                    INFO     2026-08-24T012252Z: loading model and data...      
+                    INFO     Loading dataset: jets                              
+[08/23/26 18:23:04] INFO     2026-08-24T012252Z: saved metrics to               
+                             runs/2026-08-24T012252Z/metrics.json               
+              2026-08-24T012252Z — Detector level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.2695 │   0.0049 │      +98.2% │
+│          │ JS div       │ 0.009464 │ 0.000221 │      +97.7% │
+│          │ Delta (x1e3) │  37.5934 │   0.8771 │      +97.7% │
+│ M        │ Wasserstein  │   0.2256 │   0.0049 │      +97.8% │
+│          │ JS div       │ 0.009805 │ 0.000241 │      +97.5% │
+│          │ Delta (x1e3) │  38.8742 │   0.9024 │      +97.7% │
+│ tau21    │ Wasserstein  │   0.1217 │   0.0059 │      +95.1% │
+│          │ JS div       │ 0.003437 │ 0.000133 │      +96.1% │
+│          │ Delta (x1e3) │  13.6934 │   0.5272 │      +96.1% │
+│ sdm      │ Wasserstein  │   0.2284 │   0.0099 │      +95.7% │
+│          │ JS div       │ 0.008530 │ 0.000118 │      +98.6% │
+│          │ Delta (x1e3) │  33.9104 │   0.4596 │      +98.6% │
+│ m        │ Wasserstein  │   0.2118 │   0.0047 │      +97.8% │
+│          │ JS div       │ 0.006883 │ 0.000120 │      +98.3% │
+│          │ Delta (x1e3) │  27.3743 │   0.4231 │      +98.5% │
+│ zg       │ Wasserstein  │   0.0591 │   0.0091 │      +84.5% │
+│          │ JS div       │ 0.000660 │ 0.000126 │      +80.9% │
+│          │ Delta (x1e3) │   2.6325 │   0.5028 │      +80.9% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+              2026-08-24T012252Z — Particle level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.2885 │   0.0113 │      +96.1% │
+│          │ JS div       │ 0.011709 │ 0.000296 │      +97.5% │
+│          │ Delta (x1e3) │  46.4980 │   1.1568 │      +97.5% │
+│ M        │ Wasserstein  │   0.2593 │   0.0533 │      +79.4% │
+│          │ JS div       │ 0.007968 │ 0.000756 │      +90.5% │
+│          │ Delta (x1e3) │  31.6024 │   2.9755 │      +90.6% │
+│ tau21    │ Wasserstein  │   0.2635 │   0.0584 │      +77.8% │
+│          │ JS div       │ 0.010838 │ 0.000868 │      +92.0% │
+│          │ Delta (x1e3) │  43.0646 │   3.4457 │      +92.0% │
+│ sdm      │ Wasserstein  │   0.2564 │   0.0413 │      +83.9% │
+│          │ JS div       │ 0.010263 │ 0.000808 │      +92.1% │
+│          │ Delta (x1e3) │  40.7796 │   2.9152 │      +92.9% │
+│ m        │ Wasserstein  │   0.1169 │   0.0928 │      +20.6% │
+│          │ JS div       │ 0.002137 │ 0.001411 │      +34.0% │
+│          │ Delta (x1e3) │   8.4902 │   5.5915 │      +34.1% │
+│ zg       │ Wasserstein  │   0.1103 │   0.0115 │      +89.6% │
+│          │ JS div       │ 0.001999 │ 0.000165 │      +91.8% │
+│          │ Delta (x1e3) │   7.9099 │   0.6580 │      +91.7% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+Run dir: runs/2026-08-24T012252Z
+[08/23/26 18:23:13] INFO     2026-08-24T012252Z: running IBU (niter=10,         
+                             purity=0.7071)...                                  
+                    INFO     Loading dataset: jets                              
+[08/23/26 18:23:17] WARNING  w: only 1 bin(s), skipping                         
+[08/23/26 18:23:18] INFO     M: 3 bins, 10 iterations                           
+[08/23/26 18:23:19] INFO     tau21: 3 bins, 10 iterations                       
+                    INFO     sdm: 2 bins, 10 iterations                         
+[08/23/26 18:23:20] INFO     m: 2 bins, 10 iterations                           
+                    INFO     zg: 6 bins, 10 iterations                          
+[08/23/26 18:23:21] INFO     2026-08-24T012252Z: saved IBU metrics to           
+                             runs/2026-08-24T012252Z/metrics_ibu.json and       
+                             weights to runs/2026-08-24T012252Z/ibu_weights.npz 
+           2026-08-24T012252Z [IBU] — Detector level           
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.0591 │   0.0591 │       +0.0% │
+│          │ JS div       │ 0.000660 │ 0.000660 │       -0.0% │
+│          │ Delta (x1e3) │   2.6325 │   2.6325 │       -0.0% │
+│ M        │ Wasserstein  │   0.2284 │   0.0209 │      +90.9% │
+│          │ JS div       │ 0.008530 │ 0.000367 │      +95.7% │
+│          │ Delta (x1e3) │  33.9104 │   1.4460 │      +95.7% │
+│ tau21    │ Wasserstein  │   0.2256 │   0.1773 │      +21.4% │
+│          │ JS div       │ 0.009805 │ 0.007715 │      +21.3% │
+│          │ Delta (x1e3) │  38.8742 │  30.6041 │      +21.3% │
+│ sdm      │ Wasserstein  │   0.1217 │   0.0712 │      +41.5% │
+│          │ JS div       │ 0.003437 │ 0.001971 │      +42.6% │
+│          │ Delta (x1e3) │  13.6934 │   7.8579 │      +42.6% │
+│ m        │ Wasserstein  │   0.2118 │   0.1420 │      +32.9% │
+│          │ JS div       │ 0.006883 │ 0.003687 │      +46.4% │
+│          │ Delta (x1e3) │  27.3743 │  14.6639 │      +46.4% │
+│ zg       │ Wasserstein  │   0.2695 │   0.0141 │      +94.8% │
+│          │ JS div       │ 0.009464 │ 0.000515 │      +94.6% │
+│          │ Delta (x1e3) │  37.5934 │   2.0500 │      +94.5% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+           2026-08-24T012252Z [IBU] — Particle level           
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.1103 │   0.1103 │       +0.0% │
+│          │ JS div       │ 0.001999 │ 0.001999 │       -0.0% │
+│          │ Delta (x1e3) │   7.9099 │   7.9099 │       -0.0% │
+│ M        │ Wasserstein  │   0.2564 │   0.0290 │      +88.7% │
+│          │ JS div       │ 0.010263 │ 0.001528 │      +85.1% │
+│          │ Delta (x1e3) │  40.7796 │   6.0694 │      +85.1% │
+│ tau21    │ Wasserstein  │   0.2593 │   0.2058 │      +20.6% │
+│          │ JS div       │ 0.007968 │ 0.010534 │      -32.2% │
+│          │ Delta (x1e3) │  31.6024 │  41.1178 │      -30.1% │
+│ sdm      │ Wasserstein  │   0.2635 │   0.1535 │      +41.8% │
+│          │ JS div       │ 0.010838 │ 0.006735 │      +37.9% │
+│          │ Delta (x1e3) │  43.0646 │  26.7889 │      +37.8% │
+│ m        │ Wasserstein  │   0.1169 │   0.0980 │      +16.1% │
+│          │ JS div       │ 0.002137 │ 0.010606 │     -396.4% │
+│          │ Delta (x1e3) │   8.4902 │  40.9366 │     -382.2% │
+│ zg       │ Wasserstein  │   0.2885 │   0.0168 │      +94.2% │
+│          │ JS div       │ 0.011709 │ 0.001542 │      +86.8% │
+│          │ Delta (x1e3) │  46.4980 │   6.1462 │      +86.8% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+[08/23/26 18:23:32] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/23/26 18:23:33] INFO     Loaded run from runs/2026-08-24T012252Z            
+                    INFO     Loaded IBU weights from                            
+                             runs/2026-08-24T012252Z/ibu_weights.npz            
+[08/23/26 18:23:38] INFO     Saved runs/2026-08-24T012252Z/detector_level.pdf   
+[08/23/26 18:23:39] INFO     Saved runs/2026-08-24T012252Z/particle_level.pdf   
+                    INFO     Saved runs/2026-08-24T012252Z/losses.pdf           
+                    INFO     2026-08-24T012252Z: metrics.json exists, skipping  
+                             (use --force)                                      
+[08/23/26 18:23:48] INFO     2026-08-24T012252Z: loading model and data...      
+[08/23/26 18:23:49] INFO     Unable to initialize backend 'tpu': INTERNAL:      
+                             Failed to open libtpu.so: libtpu.so: cannot open   
+                             shared object file: No such file or directory      
+[08/23/26 18:23:50] INFO     Loading dataset: jets                              
+[08/23/26 18:23:59] INFO     2026-08-24T012252Z: saved metrics to               
+                             runs/2026-08-24T012252Z/metrics.json               
+              2026-08-24T012252Z — Detector level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.2695 │   0.2939 │       -9.1% │
+│          │ JS div       │ 0.009464 │ 0.025479 │     -169.2% │
+│          │ Delta (x1e3) │  37.5934 │ 100.0711 │     -166.2% │
+│ M        │ Wasserstein  │   0.1217 │   0.1388 │      -14.1% │
+│          │ JS div       │ 0.003437 │ 0.006120 │      -78.1% │
+│          │ Delta (x1e3) │  13.6934 │  24.2622 │      -77.2% │
+│ tau21    │ Wasserstein  │   0.2118 │   0.3062 │      -44.6% │
+│          │ JS div       │ 0.006883 │ 0.025423 │     -269.4% │
+│          │ Delta (x1e3) │  27.3743 │  99.9170 │     -265.0% │
+│ sdm      │ Wasserstein  │   0.0591 │   0.0804 │      -36.0% │
+│          │ JS div       │ 0.000660 │ 0.002689 │     -307.5% │
+│          │ Delta (x1e3) │   2.6325 │  10.5978 │     -302.6% │
+│ m        │ Wasserstein  │   0.2256 │   0.2785 │      -23.4% │
+│          │ JS div       │ 0.009805 │ 0.027870 │     -184.3% │
+│          │ Delta (x1e3) │  38.8742 │ 109.7697 │     -182.4% │
+│ zg       │ Wasserstein  │   0.2284 │   0.3285 │      -43.8% │
+│          │ JS div       │ 0.008530 │ 0.015827 │      -85.5% │
+│          │ Delta (x1e3) │  33.9104 │  62.4195 │      -84.1% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+              2026-08-24T012252Z — Particle level              
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Variable ┃ Metric       ┃   Before ┃    After ┃ Improvement ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ w        │ Wasserstein  │   0.2885 │   0.3320 │      -15.1% │
+│          │ JS div       │ 0.011709 │ 0.040791 │     -248.4% │
+│          │ Delta (x1e3) │  46.4980 │ 159.3580 │     -242.7% │
+│ M        │ Wasserstein  │   0.2635 │   0.4283 │      -62.5% │
+│          │ JS div       │ 0.010838 │ 0.030641 │     -182.7% │
+│          │ Delta (x1e3) │  43.0646 │ 120.1863 │     -179.1% │
+│ tau21    │ Wasserstein  │   0.1169 │   0.2857 │     -144.3% │
+│          │ JS div       │ 0.002137 │ 0.019871 │     -830.0% │
+│          │ Delta (x1e3) │   8.4902 │  78.0842 │     -819.7% │
+│ sdm      │ Wasserstein  │   0.1103 │   0.1323 │      -20.0% │
+│          │ JS div       │ 0.001999 │ 0.006391 │     -219.6% │
+│          │ Delta (x1e3) │   7.9099 │  24.0220 │     -203.7% │
+│ m        │ Wasserstein  │   0.2593 │   0.3500 │      -35.0% │
+│          │ JS div       │ 0.007968 │ 0.030349 │     -280.9% │
+│          │ Delta (x1e3) │  31.6024 │ 119.1328 │     -277.0% │
+│ zg       │ Wasserstein  │   0.2564 │   0.4286 │      -67.2% │
+│          │ JS div       │ 0.010263 │ 0.026535 │     -158.5% │
+│          │ Delta (x1e3) │  40.7796 │ 103.6351 │     -154.1% │
+└──────────┴──────────────┴──────────┴──────────┴─────────────┘
+Artifacts in runs/2026-08-24T012252Z:
+config.json
+detector_level.pdf
+discriminator.keras
+generator.keras
+history.npz
+ibu_weights.npz
+losses.pdf
+metrics_ibu.json
+metrics.json
+particle_level.pdf
+XLA cache: 176 entries in .cache/jax

@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import jax
@@ -11,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..rantypes import (
+    CACHE_DIR,
     EVENT_DTYPE,
     ZXY,
     DatasetSplits,
@@ -22,6 +22,7 @@ from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
     from logging import Logger
+    from pathlib import Path
     from typing import Final, LiteralString, SupportsFloat
 
     from jax import Array
@@ -109,7 +110,7 @@ class RANDataset:
         self,
         batch_size: int = 128,
         seed: int = 42,
-        cache_dir: Path = Path(".cache"),
+        cache_dir: Path = CACHE_DIR,
         val_fraction: float = 0.1,
         test_fraction: float = 0.2,
     ) -> None:

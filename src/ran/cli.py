@@ -6,6 +6,10 @@ from typing import Annotated
 import numpy as np
 import typer
 
+from .baselines import evaluate_runs as ibu_evaluate_runs
+from .evaluate import evaluate_runs
+from .experiments import run_ran
+from .leakage import run_leakage_check
 from .logging_config import configure_logging
 from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
@@ -15,6 +19,7 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
+from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -58,8 +63,6 @@ def train_command(
     seed: int | None = None,
     data_seed: int = 42,
 ) -> None:
-    from .workflow import run
-
     run(
         batch_size,
         n_samples,
@@ -77,8 +80,6 @@ def train_command(
 
 @app.command(name="evaluate")
 def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
-    from .evaluate import evaluate_runs
-
     evaluate_runs(run_dir, force)
 
 
@@ -89,14 +90,11 @@ def ibu_command(
     n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 10,
     purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
 ) -> None:
-    from .baselines.ibu import evaluate_runs
-
-    purity_threshold = np.double(purity_threshold)
-    evaluate_runs(
+    ibu_evaluate_runs(
         run_dir,
         force,
         n_iterations,
-        purity_threshold,
+        purity_threshold=np.double(purity_threshold),
     )
 
 
@@ -111,8 +109,6 @@ def sweep_ran_command(
     ran_epochs: Annotated[int, typer.Option("--ran-epochs", "-e", min=1)] = 100,
     init_seed: Annotated[int | None, typer.Option("--init-seed", "-I")] = None,
 ) -> None:
-    from .experiments.cubic_sweep import run_ran
-
     run_ran(
         s_index,
         sweep_dir,
@@ -142,6 +138,4 @@ def leakage_check_command(
     seed: int = 42,
     init_seed: int = 0,
 ) -> None:
-    from .leakage import run_leakage_check
-
     run_leakage_check(poison, sentinel, seed, init_seed)

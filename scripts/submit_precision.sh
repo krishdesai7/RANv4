@@ -2,8 +2,8 @@
 set -euo pipefail
 
 PROJECT_DIR=/global/u1/k/kdesai/RANv4
-SEED_START=200
-SEED_END=271
+SEED_START=300
+SEED_END=371
 
 NODES=1
 GPUS_PER_NODE=4

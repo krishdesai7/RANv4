@@ -5,7 +5,7 @@ build-backend = "uv_build"
 
 [project]
 name = "ran"
-version = "0.1.5"
+version = "0.2.0"
 description = "Reweighting Adversarial Networks"
 readme = "README.md"
 requires-python = ">=3.14"

@@ -81,6 +81,10 @@ class StatelessOptimizer(Protocol):
 # so naming the real shape here is a legal narrowing -- and it is what makes the
 # destructuring at the call sites typed instead of `Any`.
 type GradsAndAux = tuple[tuple[JaxArray, Variables], Variables]
+#: `g`'s aux carries a second array: the loss it is *scored* on, which is not
+#: the loss it is differentiated through once a dispersion penalty is on. See
+#: `train.weight_dispersion`.
+type GenGradsAndAux = tuple[tuple[JaxArray, tuple[Variables, JaxArray]], Variables]
 
 
 class DiscGradFn(Protocol):
@@ -108,7 +112,7 @@ class GenGradFn(Protocol):
         y: JaxArray,
         mask: JaxArray,
         /,
-    ) -> GradsAndAux: ...
+    ) -> GenGradsAndAux: ...
 
 
 class TrainStep(Protocol):

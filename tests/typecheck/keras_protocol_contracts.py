@@ -48,7 +48,7 @@ def check_protocol_surfaces(
 def check_training_boundary(model: RANModel, optimizer: StatelessOptimizer) -> None:
     assert_type(build_generator(), RANModel)
     assert_type(build_discriminator(), RANModel)
-    _make_steps(model, model, optimizer, optimizer)
+    _make_steps(model, model, optimizer, optimizer, 0.0)
 
 
 def check_model_consumers(

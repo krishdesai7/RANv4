@@ -104,7 +104,6 @@ def main() -> None:
         dim=DIM,
         hidden_units=64,
         n_layers=2,
-        patience=99,
         n_epochs=EPOCHS,
         seed=SEED,
     )

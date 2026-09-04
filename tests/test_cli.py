@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from ran import cli
-from ran.cli import app, baseline_app, sweep_app
+from ran.cli import app, baseline_app, sweep_app, uncertainty_app
 from typer.testing import CliRunner
 
 if TYPE_CHECKING:
@@ -25,10 +25,12 @@ def test_registered_command_trees_are_exact() -> None:
         "evaluate",
         "baseline",
         "sweep",
+        "uncertainty",
         "leakage-check",
     }
     assert _command_names(baseline_app) == {"ibu"}
     assert _command_names(sweep_app) == {"ran", "collect"}
+    assert _command_names(uncertainty_app) == {"run", "collect"}
 
 
 @pytest.mark.parametrize(
@@ -39,9 +41,11 @@ def test_registered_command_trees_are_exact() -> None:
         ("baseline", "ibu"),
         ("sweep", "ran"),
         ("sweep", "collect"),
+        ("uncertainty", "run"),
+        ("uncertainty", "collect"),
         ("leakage-check",),
     ],
-    ids=lambda command: "-".join(command),
+    ids="-".join,
 )
 def test_every_leaf_command_has_help(command) -> None:
     result = runner.invoke(app, [*command, "--help"])
@@ -55,7 +59,10 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     re-imported on every invocation, which it deliberately no longer does.
     """
     calls = []
-    configured_levels = []
+    configured_levels: list[str] = []
+
+    def capture_log_level(*, level: str) -> None:
+        configured_levels.append(level)
 
     def fake_run(
         batch_size,
@@ -66,9 +73,9 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
         load_run,
         hidden_units,
         n_layers,
-        patience,
         seed,
         data_seed,
+        **hyperparameters,
     ) -> None:
         calls.append(
             {
@@ -80,16 +87,14 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
                 "load_run": load_run,
                 "hidden_units": hidden_units,
                 "n_layers": n_layers,
-                "patience": patience,
                 "seed": seed,
                 "data_seed": data_seed,
+                **hyperparameters,
             }
         )
 
     monkeypatch.setattr(cli, "run", fake_run)
-    monkeypatch.setattr(
-        cli, "configure_logging", lambda level: configured_levels.append(level)
-    )
+    monkeypatch.setattr(cli, "configure_logging", capture_log_level)
 
     result = runner.invoke(
         app,
@@ -123,3 +128,49 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     # LogLevel is a StrEnum of auto() members, so its values are the lowercase
     # names typer shows in --help. configure_logging normalizes the case.
     assert configured_levels == ["warning"]
+    # The training hyperparameters reach `run` too.
+    assert calls[0]["n_epochs"] == 100
+    assert calls[0]["n_disc_steps"] == 5
+    # 3e-5, not 1e-4: measured at +1.22 +- 0.53 points over two paired sweeps
+    # (p = 0.022). See "What tuning actually found" in benchmarks/README.md.
+    assert calls[0]["lr_g"] == pytest.approx(3e-5)
+    assert calls[0]["lr_d"] == pytest.approx(1e-4)
+    # 0.015: +4.30 +- 0.88 points on the 12-observable aggregate against 0
+    # (p = 0.0017), and admissible on RAN's own selection criterion. See
+    # "The dispersion penalty" in benchmarks/README.md.
+    assert calls[0]["lambda_dispersion"] == pytest.approx(0.015)
+    assert calls[0]["plots"] is True
+
+
+def test_train_forwards_an_explicit_run_dir(monkeypatch, tmp_path) -> None:
+    """A sweep names each run's directory so arms can be told apart.
+
+    Without it every run lands on a second-resolution timestamp and concurrent
+    arms overwrite each other -- see TestNewRunDir in tests/test_workflow.py.
+    """
+    calls = []
+
+    def fake_run(*args, **kwargs) -> None:
+        del args
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    wanted = tmp_path / "hp_lrg" / "lrg3e-4_seed05"
+    result = runner.invoke(app, ["train", "--run-dir", str(wanted)])
+
+    assert result.exit_code == 0
+    assert calls[0]["run_dir"] == wanted
+
+
+def test_train_defaults_to_no_explicit_run_dir(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(*args, **kwargs) -> None:
+        del args
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    assert runner.invoke(app, ["train"]).exit_code == 0
+    assert calls[0]["run_dir"] is None

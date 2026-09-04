@@ -80,7 +80,7 @@ ran train --config params/4d_correlated.yaml
 ran train --config params/6d_correlated.yaml
 
 # Customize network and training
-ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --patience 10
+ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --n-epochs 200
 ```
 
 YAML config format (see `params/` for examples):
@@ -131,7 +131,7 @@ sbatch scripts/submit.sh --dataset jets
 | `--batch-size`   | `1024`         | Training batch size                                   |
 | `--hidden-units` | `64`           | Units per hidden layer                                |
 | `--n-layers`     | `2`            | Number of hidden layers                               |
-| `--patience`     | `5`            | Early stopping patience (epochs)                      |
+| `--n-epochs`     | `100`          | Epochs to train (best checkpoint is always restored)  |
 | `--var`          | all 6          | Repeat once for each jet substructure variable to use |
 | `--load-run`     | `None`         | Path to an existing run directory to reload           |
 | `--seed`         | system entropy | Weight-initialization seed (see [Seeding](#seeding))  |
@@ -356,8 +356,6 @@ training options are listed above.
 | `n_disc_steps` | 5       | Discriminator updates per generator update |
 | `lr_g`         | 1e-4    | Generator learning rate (Adam)             |
 | `lr_d`         | 1e-4    | Discriminator learning rate (Adam)         |
-| `patience`     | 5       | Early stopping patience (epochs)           |
-| `min_delta`    | 1e-4    | Minimum improvement for early stopping     |
 | `hidden_units` | 64      | Units per hidden layer                     |
 | `n_layers`     | 2       | Number of hidden layers                    |
 

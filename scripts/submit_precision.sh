@@ -13,9 +13,15 @@ mkdir -p "${RUN_DIR}"
 echo "Run dir: ${RUN_DIR}"
 echo "Seeds ${SEED_START}-${SEED_END} (72 paired seeds, 144 runs) on ${GPUS_PER_NODE} GPUs"
 
+# `--gpus-per-node` has no short form, and `-G` is NOT it: `-G/--gpus` is the
+# TOTAL across the allocation. Shortened to `-G ${GPUS_PER_NODE}` this asks for
+# 4 GPUs spread over ${NODES} nodes, which sbatch rejects outright once NODES > 4
+# ("Failed to validate job spec, --gpus < -N") and, for NODES <= 4, silently
+# grants one GPU per node instead of four -- the sweep still finishes, in four
+# times the waves. Leave it long.
 JOB=$(sbatch --parsable \
   -qregular -Cgpu -Am3246_g -t00:45:00 \
-  -N "${NODES}" -G "${GPUS_PER_NODE}" \
+  -N "${NODES}" --gpus-per-node="${GPUS_PER_NODE}" \
   -Jprecision_bench -o "${RUN_DIR}/slurm-%j.log" \
   --export="ALL,RUN_DIR=${RUN_DIR},SEED_START=${SEED_START},SEED_END=${SEED_END},GPUS_PER_NODE=${GPUS_PER_NODE},PROJECT_DIR=${PROJECT_DIR}" \
   <<'EOF'

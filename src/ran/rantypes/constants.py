@@ -68,6 +68,15 @@ SUBSTRUCTURE_VARIABLES: Final[tuple[LiteralString, ...]] = (
     "tau21",
     "zg",
     "sdm",
+    # Beyond the OmniFold six. `--var` selects any subset, so the original
+    # configuration stays reachable as `--var m --var M --var w --var tau21
+    # --var zg --var sdm`.
+    "q",
+    "f_ch",
+    "lha",
+    "ang2",
+    "ptd",
+    "n_ch",
 )
 
 # Cache-safe filenames: avoid case collisions on case-insensitive filesystems
@@ -79,6 +88,12 @@ CACHE_FILENAMES: Final[dict[str, str]] = {
     "tau21": "tau21",
     "zg": "zg",
     "sdm": "sdm",
+    "q": "q",
+    "f_ch": "f_ch",
+    "lha": "lha",
+    "ang2": "ang2",
+    "ptd": "ptd",
+    "n_ch": "n_ch",
 }
 
 
@@ -88,7 +103,28 @@ class JetVarInfo(NamedTuple):
     symbol: str
 
 
+# The value `_get_var` writes for a jet groomed to nothing, where ln(rho^2) is
+# undefined. It is **not** a bound on the observable: real jets reach -37.9, so
+# this sentinel sits inside the distribution rather than below it, and ~0.75% of
+# events fall past it. `SDM_XLIM` is a separate number for that reason -- an
+# axis limit chosen for where the bulk lives, not derived from the sentinel.
+#
+# It is left where it is, having been measured rather than assumed. The
+# degenerate jets are a spike superimposed on a smooth tail, and the fraction
+# is generator-dependent (detector level: Herwig 0.034%, Pythia 0.057%), which
+# is exactly the shape of thing `benchmarks/response.py` is built to detect.
+# But the most information an "is it at the floor?" bit can carry at those
+# rates is 1.5e-5 nats, against a measured I(S; X | Z) of 3.6e-3 -- 0.42% of
+# the effect. Moving the sentinel would shift the standardization statistics
+# for a correction two orders of magnitude below what it would fix.
+#
+# The spike is never ambiguous, either: reaching exactly -14.0 from a
+# continuous log is measure-zero, so an event at the sentinel is a degenerate
+# jet and nothing else.
 LOG_RHO_FLOOR: Final[float] = -14.0
+
+# Covers ~99.25% of events. The remainder is a genuine tail, not an artifact.
+SDM_XLIM: Final[tuple[float, float]] = (-14.0, -2.0)
 JET_OBS: Final[dict[str, JetVarInfo]] = {
     "m": JetVarInfo(xlim=(0, 75), xlabel="Jet Mass", symbol=r"$m$ [GeV]"),
     "M": JetVarInfo(xlim=(0, 80), xlabel="Jet Constituent Multiplicity", symbol=r"$M$"),
@@ -101,8 +137,24 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
     "zg": JetVarInfo(
         xlim=(0, 0.5), xlabel="Groomed Jet Momentum Fraction", symbol=r"$z_g$"
     ),
-    "sdm": JetVarInfo(
-        xlim=(LOG_RHO_FLOOR, -2), xlabel="Soft Drop Jet Mass", symbol=r"$\ln\rho$"
+    "sdm": JetVarInfo(xlim=SDM_XLIM, xlabel="Soft Drop Jet Mass", symbol=r"$\ln\rho$"),
+    "q": JetVarInfo(xlim=(-0.5, 0.5), xlabel="Jet Charge", symbol=r"$q$"),
+    "f_ch": JetVarInfo(xlim=(0, 1), xlabel="Jet Charge Fraction", symbol=r"$f_{ch}$"),
+    # `w` is the angularity lambda^1_1, so `lha` (beta = 1/2) and `ang2`
+    # (beta = 2) complete the family around it. `ang2` is close to
+    # m^2 / (pT R)^2, which is why it is the most promising of these for
+    # constraining the jet-mass response.
+    "lha": JetVarInfo(
+        xlim=(0, 0.8), xlabel="Les Houches Angularity", symbol=r"$\lambda^{1}_{0.5}$"
+    ),
+    "ang2": JetVarInfo(
+        xlim=(0, 0.3), xlabel="Jet Angularity", symbol=r"$\lambda^{1}_{2}$"
+    ),
+    "ptd": JetVarInfo(
+        xlim=(0.1, 1), xlabel="Transverse Momentum Dispersion", symbol=r"$p_T^D$"
+    ),
+    "n_ch": JetVarInfo(
+        xlim=(0, 50), xlabel="Charged Constituent Multiplicity", symbol=r"$n_{ch}$"
     ),
 }
 

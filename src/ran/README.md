@@ -158,30 +158,59 @@ Generate particle level plots.
 
 - `None`
 
-## module `train`
+## :mod:`ran.train`
 
-Adversarial training loop for RAN, on Keras 3 with the JAX backend.
+Adversarial training loop for RAN, on Keras 3 with the JAX backend, as a single fused XLA program.
 
-The min-max game needs two optimizers driven at different cadences against a shared loss, which does not fit `Model.fit`, so this is a hand-rolled loop. It follows the standard Keras 3 + JAX pattern: model state lives in plain JAX pytrees (never in the `keras.Variable`s) for the duration of training, updates go through `stateless_call`/`stateless_apply`, and each step is a single jitted function. Values are written back into the Keras models at the end so the returned objects are ordinary, saveable `keras.Model`s.
+The min-max game needs two optimizers driven at different cadences against a shared loss, which does not fit `Model.fit`, so this module implements a hand-rolled loop. It follows the standard Keras 3 + JAX pattern: model state lives in JAX pytrees (:class:`TrainState`) for the duration of training, updates go through `stateless_call`/`stateless_apply`, and each step is a single jitted function. Values are written back into the Keras models at the end so the returned objects are ordinary, saveable `keras.Model`s.
 
-The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace — `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX, so backend-agnostic `keras.ops` bought nothing this module could still use.
+The training loop is not a Python loop over batches. The dataset is moved to device once (:mod:`ran.data.device`), one epoch is a `lax.scan` over grouped batch indices, and the epoch loop with its early stopping is a `lax.while_loop`, so a whole run compiles to one program and the batch gathers fuse into the first `Dense`.
 
-### class `TrainResult(NamedTuple)`
+The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace. `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX.
 
-All mutable training state, as a JAX pytree.
+:func:`train(fused=False)` runs the very same epoch function from an ordinary Python `while`. It is still one XLA program per epoch, but it keeps breakpoints,
+readable tracebacks and host-side logging, which can be helpful for debugging when a run goes wrong.
+
+### :data:`_HISTORY_KEYS`
+
+Every column is the weighted BCE on the same scale `_make_pass` negates `g_loss` back before recording it, so `train_g` is the BCE at the generator's batch rather than the objective g descends. What separates the columns is therefore _where_ the BCE was measured, and validation measures it in exactly one place: `eval_step` runs once per epoch and both networks are scored by that number. A "val_g" column could only be `val_d` again, two identical curves on `losses.pdf`.
+
+### :class:`TrainResult(NamedTuple)`
+
+All mutable training state, as a JAX pytree. Returns package of a model training, unpacked as `(g, d, history, seed)`.
 
 Held outside the `keras.Model`s so jitted steps stay pure and no host/device sync happens between steps.
 
 **Fields:**
 
-- `g: keras.Model` The generator model.
-- `d: keras.Model` The discriminator model.
-- `history: dict[str, list[float]]` The training history.
-- `seed: int` The random seed used for training.
+- :attr:`TrainResult.g: RANModel` The generator model.
+- :attr:`TrainResult.d: RANModel` The discriminator model.
+- :attr:`TrainResult.history: dict[str, list[float]]` The training history. Carries `train_d`, `train_g`, `val_d` (the three `lax.scan` columns) plus `val_mmd` and `val_ess` (host additions computed from the retained per-epoch parameters, once the scan is done).
+- :attr:`TrainResult.seed: int` The random seed used for training.
+- :attr:`TrainResult.best_epoch: int` Which epoch's parameters were restored: the argmin of `history["val_mmd"]`.
+- :attr:`TrainResult.params: EpochParams` Every epoch's parameters, stacked on a leading epoch axis -- what makes host-side selection possible at all.
+- :attr:`TrainResult.mmd_test: float` The weighted MMD at `best_epoch`, recomputed on a held-out test subsample rather than read off the validation curve selection minimized.
+- :attr:`TrainResult.sigmas: tuple[float, ...]` The RBF bandwidths `bandwidths()` chose from the validation subsample, reused for the test-side cache so both numbers share one kernel.
 
-### def `normalize_weights(raw_w, y)`
+### :class: `RunCarry(NamedTuple)`
 
-Per-event weights: 1 for data, mean-preserving g(z) for MC.
+What crosses an epoch boundary in the `lax.scan` over epochs. Everything else
+-- the per-epoch `(train_d, train_g, val_d)` row and the full `EpochParams`
+-- is a `scan` output, not carried state, which is what lets selection move
+to the host: `train` picks the epoch minimizing detector-level MMD against a
+validation subsample once the scan is done, rather than tracking a "best"
+state inside the trace.
+
+**Fields:**
+
+- :attr:`RunCarry.state: TrainState` The current training state.
+- :attr:`RunCarry.key: PRNGKeyArray` The random key, split once per epoch.
+
+### :func:`normalize_weights(Float[Array | NDArray, " n"], Real[Array | NDArray, " n"], Float[Array | NDArray, " n"]) -> Float[Array, " n"]`
+
+Per-batch weights: fixed at 1 for nature, renormalized to count for MC.
+
+`mask` is 1 for a real event and 0 for a padding row, and it enters every sum so a padded eval batch gives exactly the value the unpadded one would. On the training path the mask is all ones and this is the plain form.
 
 `raw_w` is the raw generator output for every event in the batch. Data events (y=1) are pinned to weight 1; MC events (y=0) are rescaled so their weights sum to the MC event count, preserving the per-class normalization.
 
@@ -189,14 +218,35 @@ The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the
 
 **Arguments:**
 
-- `raw_w: Float[Array | np.ndarray, " n"]` The raw generator output for every event in the batch, already squeezed to one dimension.
-- `y: Real[Array | np.ndarray, " n"]` The target labels for every event in the batch. `Real` rather than `Float` because the pipeline carries them as `uint8` while the tests pass floats.
+- `raw_w: Float[Array | NDArray, " n"]` The raw generator output for every event in the batch, already squeezed to one dimension.
+- `y: Real[Array | NDArray, " n"]` The target labels for every event in the batch. `Real` rather than `Float` because the pipeline carries them as `uint8` while the tests pass floats.
+- `mask: Float[Array | NDArray, " n"]` The mask for every event in the batch.
 
 **Returns:**
 
-- `Float[Array, " n"]` The normalized weights.
+- `Float[Array, " n"]` The per-batch normalized weights.
 
-### def `weighted_bce(d_out, y, w)`
+### :func:`bce_sums(Float[Array | NDArray, " n"], Real[Array | NDArray, " n"], Float[Array | NDArray, " n"], Float[Array | NDArray, " n"]) -> tuple[Float[Array, ""], Float[Array, ""]]`
+
+Masked weighted BCE, unnormalized, paired with the count it divides by.
+
+Handing back both halves is what lets a scan accumulate across batches and
+divide once. Reduce with `jnp.sum(...) / n` rather than a mean: the float64
+hazard in `keras.ops.mean` is gone now that this is plain `jnp`, but the
+explicit form is what the guard test pins.
+
+**Arguments:**
+
+- `d_out: Float[Array | NDArray, " n"]` The discriminator output for every event in the batch, already squeezed to one dimension.
+- `y: Real[Array | NDArray, " n"]` The target labels for every event in the batch.
+- `w: Float[Array | NDArray, " n"]` The weights for every event in the batch.
+- `mask: Float[Array | NDArray, " n"]` The mask for every event in the batch.
+
+**Returns:**
+
+- `tuple[Float[Array, ""], Float[Array, ""]]` The unnormalized weighted BCE and the count it divides by.
+
+### :func:`weighted_bce(d_out, y, w)`
 
 Weighted binary cross-entropy.
 
@@ -216,7 +266,7 @@ Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops
 
 - The weighted binary cross-entropy loss.
 
-### def `_make_steps(g: keras.Model, d: keras.Model, opt_g: keras.optimizers.Optimizer, opt_d: keras.optimizers.Optimizer) -> tuple[JitWrapped, JitWrapped, JitWrapped]`
+### :func:`_make_steps(RANModel, RANModel, StatelessOptimizer, StatelessOptimizer) -> tuple[TrainStep, TrainStep, EvalStep]`
 
 Build the jitted disc/gen/eval steps, closing over the models.
 
@@ -224,10 +274,10 @@ The models are captured rather than passed so jit sees only array arguments; eac
 
 **Arguments:**
 
-- `g` The generator model.
-- `d` The discriminator model.
-- `opt_g` The generator optimizer.
-- `opt_d` The discriminator optimizer.
+- `g: RANModel` The generator model.
+- `d: RANModel` The discriminator model.
+- `opt_g: StatelessOptimizer` The generator optimizer.
+- `opt_d: StatelessOptimizer` The discriminator optimizer.
 
 **Returns:**
 
@@ -251,28 +301,32 @@ One pass over the training split, returning the new state and mean losses.
 
 - `tuple[TrainState, float, float]` The new state and mean losses.
 
-### def `train(splits: DatasetSplits, dim: int, n_epochs: int, n_disc_steps: int, lr_g: float, lr_d: float, patience: int, min_delta: float, hidden_units: int, n_layers: int, seed: int | None) -> TrainResult`
+### def `train(splits: DatasetSplits, dim: int, hidden_units: int, n_layers: int, seed: int | None, n_epochs: int = 100, n_disc_steps: int = 5, lr_g: float = 1e-4, lr_d: float = 1e-4, *, fused: bool = True) -> TrainResult`
 
-Train the generator and discriminator.
+Train the generator and discriminator, then select a checkpoint.
 
 This seeds weight initialization _only_. The train/val/test split and the
 per-epoch batch order come from the dataset's own seed (`RANDataset`), which draws from an independent generator. Varying `seed` across runs therefore estimates training/initialization variance at fixed data, i.e., the usual HEP model-uncertainty ensemble, while varying the dataset seed instead would fold in split variance.
 
 The networks are Dense-only with no dropout or batch norm and Adam is deterministic, so the two seeds together fully determine a run (up to non-deterministic GPU reductions).
 
+There is no `patience` or `min_delta`: `n_epochs` is a fixed `lax.scan` trip
+count, and every epoch's parameters are retained so selection can happen once
+the scan is done, reading a detector-level MMD curve rather than tracking a
+running best inside the trace.
+
 **Arguments:**
 
 - `splits: DatasetSplits` The dataset splits.
 - `dim: int` The dimension of the data.
+- `hidden_units: int` The number of hidden units in the networks.
+- `n_layers: int` The number of layers in the networks.
+- `seed: int | None` The random weight-initialization seed to use for training. `None` draws one from system entropy. Either way the value used is returned, so a run stays reproducible after the fact without having to decide up front that it is worth reproducing.
 - `n_epochs: int` The number of epochs to train for.
 - `n_disc_steps: int` The number of discriminator steps per generator step.
 - `lr_g: float` The learning rate for the generator.
 - `lr_d: float` The learning rate for the discriminator.
-- `patience: int` The number of epochs to wait before early stopping.
-- `min_delta: float` The minimum improvement required to continue training.
-- `hidden_units: int` The number of hidden units in the networks.
-- `n_layers: int` The number of layers in the networks.
-- `seed: int | None` The random weight-initialization seed to use for training. `None` draws one from system entropy. Either way the value used is returned, so a run stays reproducible after the fact without having to decide up front that it is worth reproducing.
+- `fused: bool` Whether to run the whole epoch loop as one `lax.scan` (the default) or drive the identical per-epoch function from a Python `while` for debugging; the two must agree bit-for-bit.
 
 **Returns:**
 
@@ -320,7 +374,7 @@ Gaussian params are stored as covariance matrices so runs are self-contained and
 
 - `Path` The path to the run directory.
 
-### `def run(batch_size: int, n_samples: int, config: Path | None, dataset: DatasetName, variables: tuple[str, ...], load_run: Path | None, hidden_units: int, n_layers: int, patience: int, seed: int | None, data_seed: int) -> None`
+### `def run(batch_size: int, n_samples: int, config: Path | None, dataset: DatasetName, variables: tuple[str, ...], load_run: Path | None, hidden_units: int, n_layers: int, seed: int | None, data_seed: int) -> None`
 
 Main entry point.
 
@@ -334,10 +388,22 @@ Main entry point.
 - `load_run: Path | None` The path to the run to load.
 - `hidden_units: int` The number of hidden units in the networks.
 - `n_layers: int` The number of layers in the networks.
-- `patience: int` The number of epochs to wait before early stopping.
 - `seed: int | None` The random weight-initialization seed to use for training. `None` draws one from system entropy. Either way the value used is returned, so a run stays reproducible after the fact without having to decide up front that it is worth reproducing.
 - `data_seed: int` The data seed to use for training.
 
 **Returns:**
 
 - `None`
+
+### :func:`_use_compilation_cache() -> None`
+
+Point XLA's persistent cache at :data:`COMPILE_CACHE_DIR`.
+
+Compilation is the largest single time cost in a short run. `benchmarks/boundary.py` on an A100 measures 4.60s of compile time against 0.034s per epoch, so a 100-epoch run spends half its wall clock in XLA and only a third of it training. The cache keys on lowered HLO rather than on Python identity. Hence the fresh `jax.jit(lambda ...)` in :func:`_run` can use it regardless and it lives on disk, which is where it pays: an ensemble is N separate interpreters
+compiling the same architecture N times over.
+
+It has two separate settings because JAX's default `min_compile_time_secs` of 1.0s leaves RAN's cache _entirely empty_, because the run compiles a few dozen executables that total 4.6s and no single one of them clears a second. The threshold separates a populated cache from a silent no-op.
+
+Whatever the caller configured wins, so `JAX_COMPILATION_CACHE_DIR`, or a `jax.config.update` before :func:`train` still overrides this, and an unwritable directory costs a warning from JAX rather than the run.
+
+The path is resolved before it is handed over. JAX opens the cache once and keeps the string, so the default's leading `.` would follow any later `chdir` and turn every write into a `FileNotFoundError`, which JAX also reports as a warning rather than an error, so the run would go on quietly recompiling. Resolving pins it to the directory the datasets came from.

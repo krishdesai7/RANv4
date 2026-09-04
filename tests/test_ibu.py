@@ -11,6 +11,7 @@ from ran.rantypes import ZXY, DatasetSplits, Events
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from ran.rantypes.events import Populations
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -142,7 +143,7 @@ def test_the_fit_population_contains_no_test_event() -> None:
     splits = _splits()
     fit, test = shared.prepare_populations(splits, expected_dim=1)
 
-    def z_values(pops) -> set[float]:
+    def z_values(pops: Populations) -> set[float]:
         both = np.concatenate([pops.mc.z.ravel(), pops.data.ravel()])
         return {float(v) for v in both}
 

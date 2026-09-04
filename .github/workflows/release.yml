@@ -25,7 +25,10 @@ on:
       bump:
         description: "Version bump (blank = infer from merged PR labels)"
         type: choice
-        options: ["", major, minor, patch, pre]
+        # No `major`. Versions stay below 1.0 until the project is ready to
+        # publish; the guard in "Read new version" enforces the same rule
+        # against a bump rooster infers on its own.
+        options: ["", minor, patch, pre]
         default: ""
         required: false
       publish_pypi:
@@ -92,6 +95,17 @@ jobs:
             echo "::error::Tag $version already exists -- nothing to release."
             exit 1
           fi
+          # 1.0 is reserved for the first PyPI publication and is not reached
+          # by accident. rooster cannot infer it (major-labels is empty) and
+          # the bump input does not offer it, so this only fires if one of
+          # those is deliberately changed.
+          case "$version" in
+            0.*) ;;
+            *)
+              echo "::error::Refusing to release $version. Versions stay below 1.0 until this project is ready to publish to PyPI."
+              exit 1
+              ;;
+          esac
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # rooster curated these notes already; reuse them instead of GitHub's

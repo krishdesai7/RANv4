@@ -251,7 +251,10 @@ class RANDataset:
                 truth=np.asarray(a=z_true, dtype=self.dtype),
             ).interleave()
 
-            np.savez_compressed(file=cache_path, z=data.z, x=data.x, y=data.y)
+            # Uncompressed, for the reason spelled out in `ran.data.download`:
+            # these are incompressible floats, so DEFLATE is a large read tax
+            # for a few percent of disk. Existing compressed caches still load.
+            np.savez(file=cache_path, z=data.z, x=data.x, y=data.y)
             logger.info("Generated and saved dataset to cache: %s", cache_path)
 
         return self.splits_from_data(data)

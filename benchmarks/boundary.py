@@ -116,7 +116,7 @@ def main() -> None:
         split: TrainSplit = TrainSplit.from_zxy(splits.train.as_arrays())
         jax.block_until_ready(x=split.z)
 
-    kw = {"dim": DIM, "hidden_units": 64, "n_layers": 2, "patience": 99, "seed": 0}
+    kw = {"dim": DIM, "hidden_units": 64, "n_layers": 2, "seed": 0}
     with phase("train(n_epochs=1)   [compile + 1 epoch]"):
         train(splits, n_epochs=1, **kw)
     with phase(f"train(n_epochs={EPOCHS}) [compile + {EPOCHS} epochs]"):
@@ -125,8 +125,13 @@ def main() -> None:
     # --- host side: does NOT scale with the accelerator ---
     _time_metrics(test, weights)
 
-    with phase("np.savez_compressed (cache write, once ever)"):
-        np.savez_compressed(
+    # Mirrors what `RANDataset` actually writes. It stopped compressing --
+    # incompressible floats, ~20x read tax for a few percent of disk -- so
+    # timing `savez_compressed` here would measure a path the pipeline no
+    # longer takes, and would overstate the host term this benchmark exists
+    # to size.
+    with phase("np.savez (cache write, once ever)"):
+        np.savez(
             file=io.BytesIO(), z=pops.mc.z, x=pops.mc.x, y=splits.train.as_arrays().y
         )
 

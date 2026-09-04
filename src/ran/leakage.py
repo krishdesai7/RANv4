@@ -78,9 +78,7 @@ def run_leakage_check(poison: bool, sentinel: float, seed: int, init_seed: int) 
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.
-    g: RANModel = train(
-        splits, dim=1, hidden_units=32, n_layers=2, patience=5, seed=init_seed
-    ).g
+    g: RANModel = train(splits, dim=1, hidden_units=32, n_layers=2, seed=init_seed).g
 
     test: Populations = _collect_test_data(test_ds=splits.test).partition()
 

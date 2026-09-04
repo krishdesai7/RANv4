@@ -38,7 +38,7 @@ The default `TRAIN_ARGS` is _prepended_ to the command line arguments. Since cli
 
 - `-n1000000`: The Zenodo release holds ~1.6M jets per generator, and `load_jet_dataset` refuses $n_{\text{samples}} > n_{\text{avail}}$. 1M leaves headroom for the two generators' counts not matching exactly.
 - `-l3 -u128`: Width over depth. Andreassen et al. use 3x100 ReLU on exactly these six observables; 3x128 follows that style staying shallow, which matters in a min-max game where depth destabilises the balance between g and d faster than width does.
-- `-P100`: Effectively disables early stopping: `still_running` is `(epoch < n_epochs) & (wait < patience)` and `n_epochs` is 100. Free, because the best state is restored _always_, not only when early stopping fires, so a longer run can only find a better one. 100 epochs at 1M is ~13.6k generator updates.
+- `-e100` / `--n-epochs 100`: The training loop now runs a fixed trip count -- there is no early-stopping patience flag any more. Epoch selection happens afterward, on the host, from the recorded MMD history; every epoch's state is retained so any of them can be restored. 100 epochs at 1M is ~13.6k generator updates.
 - `-b1024`: Batch size.
 - `--seed`: Seed for the random number generator. `train` draws one from system entropy and records it in config.json, so the run is reproducible after the fact without pinning it in advance.
 
@@ -56,8 +56,92 @@ The default `TRAIN_ARGS` is _prepended_ to the command line arguments. Since cli
 
 ## submit_sweep.sh
 
-This script is used to submit a job to the cluster. It is used to run the cubic-response RAN-vs-IBU sweep.
+Launch the cubic-response RAN-vs-IBU sweep as ONE packed multi-node job. Run on the login node with `zsh scripts/submit_sweep.sh`. Do NOT sbatch this file itself; it computes the sweep directory and submits the job.
 
+On Perlmutter the queue wait for a 2-hour 1-node job can be ~1 day, while 4-7 node jobs slide into a ~2-hour wait window. We grab a few nodes at once (4 A100 GPUs per node) and run the sweep points concurrently, one GPU per point, via a bash background loop + srun step placement. The collect step runs inline at the end of the same job.
+
+### Nodes
+
+`NODES=6` -> 24 GPUs == 24 points -> every point runs at once, one GPU each (single wave, no risk of a 2nd wave overrunning the wall clock). Lower `NODES` to use fewer GPUs at the cost of extra waves; all sit in the same Perlmutter queue window. Keep `GPUS_TOTAL >= N_POINTS` for the clean one-point-per-GPU mapping.
+
+### Job
+
+The heredoc is the batch script; it is quoted (`EOF`) so shell expansion happens at job runtime, not now. `SWEEP_DIR`, `N_POINTS`, `GPUS_TOTAL` reach the job via `--export`. `--output` lives on the command line because SLURM does not expand shell vars in `#SBATCH` lines. Everything the job needs reaches it via `--export`.
+
+Each point is one srun step pinned to a single GPU. `--exact` lets multiple steps share the allocation simultaneously (without it the first step grabs whole nodes and the rest block). `--gpus-per-task=1` sets `CUDA_VISIBLE_DEVICES` per step so JAX in each point sees exactly one GPU, which matters, because JAX preallocates most of the memory on every device it can see. ~16 cores/56GB per A100 (4 GPUs, 64 cores, 256GB on a Perlmutter GPU node).
+
+Each point's log is captured so a crash in one point is easy to find and never sinks the others (collect tolerates missing point files). Each point runs both methods, so a point file is complete or absent, never half.
+
+Throttle to `GPUS_TOTAL` concurrent steps; start the next as soon as one frees a GPU (dynamic, so an uneven `N_POINTS`-over-`GPUS_TOTAL` split wastes no idle GPU time when `NODES` is lowered below the single-wave setting). `|| true` ensures a point that crashes does not abort the sweep under `set -e`. It just leaves its point file missing, and collect tolerates the gap.
+
+Join the per-point files into results.npz + wasserstein_vs_s.pdf (runs on the head node of the allocation; resilience to gaps is built into collect).
+
+## submit_hparam.sh
+
+One hyperparameter arm sweep, packed into a single multi-node job: three levels of one knob x eight initialization seeds = 24 runs, one A100 each, a single wave on 6 nodes. Run it on a login node with `zsh scripts/submit_hparam.sh`. Do NOT sbatch this file itself; it computes the arm directory and submits the job. The collect step runs inline at the end of the same job.
+
+Run on the login node:
+
+```zsh
+    zsh scripts/submit_hparam.sh                                  # lr_g at 3e-5 / 1e-4 / 3e-4
+    FLAG=--lr-d LEVELS="1e-4 3e-4 1e-3" zsh scripts/submit_hparam.sh
+    NODES=3 zsh scripts/submit_hparam.sh                          # half the GPUs, two waves
 ```
 
-```
+### Why every arm runs the same seeds
+
+Pairing is most of the available statistical power, and it is free. Across six default-configuration jet runs differing only in initialization, the per-run spread is SD 7.16 on particle jet mass and SD 1.91 on the mean over the six particle-level observables. Unpaired, resolving a 2-point difference needs ~201 runs per arm on mass and ~14 on the aggregate. The same seed in two arms starts from the same weights, and most of that variance cancels in the within-pair difference.
+
+Every sweep in `benchmarks/README.md` under "What was ruled out" ran **one** run per arm, each at a _different_ seed. `--data-seed 42` is pinned for the same reason: it is the second nuisance axis, and it has to be held rather than sampled.
+
+### `--run-dir`
+
+Without it every run lands on a second-resolution UTC timestamp under `runs/`, created with `exist_ok=True`. Twenty-four runs of identical shape launched together finish inside the same second, and the losers were overwritten with no error and no way to tell afterwards which arm had gone missing. `--run-dir` names each run so its arm is recoverable, and `workflow._new_run_dir` refuses a directory that already holds a `config.json` rather than landing on top of it. An _empty_ directory is accepted, because this script creates one per run to
+redirect `train.log` into before training starts.
+
+### Wall clock
+
+`--no-plots`: the figures are a large share of a short run's wall clock and no part of scoring one. Metrics still run, which is what the collect step reads. Training itself is ~15s per run at these parameters (`benchmarks/boundary.py`, A100); `-t01:00:00` is margin for the npz load, not for the GPU, since 24 processes read the 1M-event jet cache at once.
+
+### Warm up
+
+If the jet cache has not been populated, a cold cache pulls 3.3GB from Zenodo inside the job, 24 times over. Warm it on a login node first with `uv run python -c "from ran.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"`.
+
+### Options
+
+- `FLAG`: The arm axis. One value per level; the collect step reads the knob off the saved configs, so changing this to another flag needs no change downstream. Three levels around the default, so that the read is a trend across levels, and at n=8 against SD 1.9 the argmax of two arms is mostly luck.
+- `LEVELS`: The levels of the arm axis.
+- `SEEDS`: The seeds to run.
+- `NODES`: The number of nodes to use. n=8 x 3 levels = 24 runs. `NODES=6` -> 24 A100s -> a single wave, so the wall clock is one run's. Lower `NODES` to use fewer GPUs at the cost of extra waves.
+- `GPUS_PER_NODE`: The number of GPUs per node to use.
+- `GPUS_TOTAL`: The total number of GPUs to use.
+- `TRAIN_ARGS`: The training arguments to use.
+- `PROJECT_DIR`: The project directory.
+- `ARM_DIR`: The arm directory.
+- `JOB`: The job ID. `--time` is set for the wall clock of each run is ~15s of training (benchmarks/boundary.py, A100) plus npz loading and the scipy metrics. The margin is for the load, because 24 processes read the 1M-event jet cache at once.
+- `SLURM_JOB_ID`: The SLURM job ID.
+
+## submit_uncertainty.sh
+
+The bootstrap x seed variance design: `B` bootstrap datasets crossed with `S` initialization seeds, one `ran uncertainty run` per cell, then one `ran uncertainty collect` over the grid. The statistics — why a grid rather than two one-dimensional sweeps, why `data_seed` is held fixed, what the correction and the closure floor are for — are argued in `src/ran/uncertainty/README.md`; this section is only about the allocation.
+
+### Wall clock
+
+Written out rather than guessed at, since the last two launchers here were sized by feel and were wrong by a factor of six. A cell is one ordinary training run (~3 min at `-n1000000 -l3 -u128`) plus the jet cache read; call it 4 minutes. `B*S` cells over `NODES*4` GPUs is `ceil(B*S / (NODES*4))` waves. The default 8x8 on two nodes is 8 waves and about 35 minutes, inside the `-t01:00:00` requested. Raising `NODES` cuts waves and buys queue time; it does not make a cell faster, and a design that finishes in one wave on six nodes has spent an hour of queue to save twenty minutes of run.
+
+### Warm up
+
+Same as `submit_hparam.sh`, and it matters more here: a cold cache would pull 3.3GB from Zenodo `B*S` times over. `uv run python -c "from ran.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"` on a login node first.
+
+### Which grid to run
+
+`B=8 S=8` is the decomposition: both axes need at least two levels for the mean squares to have degrees of freedom, and eight apiece puts the components at a useful precision. `B=100 S=2` trades the seed axis for the bootstrap one, which is the shape for the bin-to-bin covariance — a `K x K` matrix from `B` replicates wants `B` well above `K`, and at 20 bins `B=50` already gave the right aggregate structure (lag correlations, effective rank) but let individual off-diagonal entries move by up to 0.39 between reruns; `B=100` is what the published numbers use.
+
+### Options
+
+- `B`: Bootstrap datasets. Minimum 2.
+- `S`: Initialization seeds. Minimum 2; `run` numbers cells seed-major, so a design cut short after `k*S` cells is still a complete grid over the datasets that finished.
+- `N_EVAL`: Size of the common evaluation set held out before resampling. Every cell is read on exactly these events; the default 100k costs 400KB per cell on disk.
+- `N_BINS`: Bins for the covariance, passed to `collect`. Equal-occupancy, so a discrete observable can come back with fewer.
+- `RUN_ARGS`: Training arguments. Defaults to the paper's configuration on purpose — a design run at cheaper settings is a variance budget for a model nobody is publishing.
+- `NODES`, `GPUS_PER_NODE`, `GPUS_TOTAL`, `PROJECT_DIR`, `DESIGN_DIR`, `JOB`: as in `submit_hparam.sh`.

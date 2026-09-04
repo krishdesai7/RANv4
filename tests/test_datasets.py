@@ -37,6 +37,7 @@ def _write_config(params: dict, tmp_path: Path) -> Path:
 class TestGenerateGaussianDataset:
     """Test multivariate Gaussian dataset generation."""
 
+    @pytest.mark.writes_default_cache
     def test_1d_uncorrelated(self, tmp_path) -> None:
         """1D scalar sigma should produce valid splits."""
         cfg = {
@@ -53,6 +54,7 @@ class TestGenerateGaussianDataset:
         assert splits.val is not None
         assert splits.test is not None
 
+    @pytest.mark.writes_default_cache
     def test_2d_correlated_shapes(self, tmp_path) -> None:
         """2D with full covariance should produce correct shapes."""
         cfg = {
@@ -69,6 +71,7 @@ class TestGenerateGaussianDataset:
         assert events.z.shape[1] == 2
         assert events.x.shape[1] == 2
 
+    @pytest.mark.writes_default_cache
     def test_params_dict_interface(self) -> None:
         """Passing promoted params directly should work (for --load_run)."""
         params = GaussianConfig(
@@ -147,6 +150,7 @@ class TestGenerateGaussianDataset:
         ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         ds2.generate_gaussian_dataset(config_path=path, n_samples=500)
 
+    @pytest.mark.writes_default_cache
     def test_smearing_preserves_event_coupling(self, tmp_path) -> None:
         """Detector-level values should be correlated with particle-level."""
         cfg = {

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 import matplotlib as mpl
 import numpy as np
@@ -37,6 +37,20 @@ mpl.rcParams["grid.linewidth"] = 0.5
 mpl.rcParams["grid.alpha"] = 0.6
 mpl.rcParams["grid.linestyle"] = "--"
 mpl.rcParams["lines.markerfacecolor"] = "none"
+
+
+# `weighted_mmd` is the unbiased U-statistic estimator, which is negative
+# roughly half the time once the two distributions actually match (MMD^2 is 0
+# when P = Q, so an unbiased estimator of it must cross zero). A converged
+# run's criterion curve therefore has values around and below zero right where
+# selection lands. A plain log axis silently masks non-positive values, which
+# hides exactly the epochs a converged run cares about; `symlog` renders those
+# linearly while keeping the log compression that makes the early, large
+# epochs readable. `SELECTION_MMD_LINTHRESH` sets where that linear region
+# starts -- near the estimator's resolution floor (~5e-4 at m=8192, see
+# `train.MMD_SUBSAMPLE`), so the linear region roughly matches the noise band
+# rather than being an arbitrary cutoff.
+SELECTION_MMD_LINTHRESH: Final[float] = 5e-4
 
 
 class _PanelSpec(NamedTuple):
@@ -356,4 +370,72 @@ def plot_losses(
 
     figure.tight_layout()
     figure.savefig(fname=save_path, bbox_inches="tight")
+    logger.info("Saved %s", save_path)
+
+
+def plot_selection(
+    history: dict[str, list[float]],
+    best_epoch: int,
+    save_path: Path = Path("plots/selection.pdf"),
+) -> None:
+    """The two MMD curves and the epoch selection landed on.
+
+    Detector-level MMD is the criterion; particle-level is the diagnostic.
+    Where they diverge -- detector still falling while particle turns up -- is
+    the ill-posedness made visible, and it is the plot that answers whether
+    truth-free selection costs anything. The particle curve is absent for a
+    real measurement, which has no truth to score against, so it is optional.
+
+    ESS shares the figure because the adversarial objective is linear in the
+    weights and therefore maximized at a simplex vertex: a falling MMD bought
+    by a collapsing effective sample size is not an improvement.
+    """
+    epochs: NDArray[np.uintc] = np.arange(len(history["val_mmd"]), dtype=np.uintc)
+
+    figure: Figure = Figure(figsize=(8, 5))
+    figure.canvas = FigureCanvasPdf(figure)
+    ax: Axes = figure.add_subplot(111)
+
+    ax.plot(
+        epochs,
+        np.array(history["val_mmd"], dtype=np.double),
+        label="Detector MMD$^2$ (criterion)",
+        color="C0",
+        lw=2,
+    )
+    if "val_mmd_particle" in history:
+        ax.plot(
+            epochs,
+            np.array(history["val_mmd_particle"], dtype=np.double),
+            label="Particle MMD$^2$ (diagnostic)",
+            color="C3",
+            ls="--",
+            lw=2,
+        )
+    if best_epoch >= 0:
+        ax.axvline(
+            best_epoch,
+            color="k",
+            ls=":",
+            lw=1,
+            label=f"selected (epoch {best_epoch + 1})",
+        )
+    ax.set_yscale("symlog", linthresh=SELECTION_MMD_LINTHRESH)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel(r"MMD$^2$")
+
+    ess: Axes = ax.twinx()
+    ess.plot(
+        epochs,
+        np.array(history["val_ess"], dtype=np.double),
+        color="C7",
+        lw=1,
+        alpha=0.6,
+    )
+    ess.set_ylabel("Effective sample size", color="C7")
+    ess.tick_params(axis="y", labelcolor="C7")
+
+    ax.legend(loc="best")
+    figure.tight_layout()
+    figure.savefig(save_path)
     logger.info("Saved %s", save_path)

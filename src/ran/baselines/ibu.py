@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..evaluate import apply_to_runs, render_metrics
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, Populations, VariableOutcome
+from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, VariableOutcome
 from ..train import EPS
 from ._shared import (
     evaluate_dimension,
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from numpy._typing import _DTypeLikeFloat
     from numpy.typing import NDArray
 
-    from ..rantypes import EventArray, MetricRecord, RunConfig
+    from ..rantypes import EventArray, MetricRecord, Populations, RunConfig
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -349,9 +349,6 @@ def _run_and_evaluate(
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
-        # Fit on train+val, then score the held-out test split with the result,
-        # so the sample scored is genuinely not the sample fitted --- see
-        # `UnfoldingPopulations`.
         unfolding: VariableUnfolding = unfold_variable(
             variable_name=variable_name,
             mc_gen=fit.mc.z[:, dimension],

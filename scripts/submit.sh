@@ -17,7 +17,7 @@ PROJECT_DIR=/global/u1/k/kdesai/RANv4
 cd "${PROJECT_DIR}"
 
 echo "RAN_CACHE_DIR = ${RAN_CACHE_DIR:-<unset: using ./.cache>}"
-TRAIN_ARGS=(-Djets -n1000000 -l3 -u128 -P100)
+TRAIN_ARGS=(-Djets -n1000000 -l3 -u128)
 
 mkdir -p runs
 marker="$(mktemp)"

@@ -152,6 +152,10 @@ indent-style = "space"
 docstring-code-format = true
 
 
+# Version bumps are inferred from the labels on the PRs merged since the last
+# tag. `major-labels` is deliberately empty: 1.0 is reserved for the first PyPI
+# publication, so no label can drive the version past 0.x. A `breaking` PR takes
+# the minor slot instead, which is the usual reading of semver below 1.0.
 [tool.rooster]
 changelog-contributors = false
 major-labels = []
@@ -165,7 +169,6 @@ ignore-labels = ["internal", "ci", "testing", "automations"]
 "Configuration" = ["configuration"]
 "Performance" = ["performance"]
 "Bug fixes" = ["bug"]
-"Rust API" = ["rustlib"]
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
 

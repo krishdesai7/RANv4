@@ -9,9 +9,15 @@ name: Release
 # There is deliberately no release *pull request*. A bot-authored PR cannot be
 # opened without either loosening repository settings or minting a PAT, and it
 # buys nothing on a repo with one maintainer: the diff is a version string, a
-# changelog stanza and a lockfile hash, all of it generated. The master ruleset
-# grants the GitHub Actions app (id 15368) a bypass so this job -- and only
-# this job -- can push to a branch that otherwise requires a green PR.
+# changelog stanza and a lockfile hash, all of it generated.
+#
+# Instead the master ruleset lists a single write-scoped deploy key as its only
+# bypass actor, and this job checks out with that key. GITHUB_TOKEN cannot be
+# granted a bypass on a user-owned repository -- the GitHub Actions app is only
+# accepted as a bypass actor on organization-owned repos -- and a PAT would
+# carry the maintainer.s own identity, re-opening direct pushes to master for a
+# human. A deploy key is scoped to this repository and to pushing, so the
+# exception belongs to this workflow rather than to anyone.
 
 on:
   workflow_dispatch:
@@ -44,6 +50,9 @@ jobs:
         with:
           # rooster diffs against the last tag, so it needs the full history.
           fetch-depth: 0
+          # Wires the deploy key into the git remote, so the push below goes
+          # over SSH as the ruleset's bypass actor rather than as GITHUB_TOKEN.
+          ssh-key: ${{ secrets.RELEASE_SSH_KEY }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.12.5,<0.13"]
+requires = ["uv_build>=0.12.7,<0.13"]
 build-backend = "uv_build"
 
 
@@ -8,7 +8,7 @@ name = "ran"
 version = "0.1.5"
 description = "Reweighting Adversarial Networks"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "beartype>=0.22.9",
     "jax>=0.11.1 ; platform_machine == 'arm64' and sys_platform == 'darwin'",
@@ -19,7 +19,7 @@ dependencies = [
     "numpy>=2.5.2",
     "pyyaml>=6.0.3",
     "scipy>=1.18.1",
-    "typer>=0.27.1",
+    "typer>=0.27.2",
 ]
 
 [project.scripts]
@@ -37,12 +37,12 @@ email = "krish@desai.ml"
 
 [dependency-groups]
 dev = [
-    "complexipy>=7.0.1",
+    "complexipy>=8.0.0",
     "ipykernel>=7.3.0",
     "pre-commit>=4.6.2",
     "pyrefly>=1.2.0",
     "pytest>=9.1.1",
-    "ruff>=0.16.4",
+    "ruff>=0.16.6",
     "rust-just>=1.58.0",
     "types-pyyaml>=6.0.12.20260815",
 ]
@@ -79,7 +79,7 @@ filterwarnings = [
 
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python"
-search-path = ["src"]
+search-path = ["src", "."]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"

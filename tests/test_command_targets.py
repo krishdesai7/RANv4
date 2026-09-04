@@ -16,3 +16,10 @@ def test_batch_orchestrators_have_domain_names() -> None:
 
     assert callable(evaluate_runs)
     assert callable(evaluate_ibu_runs)
+
+
+def test_the_variance_design_has_package_entry_points() -> None:
+    from ran.uncertainty import collect, run_cell
+
+    assert callable(run_cell)
+    assert callable(collect)

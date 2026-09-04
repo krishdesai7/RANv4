@@ -38,7 +38,6 @@ mpl.use(backend="Agg")
 # here at what their CLI commands use rather than exposed as sweep flags.
 _HIDDEN_UNITS: int = 64
 _N_LAYERS: int = 2
-_PATIENCE: int = 5
 _IBU_ITERATIONS: int = 10
 
 
@@ -169,7 +168,6 @@ def run_ran(
         dim=1,
         hidden_units=_HIDDEN_UNITS,
         n_layers=_N_LAYERS,
-        patience=_PATIENCE,
         n_epochs=ran_epochs,
         seed=init_seed,
     )

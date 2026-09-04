@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import json
 import logging
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from numpy import dtype, float64, ndarray
 
 
 def _completion_records(caplog, logger_name: str):
@@ -60,11 +66,11 @@ def test_evaluation_records_metrics_artifact_completion(
     )
 
     # Both are called by keyword, so the stubs have to name their parameters.
-    def fake_collect_test_data(test_ds):
+    def fake_collect_test_data(test_ds) -> ZXY:
         del test_ds
         return test_data
 
-    def fake_get_weights(model, z_gen):
+    def fake_get_weights(model, z_gen) -> ndarray[tuple[int], dtype[float64]]:
         del model, z_gen
         return np.ones(2)
 

@@ -5,7 +5,7 @@ This directory contains the comparison baselines for the RAN project.
 Comparison baseline: **IBU**
 
 ```python
-    from ran.baselines.ibu import evaluate_runs
+    from ran.baselines import evaluate_runs
 ```
 
 ## Shared
@@ -30,13 +30,14 @@ Validate a run's config.json into a RunConfig.
 
 Checks the shape assumptions a baseline relies on, then partitions.
 
-### `_shared::prepare_populations`
+### function`prepare_populations(DatasetSplits, int) -> UnfoldingPopulations`
 
 Returns an `UnfoldingPopulations`, which unpacks as `(fit, test)`. Both are `Populations`, and they are disjoint. `fit` is train+val and supplies the response (`fit.mc.z` and `fit.mc.x`, paired per event) and the measurement (`fit.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
-Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist.
+By construction, `fit` is `Split.TRAIN | Split.VAL`, not `Split.ALL`. A baseline fitted on every event and then
+scored on the test split would be scored on data it had already used and would be handed information RAN is denied: `train` does read the test split now, to compute a test-level MMD diagnostic, but nothing weight-bearing depends on that read, so the test split still cannot influence the returned model or its selection (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`). The comparison is only a comparison if both sides see the same events.
 
-One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
+Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist. One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
 
 #### Arguments
 
@@ -47,9 +48,9 @@ One thing still does widen: the two population-count checks and the mean-one pos
 
 - An `UnfoldingPopulations` object containing the fit (train+val) and test populations.
 
-### `_shared::load_populations`
+### function `load_populations(RunConfig) -> UnfoldingPopulations`
 
-Rebuild the run's dataset and split it into the baseline populations.
+Rebuild the run's dataset and split it into the baseline populations. It provides the run's dataset as populations, at the float64 RAN generated it in. Baselines that need another precision call `astype` at their own boundary.
 
 #### Arguments
 
@@ -93,7 +94,7 @@ A per-bin correction, learned from one population and applied to another.
 
 IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on train+val and applied to the held-out test split, so the sample it scores is genuinely not the sample it learned from.
 
-That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied, since `ran.train` never reads the test split. A comparison is only a comparison if both sides see the same events.
+That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied: `ran.train` reads the test split only to compute a diagnostic that cannot influence the returned model, and never to fit or select. A comparison is only a comparison if both sides see the same events.
 
 ### `ibu::_assign_bins`
 
@@ -173,6 +174,21 @@ Fit one variable's reweighting. Takes one column each of a `Populations`' `mc.z`
 #### Returns
 
 - A `VariableUnfolding`, whose `weights_for(gen)` gives per-event weights for whichever sample is being scored.
+
+### function `evaluate_single(Path, bool, int, float) -> dict[str, MetricRecord]`
+
+Run IBU baseline on a single run. It fits on train+val, then scores the held-out test split with the result, so the sample scored is genuinely not the sample fitted.
+
+#### Arguments
+
+- `run_dir: Path` Path to a single run.
+- `force: bool = False` Recompute even if metrics_ibu.json exists.
+- `n_iterations: int = 10` Number of IBU iterations.
+- `purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD` Purity threshold for automatic binning.
+
+#### Returns
+
+- A `dict[str, MetricRecord]` containing the metrics.
 
 ### `ibu::evaluate_runs`
 

@@ -22,8 +22,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from ran import workflow
-from ran.data import parse_gaussian_config
-from ran.rantypes import DatasetName
+from ran.data import RANDataset, parse_gaussian_config
+from ran.rantypes import ZXY, DatasetName, Events, Populations
+from ran.rantypes.events import DatasetSplits
+from ran.train import TrainResult, train
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -92,7 +94,6 @@ def _reload(run_dir: Path) -> None:
         load_run=run_dir,
         hidden_units=4,
         n_layers=1,
-        patience=1,
         seed=None,
         data_seed=0,
     )
@@ -115,6 +116,7 @@ def _write_run(tmp_path, gaussian_params: dict, **overrides):
     return run_dir
 
 
+@pytest.mark.writes_default_cache
 def test_load_run_reads_a_config_written_by_save_run(
     tmp_path, monkeypatch, stub_heavy
 ) -> None:
@@ -130,6 +132,7 @@ def test_load_run_reads_a_config_written_by_save_run(
     assert stub_heavy.evaluated == (run_dir, False)
 
 
+@pytest.mark.writes_default_cache
 def test_load_run_reads_master_era_sigma_keys(
     tmp_path, monkeypatch, stub_heavy
 ) -> None:
@@ -152,6 +155,7 @@ def test_load_run_reads_master_era_sigma_keys(
     assert len(stub_heavy.plots) == 3
 
 
+@pytest.mark.writes_default_cache
 @pytest.mark.usefixtures("stub_heavy")
 def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch) -> None:
     """A reload must rebuild the split the run trained on, not a fresh one.
@@ -180,3 +184,372 @@ def test_load_run_forwards_recorded_seed_and_size(tmp_path, monkeypatch) -> None
     _reload(run_dir)
 
     assert seen == {"seed": 7, "n_samples": 600}
+
+
+_GAUSSIAN_CONFIG = """\
+mu_gen: [0.5]
+mu_true: [0.0]
+sigma_gen: 0.9
+sigma_true: 1.0
+sigma_detector: 0.5
+"""
+
+
+@pytest.mark.writes_default_cache
+def test_particle_curve_is_recorded_when_truth_exists(tmp_path, monkeypatch) -> None:
+    """The diagnostic curve lives here, not in `train`, because it needs
+    `z_true` -- and putting truth-derived Grams in the trace is exactly what
+    `Populations` keeping `truth` outside `Events` exists to prevent.
+    """
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "gaussian.yaml"
+    config_path.write_text(_GAUSSIAN_CONFIG)
+
+    workflow.run(
+        128,
+        2000,
+        config_path,
+        DatasetName.gaussian,
+        (),
+        None,
+        8,
+        1,
+        3,
+        42,
+        n_epochs=4,
+        plots=False,
+    )
+
+    run_dir = next((tmp_path / "runs").iterdir())
+    history = dict(np.load(run_dir / "history.npz"))
+    assert "val_mmd_particle" in history
+    assert len(history["val_mmd_particle"]) == 4
+    assert np.all(np.isfinite(history["val_mmd_particle"]))
+
+    config = json.loads((run_dir / "config.json").read_text())
+    assert config["best_epoch"] >= 0
+    assert config["mmd_subsample"] == 16384
+    assert len(config["mmd_sigmas_detector"]) == 5
+    assert len(config["mmd_sigmas_particle"]) == 5
+    # The unsound knobs are gone from the record, not merely unused.
+    assert "criterion" not in config
+    assert "patience" not in config
+    assert "min_delta" not in config
+
+
+class TestParticleCurve:
+    """Direct unit tests of `_particle_curve`, isolated from `train`/`run`.
+
+    A black-box test through `run()` can only exercise the has-truth branch
+    -- both real dataset sources (Gaussian, jets) always carry truth. But
+    `_particle_curve` itself takes just a `DatasetSplits` and a `TrainResult`,
+    so the no-truth branch is directly reachable without either.
+    """
+
+    @staticmethod
+    def _truthless_splits(n: int = 64) -> DatasetSplits:
+        """A `Populations` built with no `truth` argument, the way a real
+        measurement's would be -- see `tests/test_datasets.py`.
+        """
+        rng = np.random.default_rng(seed=51)
+        z_gen = rng.normal(size=(n, 1)).astype(np.single)
+        x_sim = (z_gen + rng.normal(0, 0.4, size=(n, 1))).astype(np.single)
+        x_data = rng.normal(size=(n, 1)).astype(np.single)
+        pops = Populations.create(mc=Events(z_gen, x_sim), data=x_data)
+        assert not pops.has_truth
+        return RANDataset(batch_size=32, seed=9).splits_from_data(pops.interleave())
+
+    def test_returns_none_without_truth(self) -> None:
+        """No truth means no diagnostic -- and no touching `result.g`/
+        `result.params` to find that out: a stub with both `None` still
+        works, which is only true if the `has_truth` guard runs first.
+        """
+        splits = self._truthless_splits()
+        stub = TrainResult(
+            g=None,  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            d=None,  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            history={},
+            seed=0,
+        )
+
+        assert workflow._particle_curve(splits, stub) is None
+
+    def test_returns_a_curve_with_truth(self) -> None:
+        """The companion case: with truth present, a real curve comes back.
+
+        Without this, a `_particle_curve` that always returned `None` would
+        pass the no-truth test above for the wrong reason.
+        """
+        rng = np.random.default_rng(seed=52)
+        n = 384
+        z = rng.normal(size=(2 * n, 1)).astype(np.single)
+        x = (z + rng.normal(0, 0.4, size=(2 * n, 1))).astype(np.single)
+        y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
+        splits = RANDataset(batch_size=64, seed=10).splits_from_data(
+            ZXY(Events(z, x), y)
+        )
+        result = train(splits, dim=1, n_epochs=3, hidden_units=8, n_layers=1, seed=5)
+
+        curve = workflow._particle_curve(splits, result)
+
+        assert curve is not None
+        values, sigmas = curve
+        assert len(values) == 3
+        assert len(sigmas) == 5
+        assert all(np.isfinite(v) for v in values)
+
+
+def test_run_omits_val_mmd_particle_without_truth(tmp_path, monkeypatch) -> None:
+    """`run()` drops the key rather than writing `None`/`NaN` into history.
+
+    Neither real dataset source (`_prepare_gaussian`, `_prepare_jets`) ever
+    produces a truthless split, so this stands `_prepare_gaussian` up on a
+    truthless `DatasetSplits` -- the same one `TestParticleCurve` builds
+    directly -- to prove `run()`'s own no-truth path end to end.
+    """
+    monkeypatch.chdir(tmp_path)
+    splits = TestParticleCurve._truthless_splits(n=200)
+
+    def fake_prepare_gaussian(
+        config, saved_config, batch_size, n_samples, data_seed
+    ) -> tuple[DatasetSplits, int, None]:
+        del config, saved_config, batch_size, n_samples, data_seed
+        return splits, 1, None
+
+    monkeypatch.setattr(workflow, "_prepare_gaussian", fake_prepare_gaussian)
+
+    workflow.run(
+        32,
+        200,
+        None,
+        DatasetName.gaussian,
+        (),
+        None,
+        8,
+        1,
+        6,
+        51,
+        n_epochs=2,
+        plots=False,
+    )
+
+    run_dir = next((tmp_path / "runs").iterdir())
+    history = dict(np.load(run_dir / "history.npz"))
+    assert "val_mmd_particle" not in history
+
+
+class _StubSplits:
+    """Just enough of `DatasetSplits` for `_draw_figures` to read `.test`
+    without touching it -- `plot_detector_level`/`plot_particle_level` are
+    monkeypatched out in these tests, but `_draw_figures` still evaluates
+    `splits.test` as the call argument.
+    """
+
+    test = None
+
+
+class TestDrawFiguresSelection:
+    """R15: a pre-MMD run's history has no `val_mmd`/`val_ess` at all, and
+    `--load-run` must still be able to replot it. `plot_selection` would raise
+    `KeyError` on that history and take the other two figures down with it, so
+    `_draw_figures` skips it -- rather than erroring -- when `val_mmd` is
+    absent.
+    """
+
+    @staticmethod
+    def _patch_plot_fns(monkeypatch) -> dict[str, list]:
+        calls: dict[str, list] = {
+            "plot_detector_level": [],
+            "plot_particle_level": [],
+            "plot_losses": [],
+            "plot_selection": [],
+        }
+
+        def make(name: str):
+            def fn(*args, **kwargs) -> None:
+                calls[name].append((args, kwargs))
+
+            return fn
+
+        for name in calls:
+            monkeypatch.setattr(workflow, name, make(name))
+        return calls
+
+    def test_missing_val_mmd_does_not_raise_and_skips_selection(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        calls = self._patch_plot_fns(monkeypatch)
+        history = {"train_d": [0.7], "train_g": [0.7], "val_d": [0.7]}
+
+        workflow._draw_figures(
+            tmp_path,
+            _StubSplits(),  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            None,  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            history,
+            1,
+            None,
+            -1,
+            plots=True,
+        )
+
+        assert not calls["plot_selection"]
+        assert calls["plot_detector_level"]
+        assert calls["plot_particle_level"]
+        assert calls["plot_losses"]
+
+    def test_val_mmd_present_draws_selection_with_best_epoch(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        calls = self._patch_plot_fns(monkeypatch)
+        history = {
+            "train_d": [0.7],
+            "train_g": [0.7],
+            "val_d": [0.7],
+            "val_mmd": [0.1],
+            "val_ess": [10.0],
+        }
+
+        workflow._draw_figures(
+            tmp_path,
+            _StubSplits(),  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            None,  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            history,
+            1,
+            None,
+            5,
+            plots=True,
+        )
+
+        assert len(calls["plot_selection"]) == 1
+        args, kwargs = calls["plot_selection"][0]
+        assert args[0] is history
+        assert args[1] == 5
+        assert kwargs["save_path"] == tmp_path / "selection.pdf"
+
+
+def _fake_load_artifacts(run_dir: Path):
+    del run_dir
+    return lambda z: np.ones((len(z), 1)), {"train_d": [0.7]}
+
+
+def _fake_evaluate_run(run_dir: Path, force: bool) -> None:
+    del run_dir, force
+
+
+def _stub_best_epoch_reload(tmp_path, monkeypatch, run_dir: Path) -> dict[str, int]:
+    """Stand up a reload that stubs everything but `_draw_figures`'s
+    `best_epoch` argument, and return the dict it lands in.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(workflow, "_load_artifacts", _fake_load_artifacts)
+    monkeypatch.setattr(workflow, "evaluate_run", _fake_evaluate_run)
+    seen: dict[str, int] = {}
+
+    def fake_draw_figures(
+        run_dir, splits, g, history, dim, var_info, best_epoch, /, *, plots
+    ) -> None:
+        del run_dir, splits, g, history, dim, var_info, plots
+        seen["best_epoch"] = best_epoch
+
+    monkeypatch.setattr(workflow, "_draw_figures", fake_draw_figures)
+    _reload(run_dir)
+    return seen
+
+
+@pytest.mark.writes_default_cache
+def test_reload_sources_best_epoch_from_recorded_config(tmp_path, monkeypatch) -> None:
+    """R15: on `--load-run` there is no `TrainResult`, so `best_epoch` comes
+    from `config.json` (`RunConfig.source`), not from a training result.
+    """
+    (tmp_path / "cfg.yaml").write_text(CONFIG_2D)
+    params = parse_gaussian_config(tmp_path / "cfg.yaml")
+    run_dir = _write_run(tmp_path, params.model_dump(), best_epoch=7)
+
+    seen = _stub_best_epoch_reload(tmp_path, monkeypatch, run_dir)
+
+    assert seen["best_epoch"] == 7
+
+
+@pytest.mark.writes_default_cache
+def test_reload_defaults_best_epoch_for_a_legacy_config(tmp_path, monkeypatch) -> None:
+    """A config.json written before this branch has no `best_epoch` key."""
+    (tmp_path / "cfg.yaml").write_text(CONFIG_2D)
+    params = parse_gaussian_config(tmp_path / "cfg.yaml")
+    run_dir = _write_run(tmp_path, params.model_dump())
+
+    seen = _stub_best_epoch_reload(tmp_path, monkeypatch, run_dir)
+
+    assert seen["best_epoch"] == -1
+
+
+class TestNewRunDir:
+    """Where a run lands, and what happens when two of them want one place.
+
+    `_save_run` used to build the path inline as a second-resolution UTC
+    timestamp and `mkdir(exist_ok=True)`. A packed sweep launches runs of
+    identical shape at once, so several finish inside the same second: the
+    losers were overwritten with no error and no way to tell afterwards which
+    arm had gone missing. Both halves of the fix are here -- an explicit
+    directory that refuses to land on an existing run, and a default that stops
+    colliding with itself.
+    """
+
+    def test_explicit_directory_is_created_and_returned(self, tmp_path) -> None:
+        wanted = tmp_path / "hp_lrg" / "lrg1e-4_seed00"
+
+        assert workflow._new_run_dir(wanted) == wanted
+        assert wanted.is_dir()
+
+    def test_explicit_directory_refuses_to_overwrite_a_finished_run(
+        self, tmp_path
+    ) -> None:
+        occupied = tmp_path / "arm" / "seed00"
+        occupied.mkdir(parents=True)
+        (occupied / "config.json").write_text("{}")
+
+        with pytest.raises(FileExistsError, match="seed00"):
+            workflow._new_run_dir(occupied)
+
+    def test_explicit_directory_accepts_a_path_the_launcher_pre_made(
+        self, tmp_path
+    ) -> None:
+        """srun redirects its log into the arm directory, so it may exist."""
+        empty = tmp_path / "arm" / "seed00"
+        empty.mkdir(parents=True)
+
+        assert workflow._new_run_dir(empty) == empty
+
+    def test_default_directories_do_not_collide_within_one_second(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        first = workflow._new_run_dir(None)
+        second = workflow._new_run_dir(None)
+
+        assert first != second
+        assert first.is_dir()
+        assert second.is_dir()
+        assert first.parent.name == second.parent.name == "runs"
+
+
+def test_run_rejects_an_output_directory_on_the_reload_path(tmp_path) -> None:
+    """`--load-run` already names a directory; `--run-dir` would be ignored.
+
+    A flag that silently does nothing in a sweep script is the same class of
+    bug as the clobber it was added to prevent.
+    """
+    with pytest.raises(ValueError, match="--run-dir"):
+        workflow.run(
+            batch_size=8,
+            n_samples=32,
+            config=None,
+            dataset=DatasetName.gaussian,
+            variables=(),
+            load_run=tmp_path / "saved",
+            hidden_units=4,
+            n_layers=1,
+            seed=None,
+            data_seed=0,
+            run_dir=tmp_path / "elsewhere",
+        )

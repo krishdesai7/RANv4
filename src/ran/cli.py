@@ -23,6 +23,7 @@ from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+uncertainty_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app.add_typer(
@@ -30,6 +31,11 @@ app.add_typer(
 )
 app.add_typer(
     typer_instance=sweep_app, name="sweep", help="Run cubic-response sweep steps."
+)
+app.add_typer(
+    typer_instance=uncertainty_app,
+    name="uncertainty",
+    help="Bootstrap x seed variance decomposition.",
 )
 
 
@@ -82,7 +88,32 @@ def train_command(
     load_run: Annotated[Path | None, typer.Option("--load-run", "-r")] = None,
     hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
     n_layers: Annotated[int, typer.Option("--n-layers", "-l", min=1)] = 2,
-    patience: Annotated[int, typer.Option("--patience", "-P", min=0)] = 5,
+    n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 100,
+    n_disc_steps: Annotated[int, typer.Option("--n-disc-steps", "-k", min=1)] = 5,
+    lr_g: Annotated[float, typer.Option("--lr-g", min=0.0)] = 3e-5,
+    lr_d: Annotated[float, typer.Option("--lr-d", min=0.0)] = 1e-4,
+    lambda_dispersion: Annotated[
+        float,
+        typer.Option(
+            "--lambda-dispersion",
+            min=0.0,
+            help="Penalty on the variance of g's weights. 0 disables it.",
+        ),
+    ] = 0.015,
+    plots: Annotated[
+        bool,
+        typer.Option(
+            "--plots/--no-plots",
+            help="Draw figures. Off is for sweeps: metrics still run.",
+        ),
+    ] = True,
+    run_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--run-dir",
+            help="Where to save this run. Default is a timestamp under runs/.",
+        ),
+    ] = None,
     seed: int | None = None,
     data_seed: int = 42,
 ) -> None:
@@ -95,9 +126,15 @@ def train_command(
         load_run,
         hidden_units,
         n_layers,
-        patience,
         seed,
         data_seed,
+        n_epochs=n_epochs,
+        n_disc_steps=n_disc_steps,
+        lr_g=lr_g,
+        lr_d=lr_d,
+        lambda_dispersion=lambda_dispersion,
+        plots=plots,
+        run_dir=run_dir,
     )
 
 
@@ -152,6 +189,72 @@ def sweep_collect_command(
     from .experiments.cubic_sweep import collect
 
     collect(sweep_dir, n_points)
+
+
+@uncertainty_app.command(name="run")
+def uncertainty_run_command(
+    cell: Annotated[int, typer.Option("--cell", "-c", min=0)],
+    design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
+    n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
+    n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
+    n_eval: Annotated[int, typer.Option("--n-eval", min=1)] = 100_000,
+    dataset: Annotated[DatasetName, typer.Option("--dataset", "-D")] = DatasetName.jets,
+    variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
+    config: Path | None = None,
+    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
+    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
+    hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
+    n_layers: Annotated[int, typer.Option("--n-layers", "-l", min=1)] = 2,
+    n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 100,
+    n_disc_steps: Annotated[int, typer.Option("--n-disc-steps", "-k", min=1)] = 5,
+    lr_g: Annotated[float, typer.Option("--lr-g", min=0.0)] = 3e-5,
+    lr_d: Annotated[float, typer.Option("--lr-d", min=0.0)] = 1e-4,
+    lambda_dispersion: Annotated[
+        float, typer.Option("--lambda-dispersion", min=0.0)
+    ] = 0.015,
+    data_seed: int = 42,
+    init_seed: int = 0,
+) -> None:
+    """Train one (bootstrap dataset, init seed) cell of the design."""
+    from .uncertainty import DesignSpec, run_cell
+
+    run_cell(
+        cell,
+        design_dir,
+        DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
+        dataset=dataset,
+        variables=_canonical_variables(variable),
+        config=config,
+        n_samples=n_samples,
+        n_eval=n_eval,
+        batch_size=batch_size,
+        hidden_units=hidden_units,
+        n_layers=n_layers,
+        n_epochs=n_epochs,
+        n_disc_steps=n_disc_steps,
+        lr_g=lr_g,
+        lr_d=lr_d,
+        lambda_dispersion=lambda_dispersion,
+    )
+
+
+@uncertainty_app.command(name="collect")
+def uncertainty_collect_command(
+    design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
+    n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
+    n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
+    n_bins: Annotated[int, typer.Option("--n-bins", min=2)] = 20,
+    data_seed: int = 42,
+    init_seed: int = 0,
+) -> None:
+    """Decompose a finished design and write its table, npz and figure."""
+    from .uncertainty import DesignSpec, collect
+
+    collect(
+        design_dir,
+        DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
+        n_bins=n_bins,
+    )
 
 
 @app.command(name="leakage-check")

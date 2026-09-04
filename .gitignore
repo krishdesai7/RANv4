@@ -31,3 +31,4 @@ CLAUDE.md
 
 # Local task worktrees
 .worktrees/
+.ipynb_checkpoints

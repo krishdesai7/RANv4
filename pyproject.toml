@@ -27,7 +27,7 @@ ran = "ran.cli:app"
 
 [project.urls]
 repository = "https://github.com/krishdesai7/RANv4"
-Changelog = "https://github.com/krishdesai7/RANv4/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/krishdesai7/RANv4/blob/master/CHANGELOG.md"
 Releases = "https://github.com/krishdesai7/RANv4/releases"
 
 [[project.authors]]

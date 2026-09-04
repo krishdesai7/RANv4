@@ -1,8 +1,13 @@
 name: CI
 
+# `push` is scoped to master so a pull request gets one run, not two. With both
+# triggers unscoped every PR commit was checked twice -- identical job, twice the
+# minutes -- while pushes to master still need their own run because the release
+# workflow commits there directly.
 on:
   pull_request:
   push:
+    branches: [master]
 
 # A branch only needs its newest commit checked. Without this, pushing three
 # times in a minute queues three full runs and the first two are already stale.

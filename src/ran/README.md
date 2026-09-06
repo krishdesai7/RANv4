@@ -4,7 +4,7 @@
 
 Importing anything under `ran` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
 
-`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`ran.rantypes.constants`, with its annotation twin `EventArray` in :mod:`ran.rantypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`ran.models` follow from it. Scores are not pinned: the scipy metrics return float64 and stay there.
+`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`ran.rantypes.constants`, with its annotation twin `EventArray` in :mod:`ran.rantypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`ran.models` follow from it.
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
@@ -18,7 +18,7 @@ Computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and 
 
 **Every one of them runs on device.** The metrics were scipy and `np.histogram` in a Python loop over columns, which at the shipped 500k jet configuration was 63% of the `evaluate` phase and half of it Wasserstein alone. They are now `jnp`, vectorized across dimensions so one dispatch does every column, and the only thing that crosses back to the host is the handful of numbers per dimension they reduce to. Measured at 100k-vs-100k in 6D: 1.23s of metrics became ~0.28s of compute plus a one-time XLA compile, before any GPU.
 
-Two things did *not* change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move *toward* float64 truth, because `np.histogram` accumulates in the weights' dtype and RAN's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
+Two things did _not_ change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move _toward_ float64 truth, because `np.histogram` accumulates in the weights' dtype and RAN's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
 
 Usage:
 
@@ -66,7 +66,7 @@ They are **float32 on purpose**. `JAX_ENABLE_X64=0` truncates a float64 array on
 
 Weighted bin counts per column, `(dim, n_bins)`. `searchsorted(..., "right") - 1` reproduces `np.histogram`'s placement against explicit edges, and the clip is its closed last bin, where the maxima land.
 
-The weights are **centered before they are scattered** and the mean added back through the exact count. Scattering them raw sums ~200 magnitudes per bin in float32 --- which is what `np.histogram` did --- while centering leaves the scatter summing residuals, an order of magnitude smaller, and the integer count is exact in float32 out to 2**24. The mean carries its own error and does not matter: it multiplies every bin of a column by the same factor, which `_normalize` divides straight back out.
+The weights are **centered before they are scattered** and the mean added back through the exact count. Scattering them raw sums ~200 magnitudes per bin in float32 --- which is what `np.histogram` did --- while centering leaves the scatter summing residuals, an order of magnitude smaller, and the integer count is exact in float32 out to 2\*\*24. The mean carries its own error and does not matter: it multiplies every bin of a column by the same factor, which `_normalize` divides straight back out.
 
 ### `_cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxArray`
 

@@ -9,16 +9,15 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
-from scipy.stats import wasserstein_distance
-
-from ..baselines import unfold_variable
-from ..data import RANDataset
-from ..rantypes import (
+from ran.baselines import unfold_variable
+from ran.data import RANDataset
+from ran.rantypes import (
     DEFAULT_PURITY_THRESHOLD,
     EVENT_DTYPE,
     Events,
     Populations,
 )
+from scipy.stats import wasserstein_distance
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -27,9 +26,8 @@ if TYPE_CHECKING:
 
     from matplotlib.axes import Axes
     from numpy.typing import NDArray
-
-    from ..baselines import VariableUnfolding
-    from ..rantypes import DatasetSplits, EventArray, VariableOutcome
+    from ran.baselines import VariableUnfolding
+    from ran.rantypes import DatasetSplits, EventArray, VariableOutcome
 
 logger: Logger = logging.getLogger(name=__name__)
 mpl.use(backend="Agg")
@@ -154,10 +152,10 @@ def run_ran(
 ) -> dict[str, Any]:
     # Deferred so that `ran sweep collect`, which only reads JSON and plots,
     # does not pay for importing keras and jax.
-    from ..train import train
+    from ran.train import train
 
     if TYPE_CHECKING:
-        from ..train import TrainResult
+        from ran.train import TrainResult
 
     s, pops = _sweep_point(s_index, n_points, n_samples, seed)
 

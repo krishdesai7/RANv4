@@ -255,11 +255,12 @@ def _draw_figures(
     *,
     plots: bool,
 ) -> None:
-    """Draw a run's figures, unless this is a sweep.
+    """Draw a run's figures, unless plots are turned off.
 
     Matplotlib is a large share of a short run's wall clock and none of it is
-    needed to score one, so a sweep turns it off. The artifacts are already on
-    disk by then, so `--load-run` on the same directory draws them later.
+    needed to score one, so plots can be turned off for hyperparameter sweeps,
+    bootstrapping, etc. The artifacts are already on disk by then, so
+    `--load-run` on the same directory draws them later.
 
     The guard lives here rather than at the call site because the IBU overlay is
     part of the same decision: `_load_baseline_weights` exists only to feed

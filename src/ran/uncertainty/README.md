@@ -10,14 +10,14 @@ repeated. For an unfolding trained by an adversarial game there are three
 things that could be repeated differently, and they do not have the same
 status:
 
-| Source | Varied by | What it is | What to do with it |
-| --- | --- | --- | --- |
-| Finite sample | bootstrap | the 1M events are one draw from the population | **report it**: it is the statistical uncertainty |
-| Split and batch order | `data_seed` | which events land in train/val/test, and in what order | remove it by ensembling |
-| Initialization | `seed` | where the two networks started | remove it by ensembling |
+| Source                | Varied by   | What it is                                             | What to do with it                               |
+| --------------------- | ----------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Finite sample         | bootstrap   | the 1M events are one draw from the population         | **report it**: it is the statistical uncertainty |
+| Split and batch order | `data_seed` | which events land in train/val/test, and in what order | remove it by ensembling                          |
+| Initialization        | `seed`      | where the two networks started                         | remove it by ensembling                          |
 
 Only the first is an uncertainty on the measurement. The other two are
-*method* variance --- artifacts of the algorithm being order- and
+_method_ variance --- artifacts of the algorithm being order- and
 init-dependent, which a competitor could eliminate by averaging --- and
 folding them into a quoted band inflates the error bar with something that is
 not a property of the data.
@@ -35,12 +35,10 @@ the dataset at one fixed seed --- give `sigma_b^2 + sigma_eps^2` and
 `sigma_a^2 + sigma_eps^2`. Summing them in quadrature counts the interaction
 twice:
 
-```
-naive   = sigma_a^2 + sigma_b^2 + 2 sigma_eps^2
-truth   = sigma_a^2 + sigma_b^2 +   sigma_eps^2
-```
+\[\text{naive} = \sigma_a^2 + \sigma_b^2 + 2 \sigma_eps^2\]
+\[\text{truth} = \sigma_a^2 + \sigma_b^2 + \sigma_eps^2\]
 
-`sigma_eps^2` is the part of a run that depends on the *combination* and is
+`sigma_eps^2` is the part of a run that depends on the _combination_ and is
 attributable to neither axis. In a min-max game it is not small: the effect of
 an init seed already fails to transfer across `lr_g` arms (measured
 `r = +0.04`), which is the same phenomenon in a different coordinate. So the
@@ -48,7 +46,7 @@ naive sum is not a safe over-estimate to quote --- it is a wrong number in a
 known direction, and the only way to know by how much is to run the grid.
 
 `decompose` reads a `B x S` grid and returns all three components from the
-balanced two-way crossed random-effects ANOVA. The seed is a *crossed* factor
+balanced two-way crossed random-effects ANOVA. The seed is a _crossed_ factor
 rather than a nested one because a seed means the same thing in every cell:
 `keras.utils.set_random_seed(s)` puts identical initial weights on the network
 whichever dataset it is about to see, so a seed main effect is a real thing
@@ -64,7 +62,7 @@ and a variance budget that never admits the first is not one to trust.
 Bootstrap replicates hold different --- and duplicated --- events, so their
 per-event weight vectors are not commensurable and cannot be stacked into the
 matrix a covariance is computed from. `reserve_evaluation_set` therefore holds
-out a fixed block of gen-level MC events *before* any resampling, and every
+out a fixed block of gen-level MC events _before_ any resampling, and every
 cell is read on exactly those. Two consequences:
 
 - No replicate can have trained on an evaluation event.
@@ -87,7 +85,7 @@ correlations were zero. They are not. The reason the assumption survives is
 plausibly not that anyone believes it: measuring the covariance takes ~100
 retrainings, which at OmniFold's cost is not an analysis anyone runs, and at
 RAN's is a node-hour. That reframes the speed result --- "1000x faster at
-comparable accuracy" invites *so what, we already have the answer*; "fast
+comparable accuracy" invites _so what, we already have the answer_; "fast
 enough to bootstrap the full unfolding a hundred times, which is how you find
 out the covariance you assumed diagonal is not" is a capability claim.
 
@@ -100,7 +98,7 @@ the off-diagonals in the flattering direction.
 
 **The closure floor.** RAN's weights preserve the total count, so a spectrum's
 bins sum to a fixed number, its covariance is singular with rank `K - 1`, and
-*that constraint alone* forces negative off-diagonals. For equal-occupancy
+_that constraint alone_ forces negative off-diagonals. For equal-occupancy
 bins the pure-closure value is the multinomial `-1 / (K - 1)`, and
 `multinomial_off_diagonal` writes it into the output next to the measurement.
 Structure beyond that flat floor --- neighbouring bins correlating more than
@@ -116,8 +114,7 @@ them in a tail.
 at most `B - 1`, so at `B <= K` it is singular and every correlation saturates
 at `+-1` --- a heatmap of solid red and blue that reads as a very strong
 result and is entirely an artifact of the sample size. `collect` warns when
-the grid cannot support the binning it was asked for; 20 bins wants `B` around
-100.
+the grid cannot support the binning it was asked for; 20 bins wants `B` around 100.
 
 ## Running it
 
@@ -165,7 +162,7 @@ the 8x8, `97.9% / -0.0% / 2.1%` on the 50x2, and `96.1% / -0.0% / 3.9%` on the
 100x2 --- stable across three independent grids of increasing size.
 
 This is not the same as saying initialization does not matter. It matters
-almost entirely *in combination with the dataset*: the interaction carries
+almost entirely _in combination with the dataset_: the interaction carries
 38-59% of the variance of the unfolded mean. A seed has no dataset-independent
 effect, which is why the effect of a seed failed to transfer across `lr_g`
 arms (`r = +0.04`) --- there was never a transferable thing to find. What the
@@ -180,7 +177,7 @@ literature calls "ensemble spread" is, here, an interaction term.
   spread (mean 0.73x). That factor is the value of ensembling, measured.
 - Which bootstrap replicate was drawn is what determines fit quality more than
   which seed did: at the 100x2 grid, 10 of the 19 datasets with at least one
-  cell reading `mmd_test > 5e-4` (~4 floors) have it in *both* seeds, against
+  cell reading `mmd_test > 5e-4` (~4 floors) have it in _both_ seeds, against
   2.1 expected if the two seeds failed independently. A bad fit is a property
   of the dataset, not of the initialization drawn for it.
 

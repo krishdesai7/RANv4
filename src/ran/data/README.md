@@ -194,7 +194,7 @@ Shuffle one labelled sample and cut it into train/val/test.
 
 Device-resident training data, the third form alongside `Populations`/`ZXY`.
 
-`Populations` is the physics form and `ZXY` the transport form; both are host NumPy, because they feed SciPy, Matplotlib, npz I/O and the IBU baseline. This module is the training form: `DeviceSplits.from_splits` is the single host-to-device transfer of a run, and after it no batch crosses the boundary again.
+`Populations` is the physics form and `ZXY` the transport form; both are host NumPy, because they feed Matplotlib, npz I/O and the IBU baseline. This module is the training form: `DeviceSplits.from_splits` is the single host-to-device transfer of a run, and after it no batch crosses the boundary again.
 
 All three forms live under `ran.data` because they are all the dataset, just at different points in its trip to the accelerator. Both splits are laid out for a single fused XLA program: the train split stays flat and is gathered by index inside a `lax.scan`, so XLA fuses the gather into the first `Dense`; the eval splits are pre-batched with a mask, so evaluation scans with no gather at all and still sees every event exactly once.
 
@@ -394,8 +394,9 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `variables: Sequence[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use, **in column order**.
 
   The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, that order is what `_save_run` records in `config.json`, and it is what a later `ran evaluate` or `ran baseline ibu` must reproduce to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
+
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
-  There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline. This is one of the three places data enters and narrows — the others are `_draw_gaussian` and `cubic_sweep.make_particles`.
+  There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline.
 
 Narrowing _after_ the observables are computed is deliberate, not incidental: `ran.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
 

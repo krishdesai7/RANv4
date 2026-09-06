@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from ran import cli
-from ran.cli import app, baseline_app, sweep_app, uncertainty_app
+from ran.cli import app, baseline_app, uncertainty_app
 from typer.testing import CliRunner
 
 if TYPE_CHECKING:
@@ -26,12 +26,10 @@ def test_registered_command_trees_are_exact() -> None:
         "train",
         "evaluate",
         "baseline",
-        "sweep",
         "uncertainty",
         "leakage-check",
     }
     assert _command_names(baseline_app) == {"ibu"}
-    assert _command_names(sweep_app) == {"ran", "collect"}
     assert _command_names(uncertainty_app) == {"run", "collect"}
 
 
@@ -41,8 +39,6 @@ def test_registered_command_trees_are_exact() -> None:
         ("train",),
         ("evaluate",),
         ("baseline", "ibu"),
-        ("sweep", "ran"),
-        ("sweep", "collect"),
         ("uncertainty", "run"),
         ("uncertainty", "collect"),
         ("leakage-check",),

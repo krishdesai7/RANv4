@@ -230,7 +230,7 @@ _PARTICLE = _LevelStyle(
     title_prefix="Particle Level",
     nature_label="Truth",
     mc_label="Gen.",
-    height_per_dim=10,
+    height_per_dim=6,
     bins_span_both=True,
 )
 

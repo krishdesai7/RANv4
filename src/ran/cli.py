@@ -21,7 +21,6 @@ from .rantypes import (
 from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
-sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 uncertainty_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -100,7 +99,8 @@ def train_command(
         bool,
         typer.Option(
             "--plots/--no-plots",
-            help="Draw figures. Off is for sweeps: metrics still run.",
+            help="Draw figures. Can be turned off for hyperparameter sweeps,"
+            "bootstrapping, etc. Metrics still run.",
         ),
     ] = True,
     run_dir: Annotated[

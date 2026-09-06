@@ -341,21 +341,21 @@ def _normalized_histograms(
     ref_2d, comp_2d, w = _prepare(ref, comp, weights)
     edges: JaxArray = jnp.asarray(_bin_edges(ref_2d, comp_2d, n_bins))
     h_ref, h_comp = _histogram_kernel(ref_2d, comp_2d, w, edges)
-    return _normalize(h_ref), _normalize(h_comp)
+    return _normalize(counts=h_ref), _normalize(counts=h_comp)
 
 
 def _relative_entropy(
     x: NDArray[np.double], m: NDArray[np.double]
 ) -> NDArray[np.double]:
-    """`sum_i x_i log(x_i / m_i)` per row, with `scipy.special.rel_entr`'s zeros.
+    """`sum_i x_i log(x_i / m_i)` per row
 
     `rel_entr(0, m)` is 0, not `0 * log(0/m)`. Here `m` is a mean of `x` and
     another distribution, so it can only vanish where `x` does too, and the
     mask that supplies the 0 also keeps the division away from it.
     """
     positive: NDArray[np.bool] = x > 0
-    ratio: NDArray[np.double] = np.divide(x, m, out=np.ones_like(x), where=positive)
-    return np.sum(np.where(positive, x * np.log(ratio), 0.0), axis=1)
+    ratio: NDArray[np.double] = np.divide(x, m, out=np.ones_like(a=x), where=positive)
+    return np.sum(a=np.where(positive, x * np.log(ratio), 0.0), axis=1)
 
 
 def _js_from_histograms(

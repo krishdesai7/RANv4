@@ -105,10 +105,10 @@ class TrainResult(NamedTuple):
     # constructible from a stub.
     best_epoch: int = -1
     # Every epoch's weights, stacked -- what makes host-side selection
-    # possible at all. Defaulted for the same reason as `best_epoch`: a stub
-    # `TrainResult` (see `tests/test_cubic_sweep.py`) should not have to build
-    # one.
-    params: EpochParams = EpochParams([], [], [], [])
+    # possible at all.
+    params: EpochParams = EpochParams(
+        g_trainable=[], g_non_trainable=[], d_trainable=[], d_non_trainable=[]
+    )
     # The honest number: MMD recomputed on a test subsample at `best_epoch`,
     # never the val number selection minimized. Defaulted so the stub
     # `TrainResult` stays constructible.

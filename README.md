@@ -179,19 +179,6 @@ ran baseline ibu
 
 Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
 
-### Cubic-Response Sweep
-
-Sweeps the strength $s$ of a cubic detector response $r(s, z) = z + s z^3$ and
-records how well each method unfolds it. Each point trains RAN and unfolds the
-same populations with IBU in one pass, writing both into `point_NN.json`;
-`collect` joins them into `results.npz` and `wasserstein_vs_s.pdf`.
-
-```bash
-ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
-ran sweep collect --sweep-dir runs/cubic-sweep
-bash scripts/submit_sweep.sh   # every point at once on SLURM
-```
-
 ### Leakage Verification
 
 A core correctness requirement is that the generator $g(z)$ never receives $z_\text{true}$, the particle-level values of measured data events, which are unknowable in a real experiment. The `leakage-check` command verifies this empirically via a **data poisoning test**:
@@ -286,8 +273,6 @@ RANv4/
 │   ├── baselines/
 │   │   ├── _shared.py            Run config and populations a baseline needs, minus the unfolder
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
-│   ├── experiments/
-│   │   └── cubic_sweep.py        Cubic-response RAN-vs-IBU sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -299,7 +284,6 @@ RANv4/
 │   └── 6d_correlated.yaml
 ├── scripts/
 │   ├── submit.sh                 Training and baseline SLURM submission script
-│   └── submit_sweep.sh           Packed cubic-response sweep launcher
 ├── tests/                        pytest tests
 ├── .github/workflows/ci.yml      Lint, format, types, complexity, tests, audit
 ├── Justfile                      Development recipes (just validate, just lint-fix, ...)
@@ -308,8 +292,7 @@ RANv4/
 └── .cache/                       Cached datasets
 ```
 
-`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
-`src/ran/experiments/` carry their own `README.md` with module-level detail.
+`src/ran/rantypes/`, `src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with module-level detail.
 
 ## Datasets
 

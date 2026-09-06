@@ -8,7 +8,6 @@ import typer
 
 from .baselines import evaluate_runs as ibu_evaluate_runs
 from .evaluate import evaluate_runs
-from .experiments import run_ran
 from .leakage import run_leakage_check
 from .logging_config import configure_logging
 from .rantypes import (
@@ -28,9 +27,6 @@ uncertainty_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app.add_typer(
     typer_instance=baseline_app, name="baseline", help="Run comparison baselines."
-)
-app.add_typer(
-    typer_instance=sweep_app, name="sweep", help="Run cubic-response sweep steps."
 )
 app.add_typer(
     typer_instance=uncertainty_app,
@@ -156,39 +152,6 @@ def ibu_command(
         n_iterations,
         purity_threshold=np.double(purity_threshold),
     )
-
-
-@sweep_app.command(name="ran")
-def sweep_ran_command(
-    s_index: Annotated[int, typer.Option("--s-index", "-s", min=0)],
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-    seed: int = 42,
-    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
-    ran_epochs: Annotated[int, typer.Option("--ran-epochs", "-e", min=1)] = 100,
-    init_seed: Annotated[int | None, typer.Option("--init-seed", "-I")] = None,
-) -> None:
-    _ = run_ran(
-        s_index,
-        sweep_dir,
-        n_samples,
-        n_points,
-        seed,
-        batch_size,
-        ran_epochs,
-        init_seed,
-    )
-
-
-@sweep_app.command(name="collect")
-def sweep_collect_command(
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-) -> None:
-    from .experiments.cubic_sweep import collect
-
-    collect(sweep_dir, n_points)
 
 
 @uncertainty_app.command(name="run")

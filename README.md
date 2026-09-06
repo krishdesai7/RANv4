@@ -222,7 +222,7 @@ The project runs in float32 end to end. The pin is a single constant, `EVENT_DTY
 
 This is a measured choice, not a default. Every jet observable is float32-clean — `mass` and `mult` survive a float32 round trip bit-exactly, and the other four lose exactly half a ULP, the least a cast can cost. Across 20 paired seeds, float32 and float64 agree on unfolding improvement to within ±0.5 percentage points (equivalence test p=0.015), while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
 
-Two boundaries stay float64 deliberately: the metrics (Wasserstein, JS, triangular discriminator) come back from scipy in float64 and are not narrowed — what is pinned is the data, not the measurement of it — and `ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
+`ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
 
 `src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
@@ -381,7 +381,6 @@ cognitive complexity of 10.
 - [`JAX`](https://docs.jax.dev/) >= 0.11 \(`jax[cuda13]` on x86_64 Linux\)
 - [`Keras`](https://keras.io/) >= 3.15.1
 - [`NumPy`](https://numpy.org/) >= 2.5.1
-- [`SciPy`](https://scipy.org/) >= 1.18.0
 - [`Matplotlib`](https://matplotlib.org/) >= 3.11.1
 - [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
 - [`PyYAML`](https://pyyaml.org/) >= 6.0.3

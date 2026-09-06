@@ -284,7 +284,6 @@ ran train --load-run runs/...             → reload + re-plot with baseline ove
 - **Python 3.13** + **uv** (no pip, lockfile-based)
 - **Keras 3 on the JAX backend** — training, `@jax.jit` on each disc/gen/eval step, float32 end to end
 - **NumPy** — data generation and evaluation
-- **SciPy** — Wasserstein distance, Jensen-Shannon divergence
 - **Matplotlib** — publication-quality plots (serif font, ratio panels)
 - **Typer** + **Rich** — one CLI command tree, structured logging and metrics tables
 - **SLURM** — `scripts/submit.sh` for cluster runs

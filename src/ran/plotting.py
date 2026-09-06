@@ -288,9 +288,17 @@ def _plot_level(
 ) -> None:
     """Draw one stacked hist+ratio panel per dimension and save the figure."""
     dim: int = nature.shape[1]
-    figure = Figure(figsize=(8, style.height_per_dim * dim))
+    height: float = style.height_per_dim * dim
+    figure = Figure(figsize=(8, height))
     figure.canvas = FigureCanvasPdf(figure)
-    outer_grid: GridSpec = figure.add_gridspec(nrows=dim, ncols=1, hspace=0.35)
+    edge_margin: float = 0.5 / height
+    outer_grid: GridSpec = figure.add_gridspec(
+        nrows=dim,
+        ncols=1,
+        hspace=0.35,
+        bottom=edge_margin,
+        top=1 - edge_margin,
+    )
     for i in range(dim):
         inner_grid: GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
             nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.0

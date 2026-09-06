@@ -1614,7 +1614,6 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyyaml" },
-    { name = "scipy" },
     { name = "typer" },
 ]
 
@@ -1627,10 +1626,15 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "rust-just" },
+    { name = "scipy" },
     { name = "types-pyyaml" },
 ]
 release = [
     { name = "rooster" },
+]
+test = [
+    { name = "pytest" },
+    { name = "scipy" },
 ]
 
 [[package]]

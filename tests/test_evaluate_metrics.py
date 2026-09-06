@@ -221,6 +221,20 @@ class TestDivergencesPerDim:
 
         np.testing.assert_allclose(result, [2000.0, 0.0], atol=1e-12)
 
+    def test_js_of_an_empty_histogram_is_not_a_number(self) -> None:
+        """A histogram with no mass has no distribution to be a divergence from.
+
+        `scipy.spatial.distance.jensenshannon` divides each input by its own
+        sum, so an all-zero row comes back NaN rather than 0 --- and 0 would be
+        the actively wrong answer, since it reads as "these agree perfectly".
+        `_normalized_histograms` leaves such a row unnormalized, so preserving
+        the NaN is the reimplementation's job rather than something it inherits.
+        """
+        p = np.array([[0.5, 0.5]])
+        q = np.array([[0.0, 0.0]])
+
+        assert np.isnan(_js_from_histograms(p, q)).all()
+
     def test_js_matches_scipy_on_a_continuous_sample(self) -> None:
         rng = np.random.default_rng(6)
         ref = rng.normal(size=(4000, 3)).astype(np.float32)

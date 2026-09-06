@@ -175,8 +175,4 @@ type Nested[T] = T | list[Nested[T]]
 # Every event array in the pipeline. The dtype is pinned in
 # `ran.rantypes.constants.EVENT_DTYPE`; this is its annotation-space twin, so
 # changing precision is two lines rather than a sweep through the package.
-#
-# Scores are deliberately not this type: Wasserstein, JS and the triangular
-# discriminator come back from scipy as float64 and stay there. What is pinned
-# is the data, not the measurement taken of it.
 type EventArray = NDArray[np.single]

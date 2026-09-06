@@ -9,7 +9,6 @@ import jax.numpy as jnp
 import numpy as np
 from rich.console import Console
 from rich.table import Table
-from scipy.spatial.distance import jensenshannon
 
 from .data import (
     ArrayDataset,
@@ -252,9 +251,11 @@ def _cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxAr
     """`integral |F_ref - F_comp| dt` per column: the 1D Wasserstein-1 distance.
 
     Sort the pooled values, accumulate the two sides' normalized weights into a
-    step CDF, integrate the gap -- the same estimator
-    `scipy.stats.wasserstein_distance` computes, vectorized over columns so one
-    dispatch does every dimension.
+    step CDF, integrate the gap -- the estimator
+    `scipy.stats.wasserstein_distance` defines, vectorized over columns so one
+    dispatch does every dimension. Named as the definition, not as a call: the
+    agreement is asserted against scipy in `tests/test_evaluate_metrics.py`,
+    which is the only place in this package that still imports it.
 
     The two CDFs are *never* accumulated separately. Each climbs to 1 while
     their difference stays at the order of the distance being measured, so
@@ -343,16 +344,43 @@ def _normalized_histograms(
     return _normalize(h_ref), _normalize(h_comp)
 
 
+def _relative_entropy(
+    x: NDArray[np.double], m: NDArray[np.double]
+) -> NDArray[np.double]:
+    """`sum_i x_i log(x_i / m_i)` per row, with `scipy.special.rel_entr`'s zeros.
+
+    `rel_entr(0, m)` is 0, not `0 * log(0/m)`. Here `m` is a mean of `x` and
+    another distribution, so it can only vanish where `x` does too, and the
+    mask that supplies the 0 also keeps the division away from it.
+    """
+    positive: NDArray[np.bool] = x > 0
+    ratio: NDArray[np.double] = np.divide(x, m, out=np.ones_like(x), where=positive)
+    return np.sum(np.where(positive, x * np.log(ratio), 0.0), axis=1)
+
+
 def _js_from_histograms(
     p: NDArray[np.double], q: NDArray[np.double]
 ) -> NDArray[np.double]:
-    """JS divergence, i.e. the square of scipy's JS *distance*.
+    """Jensen-Shannon divergence per row: the square of the JS *distance*.
 
-    Row by row rather than vectorized: `dim` is single digits and each row is
-    `n_bins` wide, so the loop is unmeasurable next to the histogram that fed
-    it, and this is the call signature scipy documents.
+    `(D(p || m) + D(q || m)) / 2` with `m` the midpoint mixture, in nats --
+    what `scipy.spatial.distance.jensenshannon(p, q) ** 2` returns, which
+    `tests/test_evaluate_metrics.py` asserts against rather than this module
+    importing it. Vectorized over rows, because scipy's own `axis=` argument is
+    missing from its type stubs and calling it row by row to get around that
+    was the last thing here still reaching for scipy at all.
+
+    Each row is divided by its own sum, exactly as scipy does, and that is the
+    whole reason the division is not skipped as redundant: `_normalize` leaves
+    a histogram with no mass unnormalized, and dividing it by a zero total is
+    what turns it into the NaN an empty distribution deserves. A 0 there would
+    read as "these two agree perfectly".
     """
-    return np.array([jensenshannon(p[i], q[i]) ** 2 for i in range(p.shape[0])])
+    with np.errstate(invalid="ignore", divide="ignore"):
+        p_norm: NDArray[np.double] = p / p.sum(axis=1, keepdims=True)
+        q_norm: NDArray[np.double] = q / q.sum(axis=1, keepdims=True)
+    m: NDArray[np.double] = (p_norm + q_norm) / 2
+    return (_relative_entropy(p_norm, m) + _relative_entropy(q_norm, m)) / 2
 
 
 def _triangular_from_histograms(

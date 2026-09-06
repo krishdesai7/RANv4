@@ -17,7 +17,9 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from ran.data import ArrayDataset
 from ran.plotting import (
+    _DETECTOR,
     _hist_ratio_panel,
+    _plot_level,
     _save_fig,
     plot_losses,
     plot_selection,
@@ -73,6 +75,39 @@ def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
     _save_fig(Figure(), out)
 
     assert calls == [(out, {})]
+
+
+def test_multilevel_figure_uses_fixed_physical_edge_margins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default fractional margins turn into several blank inches as the
+    stacked figure grows taller; the outer panels should use the page instead.
+    """
+    captured: list[Figure] = []
+
+    def capture(figure: Figure, save_path: Path) -> None:
+        del save_path
+        captured.append(figure)
+
+    monkeypatch.setattr("ran.plotting._save_fig", capture)
+    values = np.array(
+        [[-1.0, -0.5], [0.0, 0.2], [0.5, 0.8], [1.0, 1.2]], dtype=np.single
+    )
+    _plot_level(
+        values,
+        values + np.single(0.1),
+        np.ones(4, dtype=np.single),
+        _DETECTOR,
+        tmp_path / "levels.pdf",
+        None,
+        None,
+    )
+
+    figure = captured[0]
+    top = max(ax.get_position().y1 for ax in figure.axes)
+    bottom = min(ax.get_position().y0 for ax in figure.axes)
+    assert top >= 0.95
+    assert bottom <= 0.05
 
 
 def test_plot_levels_evaluates_generator_once(tmp_path: Path) -> None:

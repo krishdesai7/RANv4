@@ -333,14 +333,26 @@ Each run produces a timestamped directory under `runs/` containing:
 These are internal training defaults in `src/ran/train.py`; the CLI-exposed
 training options are listed above.
 
-| Parameter      | Default | Description                                |
-| -------------- | ------- | ------------------------------------------ |
-| `n_epochs`     | 100     | Maximum training epochs                    |
-| `n_disc_steps` | 5       | Discriminator updates per generator update |
-| `lr_g`         | 1e-4    | Generator learning rate (Adam)             |
-| `lr_d`         | 1e-4    | Discriminator learning rate (Adam)         |
-| `hidden_units` | 64      | Units per hidden layer                     |
-| `n_layers`     | 2       | Number of hidden layers                    |
+| Parameter            | Default | Description                                     |
+| -------------------- | ------- | ----------------------------------------------- |
+| `n_epochs`           | 100     | Training epochs — a fixed `scan` trip count      |
+| `n_disc_steps`       | 5       | Discriminator updates per generator update       |
+| `lr_g`               | 3e-5    | Generator learning rate (Adam)                   |
+| `lr_d`               | 1e-4    | Discriminator learning rate (Adam)               |
+| `lambda_dispersion`  | 0.015   | Penalty on the variance of `g`'s weights         |
+| `hidden_units`       | 64      | Units per hidden layer                           |
+| `n_layers`           | 2       | Number of hidden layers                          |
+
+`lr_g` and `lambda_dispersion` are both measured rather than chosen, and they
+act on the same axis: the dispersion of `g`'s normalized MC weights. See "What
+tuning actually found" and "The dispersion penalty: the trade made explicit" in
+`benchmarks/README.md`. Because the penalty is **on** by default, a run left at
+these defaults already carries it — which is the configuration any comparison
+should be made against, not a variant of it.
+
+`n_epochs` is not a maximum in the early-stopping sense. `scan` needs a fixed
+trip count, so every run executes all of them; the best epoch is then restored
+on the host by the detector-level MMD argmin.
 
 ## Development
 

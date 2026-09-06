@@ -145,7 +145,18 @@ decomposing whatever landed would charge the imbalance to the dataset axis.
 
 ## What the design measured
 
-Three grids on the 6-observable jet run at the shipped configuration
+> **Superseded configuration.** Everything below was measured at
+> `-n1000000`. The shipped run is now `-n1600000` (`scripts/submit.sh`), and a
+> variance budget at one sample size does not describe a measurement at
+> another: the finite-sample component is the one being reported, and it is the
+> one that moves with N. Both grids are being rerun at 1.6M — the decomposition
+> *and* the covariance, since mixing sizes across the two would describe no
+> single model. Until those land, the numbers here are the best available and
+> are quantitatively wrong for the current run. The structural findings
+> (initialization has no main effect; the interaction dominates) are what is
+> expected to survive, because neither is a statement about sample size.
+
+Three grids on the twelve-observable jet run at the then-shipped configuration
 (`-n1000000 -l3 -u128`, `lr_g` 3e-5, `lambda_dispersion` 0.015), 2026-09-02 to
 2026-09-03: an 8x8 for the decomposition, and 50x2 then 100x2 for the
 covariance, the second superseding the first once it confirmed nothing moved.

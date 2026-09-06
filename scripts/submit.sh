@@ -6,7 +6,17 @@
 #SBATCH -G1
 #SBATCH -c32
 
-#SBATCH -t00:45:00
+# Sized from a measured run, not guessed: 12 vars / 500k / 100 epochs reports
+# 18.7s total in timings.json (train 11.2, plots 3.2, evaluate 3.1). Scaling
+# rows by 3.2x and the net by ~7x for -u128 -l3 puts the whole pipeline --
+# train, IBU, the reload that replots with the baseline overlaid, evaluate --
+# near 4 minutes. 15 gives ~4x margin.
+#
+# Requesting more is not free even though NERSC charges elapsed time rather
+# than the request: `-t` is what Slurm's backfill scheduler matches against, so
+# a short request slots into gaps a long one cannot reach. The counter-pressure
+# is that overrunning kills the job outright, which is what the margin is for.
+#SBATCH -t00:15:00
 #SBATCH -Am3246_g
 #SBATCH -Jran_e2e
 #SBATCH -oslurm-%j.log

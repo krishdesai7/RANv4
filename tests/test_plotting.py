@@ -15,12 +15,64 @@ import numpy as np
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from ran.plotting import plot_losses, plot_selection
+from ran.data import ArrayDataset
+from ran.plotting import (
+    _hist_ratio_panel,
+    _save_fig,
+    plot_losses,
+    plot_selection,
+)
+from ran.rantypes import Events, Populations
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 type DrawnCalls = list[tuple[tuple[Any, ...], dict[str, Any]]]
+
+
+def test_filled_histograms_use_one_artist_per_distribution() -> None:
+    """Falling back to Matplotlib's default bar histogram creates one
+    rectangle per bin and makes the large vector PDFs needlessly expensive.
+    """
+    figure = Figure()
+    ax = figure.add_subplot(211)
+    ax_r = figure.add_subplot(212)
+    nature = np.array([0.1, 0.3, 0.6, 0.8], dtype=np.single)
+    mc = np.array([0.2, 0.4, 0.5, 0.9], dtype=np.single)
+
+    _hist_ratio_panel(
+        ax,
+        ax_r,
+        nature,
+        mc,
+        np.ones(4, dtype=np.single),
+        bins=[0.0, 0.25, 0.5, 0.75, 1.0],
+        nature_label="Data",
+        mc_label="Sim",
+        xlabel="x",
+        title="Detector level",
+    )
+
+    assert len(ax.patches) == 3
+
+
+def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reintroducing ``bbox_inches='tight'`` causes an extra traversal of
+    every artist in the tall multi-panel figures.
+    """
+    calls: list[tuple[Path, dict[str, Any]]] = []
+
+    def record(_figure: Figure, fname: Path, **kwargs: Any) -> None:
+        calls.append((fname, kwargs))
+
+    monkeypatch.setattr(Figure, "savefig", record)
+    out = tmp_path / "figure.pdf"
+
+    _save_fig(Figure(), out)
+
+    assert calls == [(out, {})]
 
 
 def _history(n: int = 12) -> dict[str, list[float]]:

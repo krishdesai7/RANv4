@@ -80,18 +80,20 @@ def test_evaluation_records_metrics_artifact_completion(
         del test_ds
         return test_data
 
-    def fake_get_weights(
+    def fake_generator_weights(
         model: object, z_gen: object
     ) -> ndarray[tuple[int], dtype[float64]]:
         del model, z_gen
         return np.ones(2)
 
     monkeypatch.setattr(evaluate, "_collect_test_data", fake_collect_test_data)
-    monkeypatch.setattr(evaluate, "_get_weights", fake_get_weights)
-    monkeypatch.setattr(evaluate, "_wd_per_dim", lambda *_args, **_kwargs: [1.0])
-    monkeypatch.setattr(evaluate, "_js_per_dim", lambda *_args, **_kwargs: [0.5])
+    monkeypatch.setattr(evaluate, "_generator_weights", fake_generator_weights)
     monkeypatch.setattr(
-        evaluate, "_triangular_per_dim", lambda *_args, **_kwargs: [0.25]
+        evaluate,
+        "_metrics_per_dim",
+        lambda *_args, **_kwargs: evaluate.MetricSet(
+            np.array([1.0]), np.array([0.5]), np.array([0.25])
+        ),
     )
     monkeypatch.setattr(evaluate, "render_metrics", lambda *_args, **_kwargs: None)
 

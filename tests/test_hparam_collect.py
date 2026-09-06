@@ -13,9 +13,13 @@ from __future__ import annotations
 
 import json
 import math
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from benchmarks.hparam_collect import (
     ArmSummary,
@@ -31,10 +35,12 @@ from benchmarks.hparam_collect import (
 )
 
 
-def _write_run(root, name: str, config: dict, particle: dict) -> None:
-    run_dir = root / name
+def _write_run(
+    root: Path, name: str, config: dict[str, Any], particle: dict[str, float]
+) -> None:
+    run_dir: Path = root / name
     run_dir.mkdir(parents=True)
-    (run_dir / "config.json").write_text(json.dumps(config))
+    _ = (run_dir / "config.json").write_text(json.dumps(config))
     metrics = {
         f"particle_{var}": {
             "wasserstein_improvement_pct": value,
@@ -43,7 +49,7 @@ def _write_run(root, name: str, config: dict, particle: dict) -> None:
         for var, value in particle.items()
     }
     metrics["detector_m"] = {"wasserstein_improvement_pct": 95.0}
-    (run_dir / "metrics.json").write_text(json.dumps(metrics))
+    _ = (run_dir / "metrics.json").write_text(json.dumps(metrics))
 
 
 class TestParticleImprovements:
@@ -135,7 +141,7 @@ class TestPairedDelta:
 
     def test_refuses_to_report_a_spread_it_cannot_estimate(self) -> None:
         with pytest.raises(ValueError, match="at least two"):
-            paired_delta({0: 70.0}, {0: 73.0})
+            _ = paired_delta({0: 70.0}, {0: 73.0})
 
 
 class TestSummarizeArm:
@@ -179,7 +185,7 @@ class TestSummarizeArm:
 
 
 class TestLoadRecords:
-    def test_reads_every_run_under_the_arm_directory(self, tmp_path) -> None:
+    def test_reads_every_run_under_the_arm_directory(self, tmp_path: Path) -> None:
         _write_run(tmp_path, "lrg1e-4_seed00", {"lr_g": 1e-4, "seed": 0}, {"m": 22.5})
         _write_run(tmp_path, "lrg3e-4_seed00", {"lr_g": 3e-4, "seed": 0}, {"m": 31.1})
 
@@ -188,20 +194,20 @@ class TestLoadRecords:
         assert [r.name for r in records] == ["lrg1e-4_seed00", "lrg3e-4_seed00"]
         assert records[0].particle == {"m": 22.5}
 
-    def test_skips_a_run_that_died_before_writing_metrics(self, tmp_path) -> None:
+    def test_skips_a_run_that_died_before_writing_metrics(self, tmp_path: Path) -> None:
         """A crashed point must not sink the collection, only be absent."""
         _write_run(tmp_path, "good_seed00", {"lr_g": 1e-4, "seed": 0}, {"m": 22.5})
-        crashed = tmp_path / "crashed_seed01"
+        crashed: Path = tmp_path / "crashed_seed01"
         crashed.mkdir()
-        (crashed / "config.json").write_text(json.dumps({"lr_g": 1e-4, "seed": 1}))
+        _ = (crashed / "config.json").write_text(json.dumps({"lr_g": 1e-4, "seed": 1}))
 
         records = load_records(tmp_path)
 
         assert [r.name for r in records] == ["good_seed00"]
 
-    def test_reports_when_the_directory_holds_no_runs(self, tmp_path) -> None:
+    def test_reports_when_the_directory_holds_no_runs(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError, match="no runs"):
-            load_records(tmp_path)
+            _ = load_records(tmp_path)
 
 
 class TestObservableDeltas:
@@ -290,7 +296,7 @@ def test_summarize_arm_refuses_a_pairing_key_that_does_not_index_the_runs() -> N
     ]
 
     with pytest.raises(ValueError, match="--pair-on"):
-        summarize_arm("baseline", records, pair_on="seed")
+        _ = summarize_arm("baseline", records, pair_on="seed")
 
 
 class TestEffectiveSampleSize:
@@ -302,25 +308,25 @@ class TestEffectiveSampleSize:
     subsample; the number that matters is the one at the selected epoch.
     """
 
-    def test_reads_the_ess_at_the_selected_epoch(self, tmp_path) -> None:
-        run = tmp_path / "lam0_seed00"
+    def test_reads_the_ess_at_the_selected_epoch(self, tmp_path: Path) -> None:
+        run: Path = tmp_path / "lam0_seed00"
         run.mkdir()
-        (run / "config.json").write_text(
+        _ = (run / "config.json").write_text(
             json.dumps({"lr_g": 3e-5, "seed": 0, "best_epoch": 2})
         )
-        (run / "metrics.json").write_text(
+        _ = (run / "metrics.json").write_text(
             json.dumps({"particle_m": {"wasserstein_improvement_pct": 22.5}})
         )
         np.savez(run / "history.npz", val_ess=np.array([100.0, 200.0, 300.0, 400.0]))
 
         assert load_records(tmp_path)[0].ess == pytest.approx(300.0)
 
-    def test_a_run_without_history_is_still_read(self, tmp_path) -> None:
+    def test_a_run_without_history_is_still_read(self, tmp_path: Path) -> None:
         """Older runs predate the field; they score, they just report no ESS."""
-        run = tmp_path / "lam0_seed00"
+        run: Path = tmp_path / "lam0_seed00"
         run.mkdir()
-        (run / "config.json").write_text(json.dumps({"lr_g": 3e-5, "seed": 0}))
-        (run / "metrics.json").write_text(
+        _ = (run / "config.json").write_text(json.dumps({"lr_g": 3e-5, "seed": 0}))
+        _ = (run / "metrics.json").write_text(
             json.dumps({"particle_m": {"wasserstein_improvement_pct": 22.5}})
         )
 

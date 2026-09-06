@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -11,16 +11,21 @@ from ..rantypes import (
     EVENT_DTYPE,
     SUBSTRUCTURE_VARIABLES,
     ZXY,
+    DatasetSplits,
     Events,
     Populations,
 )
-from .datasets import DatasetSplits, RANDataset
+from ..timing import note
+from .datasets import RANDataset
 from .download import download_jet_data
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from logging import Logger
     from pathlib import Path
+    from typing import Any
+
+    from numpy.typing import NDArray
 
     from ..rantypes import EventArray
 
@@ -77,14 +82,20 @@ def load_jet_dataset(
         v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
     ]
     if missing:
+        note("downloaded from Zenodo", to="data")
         logger.info(msg="Jet data not found in cache; downloading from Zenodo.")
         download_jet_data(cache_dir)
+    else:
+        note("cache hit", to="data")
 
     n_features: int = len(variables)
 
     # Check available samples
     with np.load(file=cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
-        n_avail: int = min(len(f["z_true"]), len(f["z_gen"]))
+        n_avail: int = min(
+            len(cast("NDArray[Any]", f["z_true"])),
+            len(cast("NDArray[Any]", f["z_gen"])),
+        )
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
@@ -98,10 +109,11 @@ def load_jet_dataset(
     std_params: dict[str, tuple[np.single, np.single]] = {}
     for i, var in enumerate(iterable=variables):
         with np.load(file=cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:
-            z_true[:, i] = f["z_true"][:n_samples]
-            x_data[:, i] = f["x_data"][:n_samples]
-            z_gen[:, i] = f["z_gen"][:n_samples]
-            x_sim[:, i] = f["x_sim"][:n_samples]
+            col: Mapping[str, NDArray[Any]] = cast("Mapping[str, NDArray[Any]]", f)
+            z_true[:, i] = col["z_true"][:n_samples]
+            x_data[:, i] = col["x_data"][:n_samples]
+            z_gen[:, i] = col["z_gen"][:n_samples]
+            x_sim[:, i] = col["x_sim"][:n_samples]
 
         # Standardize using MC gen-level statistics only
         mu: np.single = z_gen[:, i].mean()

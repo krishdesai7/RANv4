@@ -31,11 +31,13 @@ uv run benchmarks/mmd_floor.py --side sim                   # split the MC side 
 ```
 """
 
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- numpy stubs return Any for elementwise ops and boolean indexing
 from __future__ import annotations
 
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "jax")
+os.environ.setdefault("KERAS_BACKEND", "jax")  # pyrefly: ignore[unused-call-result]
 
 import argparse
 import logging
@@ -93,7 +95,7 @@ class FloorEstimate(NamedTuple):
     @property
     def standard_error(self) -> float:
         """How well *this benchmark* has pinned the mean. Not the floor."""
-        return self.sd / np.sqrt(len(self.values))
+        return float(self.sd / np.sqrt(len(self.values)))
 
     @property
     def sd_error(self) -> float:
@@ -103,7 +105,7 @@ class FloorEstimate(NamedTuple):
         It matters because arms sit within a floor or two of the tie threshold,
         where quoting the floor bare invites reading 1.1 as different from 0.9.
         """
-        return self.sd / np.sqrt(2.0 * (len(self.values) - 1))
+        return float(self.sd / np.sqrt(2.0 * (len(self.values) - 1)))
 
 
 def null_floor(
@@ -122,7 +124,7 @@ def null_floor(
             f"need two disjoint subsamples of {m}, but the population has "
             f"{x.shape[0]} rows"
         )
-    share = 2 * m / x.shape[0]
+    share: float = 2 * m / x.shape[0]
     if share > MAX_POOL_SHARE:
         logger.warning(
             "2m/N = %.2f exceeds %.2f: repeats overlap heavily and the spread "
@@ -214,17 +216,17 @@ def _report(estimates: dict[int, FloorEstimate], side: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
+    _ = parser.add_argument(
         "--m",
         type=int,
         action="append",
         default=None,
         help=f"subsample size; repeatable. Default {MMD_SUBSAMPLE} (operating point)",
     )
-    parser.add_argument("--repeats", type=int, default=32)
-    parser.add_argument("--n-samples", type=int, default=400_000)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
+    _ = parser.add_argument("--repeats", type=int, default=32)
+    _ = parser.add_argument("--n-samples", type=int, default=400_000)
+    _ = parser.add_argument("--seed", type=int, default=0)
+    _ = parser.add_argument(
         "--side",
         choices=("data", "sim"),
         default="data",
@@ -233,9 +235,15 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging(level="info")
 
-    sizes: Sequence[int] = sorted(set(args.m or [MMD_SUBSAMPLE]))
+    m_values: list[int] | None = args.m
+    n_samples: int = args.n_samples
+    repeats: int = args.repeats
+    seed: int = args.seed
+    side: str = args.side
+
+    sizes: Sequence[int] = sorted(set(m_values or [MMD_SUBSAMPLE]))
     splits, _dim, _std = load_jet_dataset(
-        n_samples=args.n_samples,
+        n_samples=n_samples,
         batch_size=1024,
         variables=SUBSTRUCTURE_VARIABLES,
         seed=42,
@@ -247,13 +255,13 @@ def main() -> None:
     # reach 2m/N <= 0.2 without more events than the Zenodo release holds.
     zxy = splits.select(Split.TRAIN | Split.VAL | Split.TEST)
     nature = zxy.y == 1
-    x = zxy.x[nature] if args.side == "data" else zxy.x[~nature]
+    x = zxy.x[nature] if side == "data" else zxy.x[~nature]
     logger.info(
         "%s side: %d rows x %d observables, %d repeats",
-        args.side,
+        side,
         x.shape[0],
         x.shape[1],
-        args.repeats,
+        repeats,
     )
 
     estimates: dict[int, FloorEstimate] = {}
@@ -267,11 +275,11 @@ def main() -> None:
                 x.shape[0],
             )
             continue
-        estimates[m] = null_floor(x, m=m, repeats=args.repeats, seed=args.seed)
+        estimates[m] = null_floor(x, m=m, repeats=repeats, seed=seed)
         logger.info("m=%d done: sd %.3e", m, estimates[m].sd)
     if not estimates:
         raise SystemExit("no subsample size fit the data; raise --n-samples")
-    _report(estimates, args.side)
+    _report(estimates, side)
 
 
 if __name__ == "__main__":

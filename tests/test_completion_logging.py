@@ -6,10 +6,16 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    import pytest
     from numpy import dtype, float64, ndarray
 
 
-def _completion_records(caplog, logger_name: str):
+def _completion_records(
+    caplog: pytest.LogCaptureFixture, logger_name: str
+) -> list[logging.LogRecord]:
     return [
         record
         for record in caplog.records
@@ -17,15 +23,19 @@ def _completion_records(caplog, logger_name: str):
     ]
 
 
-def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
+def test_raw_download_records_completion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     from ran.data import download
     from rich.progress import Progress
 
-    destination = tmp_path / "sample.npz"
+    destination: Path = tmp_path / "sample.npz"
 
-    def fake_urlretrieve(_url, filename, reporthook) -> None:
+    def fake_urlretrieve(
+        _url: str, filename: Path, reporthook: Callable[[int, int, int], object]
+    ) -> None:
         assert filename == destination
-        reporthook(1, 100, 100)
+        _ = reporthook(1, 100, 100)
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)
     progress = Progress(disable=True)
@@ -46,16 +56,16 @@ def test_raw_download_records_completion(monkeypatch, tmp_path, caplog) -> None:
 
 
 def test_evaluation_records_metrics_artifact_completion(
-    monkeypatch, tmp_path, caplog
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     import keras
     import numpy as np
     from ran import evaluate
     from ran.rantypes import ZXY, Events
 
-    run_dir = tmp_path / "sample-run"
+    run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
-    (run_dir / "config.json").write_text('{"dataset": "gaussian", "dim": 1}')
+    _ = (run_dir / "config.json").write_text('{"dataset": "gaussian", "dim": 1}')
     (run_dir / "generator.keras").touch()
     z = np.array([[0.0], [1.0], [2.0], [3.0]])
     test_data = ZXY(Events(z, z.copy()), np.array([1, 1, 0, 0], dtype=np.ubyte))
@@ -66,11 +76,13 @@ def test_evaluation_records_metrics_artifact_completion(
     )
 
     # Both are called by keyword, so the stubs have to name their parameters.
-    def fake_collect_test_data(test_ds) -> ZXY:
+    def fake_collect_test_data(test_ds: object) -> ZXY:
         del test_ds
         return test_data
 
-    def fake_get_weights(model, z_gen) -> ndarray[tuple[int], dtype[float64]]:
+    def fake_get_weights(
+        model: object, z_gen: object
+    ) -> ndarray[tuple[int], dtype[float64]]:
         del model, z_gen
         return np.ones(2)
 
@@ -84,9 +96,9 @@ def test_evaluation_records_metrics_artifact_completion(
     monkeypatch.setattr(evaluate, "render_metrics", lambda *_args, **_kwargs: None)
 
     with caplog.at_level(logging.INFO, logger="ran.evaluate"):
-        evaluate.evaluate_run(run_dir)
+        _ = evaluate.evaluate_run(run_dir)
 
-    out_path = run_dir / "metrics.json"
+    out_path: Path = run_dir / "metrics.json"
     messages = [
         record.getMessage() for record in _completion_records(caplog, "ran.evaluate")
     ]
@@ -98,15 +110,17 @@ def test_evaluation_records_metrics_artifact_completion(
 
 
 def test_ibu_records_metric_and_weight_artifact_completion(
-    monkeypatch, tmp_path, caplog
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     import numpy as np
     from ran.baselines import _shared as shared
     from ran.baselines import ibu
 
-    run_dir = tmp_path / "sample-run"
+    run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
-    (run_dir / "config.json").write_text('{"dim": 2, "n_samples": 2, "batch_size": 1}')
+    _ = (run_dir / "config.json").write_text(
+        '{"dim": 2, "n_samples": 2, "batch_size": 1}'
+    )
 
     metric_record: shared.MetricRecord = {
         "wasserstein_before": 1.0,
@@ -150,10 +164,10 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     monkeypatch.setattr(ibu, "render_metrics", lambda *_args, **_kwargs: None)
 
     with caplog.at_level(logging.INFO, logger="ran.baselines.ibu"):
-        ibu.evaluate_single(run_dir)
+        _ = ibu.evaluate_single(run_dir)
 
-    metrics_path = run_dir / "metrics_ibu.json"
-    weights_path = run_dir / "ibu_weights.npz"
+    metrics_path: Path = run_dir / "metrics_ibu.json"
+    weights_path: Path = run_dir / "ibu_weights.npz"
     messages = [
         record.getMessage()
         for record in _completion_records(caplog, "ran.baselines.ibu")
@@ -162,9 +176,10 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     assert weights_path.exists()
     assert json.loads(metrics_path.read_text()) == {"detector_mass": metric_record}
     with np.load(weights_path) as weights:
-        assert set(weights.files) == {"weights_0", "weights_1"}
-        np.testing.assert_array_equal(weights["weights_0"], [1.0, 2.0])
-        np.testing.assert_array_equal(weights["weights_1"], [3.0, 4.0])
+        stored: dict[str, object] = {k: weights[k] for k in weights.files}
+    assert set(stored) == {"weights_0", "weights_1"}
+    np.testing.assert_array_equal(stored["weights_0"], [1.0, 2.0])
+    np.testing.assert_array_equal(stored["weights_1"], [3.0, 4.0])
     assert any(
         str(metrics_path) in message and str(weights_path) in message
         for message in messages

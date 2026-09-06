@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 import pytest
 from rich.logging import RichHandler
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 
 @pytest.fixture(autouse=True)
-def restore_root_logging():
+def restore_root_logging() -> Iterator[None]:
     root = logging.getLogger()
     old_handlers = root.handlers[:]
     old_level = root.level

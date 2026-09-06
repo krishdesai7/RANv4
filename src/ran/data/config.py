@@ -57,7 +57,9 @@ def sigma_to_covariance(
     else:
         raise ValueError(f"sigma must be 0D, 1D, or 2D, got {arr.ndim = }")
 
-    cholesky(a=cov, lower=True)
+    # Called for its side effect: raises `LinAlgError` if `cov` is not positive
+    # definite, which is the validation this function exists to perform.
+    _ = cholesky(a=cov, lower=True)
     return cov
 
 

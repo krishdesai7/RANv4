@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import jax.numpy as jnp
 import numpy as np
@@ -20,9 +20,10 @@ from .data import (
 from .rantypes import RUN_DIR, DatasetName
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping, Sequence
     from logging import Logger
     from pathlib import Path
+    from typing import Any
 
     from jax import Array as JaxArray
     from numpy.typing import NDArray
@@ -47,7 +48,7 @@ def apply_to_runs(
     log: logging.Logger,
 ) -> None:
     if (run_dir / "config.json").exists():
-        evaluate_one(run_dir)
+        _ = evaluate_one(run_dir)
         return
 
     run_dirs: list[Path] = sorted(
@@ -56,14 +57,14 @@ def apply_to_runs(
     log.info("Found %d runs to %s", len(run_dirs), description)
     for d in run_dirs:
         try:
-            evaluate_one(d)
+            _ = evaluate_one(d)
         except Exception:
             log.warning("%s: failed", d.name, exc_info=True)
 
 
-def _load_splits(config: dict) -> DatasetSplits:
+def _load_splits(config: dict[str, Any]) -> DatasetSplits:
     dataset: DatasetName = DatasetName(
-        value=config.get("dataset", DatasetName.gaussian.value)
+        value=str(config.get("dataset", DatasetName.gaussian.value))
     )
     n_samples: int = config["n_samples"]
     batch_size: int = config["batch_size"]
@@ -74,7 +75,7 @@ def _load_splits(config: dict) -> DatasetSplits:
     if dataset == DatasetName.gaussian:
         if "gaussian_params" in config:
             params: GaussianConfig = gaussian_config_from_run_config(
-                config["gaussian_params"], dim
+                cast("Mapping[str, Any]", config["gaussian_params"]), dim
             )
         else:
             # Legacy config format: hardcoded mu/sigma, only smearing varied.
@@ -100,7 +101,7 @@ def _load_splits(config: dict) -> DatasetSplits:
             # The recorded list, in the recorded order. Round-tripping it
             # through a set here is what mismatched these columns against the
             # `var_names` below --- and against the generator's own training.
-            variables=config["variables"],
+            variables=cast("Sequence[str]", config["variables"]),
             seed=data_seed,
         )
         return splits
@@ -112,7 +113,9 @@ def _collect_test_data(test_ds: ArrayDataset) -> ZXY:
     return test_ds.as_arrays()
 
 
-def _get_weights(g: RANModel, z_gen: NDArray, chunk_size: int = 10_000) -> EventArray:
+def _get_weights(
+    g: RANModel, z_gen: NDArray[Any], chunk_size: int = 10_000
+) -> EventArray:
     """Compute normalized generator weights, mean 1, as host NumPy.
 
     Chunked because it is the intermediate activations, not the output, that set
@@ -130,7 +133,7 @@ def _get_weights(g: RANModel, z_gen: NDArray, chunk_size: int = 10_000) -> Event
     return np.asarray(a=raw / (jnp.sum(raw) / n))
 
 
-def _dim(x: NDArray, /) -> int:
+def _dim(x: NDArray[Any], /) -> int:
     return x.shape[1] if x.ndim > 1 else 1
 
 
@@ -146,9 +149,11 @@ def _wd_per_dim(
         for i in range(dim):
             r: EventArray = ref[:, i]
             c: EventArray = comp[:, i]
-            result[i] = wasserstein_distance(r, c, v_weights=weights)
+            distance: float = wasserstein_distance(r, c, v_weights=weights)
+            result[i] = distance
     else:
-        result[0] = wasserstein_distance(ref.ravel(), comp.ravel(), v_weights=weights)
+        flat: float = wasserstein_distance(ref.ravel(), comp.ravel(), v_weights=weights)
+        result[0] = flat
     return result
 
 
@@ -223,19 +228,19 @@ def _improvement(before: float, after: float) -> float:
     return (1 - after / before) * 100 if before > 0 else 0.0
 
 
-def evaluate_run(run_dir: Path, force: bool = False) -> dict:
+def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
     """Evaluate a single run directory."""
     out_path: Path = run_dir / "metrics.json"
 
     if out_path.exists() and not force:
         logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
-        return json.loads(out_path.read_text())
+        return cast("dict[str, Any]", json.loads(out_path.read_text()))
 
     # Imported here, not at module scope, so this module stays keras-free on
     # import.
     import keras
 
-    config = json.loads((run_dir / "config.json").read_text())
+    config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     logger.info("%s: loading model and data...", run_dir.name)
     g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
 
@@ -244,14 +249,14 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
     w = _get_weights(g, test.mc.z)
 
     # Variable names for labeling
-    dataset = config.get("dataset", "gaussian")
-    dim = config["dim"]
+    dataset: str = config.get("dataset", "gaussian")
+    dim: int = config["dim"]
     if dataset == "jets":
         var_names: list[str] = config["variables"]
     else:
         var_names = [f"dim_{i}" for i in range(dim)]
 
-    metrics: dict = {}
+    metrics: dict[str, Any] = {}
 
     for level, data, mc in [
         ("detector", test.data, test.mc.x),
@@ -288,7 +293,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict:
 
 def render_metrics(
     run_name: str,
-    metrics: dict,
+    metrics: dict[str, Any],
     var_names: list[str],
     console: Console | None = None,
     /,

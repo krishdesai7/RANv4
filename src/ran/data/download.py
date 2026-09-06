@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import urllib.request
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from rich.progress import Progress, TaskID
@@ -52,7 +52,7 @@ def _download_file(url: str, dest: Path, progress: Progress, task_id: TaskID) ->
     if not url.startswith("https://"):
         raise ValueError(f"refusing to fetch non-https URL: {url!r}")
     # ruff: ignore[suspicious-url-open-usage]
-    urllib.request.urlretrieve(url, filename=dest, reporthook=_progress)
+    _ = urllib.request.urlretrieve(url, filename=dest, reporthook=_progress)
     logger.info("Downloaded %s", dest)
 
 
@@ -67,7 +67,7 @@ _MAX_PID_INDEX: Final[int] = 15
 
 
 def _constituents(
-    data: dict[str, NDArray], ptype: str, /
+    data: dict[str, NDArray[np.double]], ptype: str, /
 ) -> tuple[NDArray[np.double], NDArray[np.int8]]:
     """Per-constituent `(pt, charge)` for every jet.
 
@@ -77,7 +77,7 @@ def _constituents(
     a silent axis error whenever a jet happens to have four constituents and a
     broadcast failure otherwise.
     """
-    particles: NDArray = data[f"{ptype}_particles"]
+    particles: NDArray[np.double] = data[f"{ptype}_particles"]
     if particles.ndim != 3 or particles.shape[2] < 4:
         raise ValueError(
             f"{ptype}_particles has shape {particles.shape}; "
@@ -123,7 +123,7 @@ _CONSTITUENT_VARS: Final[frozenset[str]] = frozenset({"q", "f_ch", "n_ch", "ptd"
 
 
 def _stored_var(
-    data: dict[str, NDArray], var: str, ptype: str, /
+    data: dict[str, NDArray[np.double]], var: str, ptype: str, /
 ) -> NDArray[np.double]:
     """Observables the Zenodo release already carries, one value per jet."""
     match var:
@@ -163,7 +163,7 @@ def _stored_var(
 
 
 def _constituent_var(
-    data: dict[str, NDArray], var: str, ptype: str, /
+    data: dict[str, NDArray[np.double]], var: str, ptype: str, /
 ) -> NDArray[np.double]:
     """Observables computed from the jet's constituents."""
     pt, charge = _constituents(data, ptype)
@@ -179,9 +179,10 @@ def _constituent_var(
             # zero-padded to the longest jet in the file, and a count is the
             # one observable here that a padded row could enter -- every other
             # one weights by pt, which is zero on padding.
-            return np.count_nonzero((charge != 0) & (pt > 0.0), axis=1).astype(
-                dtype=np.double
+            populated: NDArray[np.bool] = cast(
+                "NDArray[np.bool]", (charge != 0) & (pt > 0.0)
             )
+            return np.asarray(a=np.count_nonzero(populated, axis=1), dtype=np.double)
         case "ptd":
             # sqrt(sum pt^2) / sum pt: 1 for a one-particle jet, 1/sqrt(n) for
             # n equal ones. Padding contributes zero to both sums.
@@ -190,7 +191,9 @@ def _constituent_var(
     raise ValueError(f"Unknown variable '{var}'")
 
 
-def _get_var(data: dict[str, NDArray], var: str, ptype: str, /) -> NDArray[np.double]:
+def _get_var(
+    data: dict[str, NDArray[np.double]], var: str, ptype: str, /
+) -> NDArray[np.double]:
     if var in _CONSTITUENT_VARS:
         return _constituent_var(data, var, ptype)
     return _stored_var(data, var, ptype)
@@ -216,7 +219,9 @@ def _shard_observables(path: Path, /) -> dict[str, NDArray[np.double]]:
     # Materialized once: an `NpzFile` decompresses on every member access, and
     # four observables read `particles`.
     with np.load(file=path) as handle:
-        shard: dict[str, NDArray] = {key: handle[key] for key in handle.files}
+        shard: dict[str, NDArray[np.double]] = {
+            key: handle[key] for key in handle.files
+        }
     return {
         f"{ptype}_{var}": _get_var(shard, var, ptype)
         for var in SUBSTRUCTURE_VARIABLES

@@ -31,6 +31,7 @@ from .rantypes import (
     GaussianConfig,
     VarInfo,
 )
+from .timing import phase, report, write
 from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
 
 if TYPE_CHECKING:
@@ -158,6 +159,44 @@ def _save_run(
     hyperparameters: dict[str, Any],
     run_dir: Path | None = None,
 ) -> Path:
+    with phase("save"):
+        return _write_run_dir(
+            g,
+            d,
+            history,
+            params,
+            batch_size=batch_size,
+            n_samples=n_samples,
+            dim=dim,
+            dataset=dataset,
+            init_seed=init_seed,
+            data_seed=data_seed,
+            gaussian_params=gaussian_params,
+            variables=variables,
+            hyperparameters=hyperparameters,
+            run_dir=run_dir,
+        )
+
+
+def _write_run_dir(
+    g: RANModel,
+    d: RANModel,
+    history: dict[str, list[float]],
+    params: EpochParams,
+    *,
+    batch_size: int,
+    n_samples: int,
+    dim: int,
+    dataset: str,
+    init_seed: int,
+    data_seed: int,
+    gaussian_params: GaussianConfig | None,
+    variables: tuple[str, ...],
+    hyperparameters: dict[str, Any],
+    run_dir: Path | None = None,
+) -> Path:
+    """Everything `_save_run` puts on disk. Split out only so the timer wraps a
+    call rather than an indented body."""
     run_dir = _new_run_dir(run_dir)
 
     g.save(run_dir / "generator.keras")
@@ -165,7 +204,7 @@ def _save_run(
     # Every epoch's parameters, not just the selected one's. `scan` already
     # emitted the stack; dropping it on the floor is what made re-scoring a run
     # under a different criterion cost a full retrain.
-    save_params(run_dir, params)
+    _ = save_params(run_dir, params)
     np.savez(
         file=run_dir / "history.npz",
         # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
@@ -346,8 +385,67 @@ def run(
     plots: bool = True,
     run_dir: Path | None = None,
 ) -> None:
+    """Train (or reload) one run, then report where its wall clock went.
+
+    The timing report is in a `finally` because a run that fell over is exactly
+    the one whose breakdown is worth having --- the phase that raised is
+    recorded with the time it burned before it did.
+
+    `timings.json` needs a directory to land in. `--run-dir` and `--load-run`
+    both name one up front, so a crash there still gets a file; a fresh run
+    under the default timestamp has no directory until `_save_run` makes one,
+    and if it dies first the table on stderr is all there is.
+    """
     _reject_conflicting_outputs(load_run, run_dir)
 
+    written_to: Path | None = load_run or run_dir
+    try:
+        written_to = _pipeline(
+            batch_size,
+            n_samples,
+            config,
+            dataset,
+            variables,
+            load_run,
+            hidden_units,
+            n_layers,
+            seed,
+            data_seed,
+            n_epochs=n_epochs,
+            n_disc_steps=n_disc_steps,
+            lr_g=lr_g,
+            lr_d=lr_d,
+            lambda_dispersion=lambda_dispersion,
+            plots=plots,
+            run_dir=run_dir,
+        )
+    finally:
+        report()
+        if written_to is not None:
+            write(written_to)
+
+
+def _pipeline(
+    batch_size: int,
+    n_samples: int,
+    config: Path | None,
+    dataset: DatasetName,
+    variables: tuple[str, ...],
+    load_run: Path | None,
+    hidden_units: int,
+    n_layers: int,
+    seed: int | None,
+    data_seed: int,
+    *,
+    n_epochs: int,
+    n_disc_steps: int,
+    lr_g: float,
+    lr_d: float,
+    lambda_dispersion: float,
+    plots: bool,
+    run_dir: Path | None,
+) -> Path:
+    """The run itself, returning the directory its artifacts landed in."""
     # Each dataset fills in only its own metadata, but the plots and the saved
     # config are handed both, so the other one has to exist as None.
     gaussian_params: GaussianConfig | None = None
@@ -382,44 +480,50 @@ def run(
                 saved_config.source["gaussian_params"], dim
             )
 
-    if dataset == DatasetName.gaussian:
-        splits, dim, gaussian_params = _prepare_gaussian(
-            config,
-            saved_gaussian_config,
-            batch_size,
-            n_samples,
-            data_seed,
-        )
-    elif dataset == DatasetName.jets:
-        splits, dim, var_info = _prepare_jets(
-            n_samples, batch_size, variables, data_seed
-        )
-    else:
-        raise ValueError(f"Unknown dataset: {dataset!r}")
+    with phase("data"):
+        # Which branch this took --- cache hit, generated, downloaded --- is
+        # filled in from inside the loaders, which know and this does not.
+        if dataset == DatasetName.gaussian:
+            splits, dim, gaussian_params = _prepare_gaussian(
+                config,
+                saved_gaussian_config,
+                batch_size,
+                n_samples,
+                data_seed,
+            )
+        elif dataset == DatasetName.jets:
+            splits, dim, var_info = _prepare_jets(
+                n_samples, batch_size, variables, data_seed
+            )
+        else:
+            raise ValueError(f"Unknown dataset: {dataset!r}")
 
     g: RANModel
     history: dict[str, list[float]]
     best_epoch: int
     if load_run is not None:
         run_dir = Path(load_run)
-        g, history = _load_artifacts(run_dir)
+        with phase("load"):
+            g, history = _load_artifacts(run_dir)
         best_epoch = saved_best_epoch
     else:
-        result: TrainResult = train(
-            splits,
-            dim,
-            hidden_units,
-            n_layers,
-            seed,
-            n_epochs=n_epochs,
-            n_disc_steps=n_disc_steps,
-            lr_g=lr_g,
-            lr_d=lr_d,
-            lambda_dispersion=lambda_dispersion,
-        )
+        with phase("train"):
+            result: TrainResult = train(
+                splits,
+                dim,
+                hidden_units,
+                n_layers,
+                seed,
+                n_epochs=n_epochs,
+                n_disc_steps=n_disc_steps,
+                lr_g=lr_g,
+                lr_d=lr_d,
+                lambda_dispersion=lambda_dispersion,
+            )
         g = result.g
         best_epoch = result.best_epoch
-        history, mmd_record = _finish_run(splits, result)
+        with phase("particle_mmd"):
+            history, mmd_record = _finish_run(splits, result)
         run_dir = _save_run(
             result.g,
             result.d,
@@ -446,10 +550,16 @@ def run(
             run_dir=run_dir,
         )
 
-    _draw_figures(run_dir, splits, g, history, dim, var_info, best_epoch, plots=plots)
+    with phase("plots"):
+        _draw_figures(
+            run_dir, splits, g, history, dim, var_info, best_epoch, plots=plots
+        )
 
     # Metrics (run last so failures don't block plots/checkpoints)
-    try:
-        evaluate_run(run_dir, force=(load_run is None))
-    except Exception:
-        logger.exception(msg="Metric evaluation failed")
+    with phase("evaluate"):
+        try:
+            _ = evaluate_run(run_dir, force=(load_run is None))
+        except Exception:
+            logger.exception(msg="Metric evaluation failed")
+
+    return run_dir

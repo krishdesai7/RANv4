@@ -1,24 +1,15 @@
 from __future__ import annotations
 
-import os
-
-# Before *any* keras import, and it cannot be delegated to `import ran`: ruff
-# sorts `keras` above `ran`, so the package `__init__` that would set this runs
-# after keras has already chosen a backend. Setting it here, above the import
-# block, is what makes the ordering independent of the sorter.
-os.environ.setdefault(key="KERAS_BACKEND", value="jax")
-
-import argparse
 import json
 import logging
-import math
-from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from pathlib import Path  # ruff: ignore[typing-only-standard-library-import] -- needed by typer
+from typing import TYPE_CHECKING, Annotated, NamedTuple, cast
 
 import jax.numpy as jnp
 import keras
 import numpy as np
-import ran  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64; the backend is set above
+import typer
+from jax import Array
 from ran.data import load_jet_dataset
 from ran.evaluate import _improvement, _wd_per_dim
 from ran.logging_config import configure_logging
@@ -34,19 +25,23 @@ from ran.train import (
 )
 
 if TYPE_CHECKING:
+    from logging import Logger
+    from typing import Any, Final
+
     from numpy.typing import NDArray
+    from ran.mmd import MMDCache
     from ran.rantypes import DatasetSplits, EventArray, Populations, RANModel
 
-LOG2: float = math.log(2.0)
+LOG2: Final[np.double] = np.log(2.0)
 
-# Where a float32 sigmoid stops resolving a probability from 0 or 1.
-_P_CLIP: float = 1e-7
+# Resolution limit of a float32 sigmoid.
+_P_CLIP: Final[float] = 1e-7
 
-logger = logging.getLogger("ran.ceiling")
+logger: Logger = logging.getLogger(name="ran.ceiling")
 
 
 class Fit(NamedTuple):
-    model: RANModel
+    model: keras.Model
     val_bce: float
     epochs_run: int
 
@@ -58,7 +53,8 @@ def _labelled(
     return (
         np.concatenate([positive, negative], axis=0),
         np.concatenate(
-            [np.ones(len(positive)), np.zeros(len(negative))], dtype=np.single
+            [np.ones(shape=len(positive)), np.zeros(shape=len(negative))],
+            dtype=np.single,
         ),
     )
 
@@ -94,16 +90,23 @@ def _fit_classifier(
     # the row count, not by the weight sum -- which is exactly what
     # `ran.train.weighted_bce` does. The two are the same quantity, so a
     # sample-weighted fit here early-stops on the same number C then scores.
-    fit_w = None if train_w is None else {"sample_weight": train_w}
-    val_data = (x_val, y_val) if val_w is None else (x_val, y_val, val_w)
+    fit_w: dict[str, NDArray[np.single]] | None = (
+        None if train_w is None else {"sample_weight": train_w}
+    )
+    val_data: tuple[NDArray[np.single], ...] = (
+        (x_val, y_val) if val_w is None else (x_val, y_val, val_w)
+    )
 
-    model: RANModel = build_discriminator(
-        dim=x_train.shape[1], hidden_units=hidden_units, n_layers=n_layers
+    model: keras.Model = cast(
+        typ=keras.Model,
+        val=build_discriminator(
+            dim=x_train.shape[1], hidden_units=hidden_units, n_layers=n_layers
+        ),
     )
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=lr), loss="binary_crossentropy"
     )
-    history = model.fit(
+    history: keras.callbacks.History = model.fit(
         x_train,
         y_train,
         validation_data=val_data,
@@ -122,7 +125,7 @@ def _fit_classifier(
         ],
     )
     curve: list[float] = history.history["val_loss"]
-    fit = Fit(model=model, val_bce=float(min(curve)), epochs_run=len(curve))
+    fit = Fit(model=model, val_bce=min(curve), epochs_run=len(curve))
     logger.info(
         "%-28s val BCE %.6f  (log2 - BCE = %.6f)  [%d epochs]",
         label,
@@ -133,14 +136,14 @@ def _fit_classifier(
     return fit
 
 
-def _likelihood_ratio(model: RANModel, z: EventArray, /) -> EventArray:
+def _likelihood_ratio(model: keras.Model, z: EventArray, /) -> NDArray[np.double]:
     """`p / (1 - p)` from a calibrated classifier, normalized to preserve count.
 
     The normalization matches `train.normalize_weights` so the weights entering
     the metrics below are on the same footing as the ones RAN produces.
     """
-    p: EventArray = (
-        np.asarray(model.predict(z, batch_size=8192, verbose=0))
+    p: NDArray[np.double] = (
+        np.asarray(a=model.predict(z, batch_size=8192, verbose=0))
         .ravel()
         .astype(np.double)
     )
@@ -150,7 +153,7 @@ def _likelihood_ratio(model: RANModel, z: EventArray, /) -> EventArray:
     # how many events landed on the bound -- a ratio pinned at 1e7 is a weight
     # that will dominate every sum it enters, and that is a finding, not a
     # detail to smooth over.
-    saturated: int = int(np.count_nonzero((p <= _P_CLIP) | (p >= 1.0 - _P_CLIP)))
+    saturated: int = int(np.count_nonzero(a=(p <= _P_CLIP) | (p >= 1.0 - _P_CLIP)))
     if saturated:
         logger.info(
             "  %d / %d events (%.3f%%) hit the sigmoid clip at p=%g",
@@ -159,7 +162,7 @@ def _likelihood_ratio(model: RANModel, z: EventArray, /) -> EventArray:
             100.0 * saturated / len(p),
             _P_CLIP,
         )
-    raw: EventArray = np.clip(p, _P_CLIP, 1.0 - _P_CLIP)
+    raw: NDArray[np.double] = np.clip(a=p, a_min=_P_CLIP, a_max=1.0 - _P_CLIP)
     raw = raw / (1.0 - raw)
     return raw * (len(raw) / raw.sum())
 
@@ -172,10 +175,12 @@ def _report_level(
     variables: tuple[str, ...],
     /,
 ) -> None:
-    before = _wd_per_dim(ref=reference, comp=comparison)
-    after = _wd_per_dim(ref=reference, comp=comparison, weights=weights)
+    before: NDArray[np.double] = _wd_per_dim(ref=reference, comp=comparison)
+    after: NDArray[np.double] = _wd_per_dim(
+        ref=reference, comp=comparison, weights=weights
+    )
     logger.info("  %s level", name)
-    for i, var in enumerate(variables):
+    for i, var in enumerate(iterable=variables):
         logger.info(
             "    %-6s W %.5f -> %.5f  (%+.1f%%)",
             var,
@@ -186,17 +191,17 @@ def _report_level(
     logger.info(
         "    %-6s %+.1f%%",
         "mean",
-        float(np.mean(list(map(_improvement, before, after, strict=True)))),
+        float(np.mean(a=list(map(_improvement, before, after, strict=True)))),
     )
 
 
 def _weight_stats(w: EventArray, /) -> None:
     """Effective sample size is what a degenerate reweighting destroys first."""
-    ess: float = float(w.sum() ** 2 / np.square(w).sum())
+    ess: np.double = w.sum() ** 2 / np.square(w).sum()
     logger.info(
         "  weights: min %.3g  max %.3g  ESS %.0f / %d (%.1f%%)",
-        float(w.min()),
-        float(w.max()),
+        w.min(),
+        w.max(),
         ess,
         len(w),
         100.0 * ess / len(w),
@@ -207,23 +212,23 @@ def diagnostic_a(
     train_pop: Populations,
     val_pop: Populations,
     /,
-    **kwargs,
+    **kwargs: dict[str, Any],
 ) -> Fit:
     """How much detector-level signal is there for `d` to find?
 
     Deliberately fitted on train and scored on val, the same two splits RAN's
     `val_d` is built from, so the two numbers are directly comparable.
     """
-    logger.info("")
-    logger.info("A. Detector-level separability of x_sim from x_data")
-    logger.info("   The BCE floor a converged, unweighted classifier reaches.")
+    logger.info(msg="")
+    logger.info(msg="A. Detector-level separability of x_sim from x_data")
+    logger.info(msg="   The BCE floor a converged, unweighted classifier reaches.")
     return _fit_classifier(
         train_pop.data,
         train_pop.mc.x,
         val_pop.data,
         val_pop.mc.x,
         label="d*(x): x_data vs x_sim",
-        **kwargs,
+        **kwargs,  # ty: ignore[invalid-argument-type]
     )
 
 
@@ -233,12 +238,12 @@ def diagnostic_b(
     test_pop: Populations,
     variables: tuple[str, ...],
     /,
-    **kwargs,
+    **kwargs: dict[str, Any],
 ) -> EventArray:
     """Does the weight function that fixes particle level also fix detector level?"""
-    logger.info("")
-    logger.info("B. The particle-level likelihood ratio, applied at both levels")
-    logger.info("   Fitted on train, early-stopped on val, scored on test.")
+    logger.info(msg="")
+    logger.info(msg="B. The particle-level likelihood ratio, applied at both levels")
+    logger.info(msg="   Fitted on train, early-stopped on val, scored on test.")
     # Three splits, not two: a likelihood ratio early-stopped on the same events
     # it is then scored against reports a particle-level match it will not
     # reproduce anywhere else, which is precisely the failure this diagnostic
@@ -249,9 +254,9 @@ def diagnostic_b(
         val_pop.require_truth(),
         val_pop.mc.z,
         label="w*(z): z_true vs z_gen",
-        **kwargs,
+        **kwargs,  # ty: ignore[invalid-argument-type]
     )
-    w: EventArray = _likelihood_ratio(fit.model, test_pop.mc.z)
+    w: EventArray = _likelihood_ratio(fit.model, test_pop.mc.z).astype(dtype=np.single)
     _weight_stats(w)
     # Particle level is the level w* was fitted to separate, so a large
     # improvement here is a check that the fit worked, not a result.
@@ -261,7 +266,9 @@ def diagnostic_b(
     return w
 
 
-def _generator_at(run_dir: Path, config: dict, epoch: int | None, /) -> RANModel:
+def _generator_at(
+    run_dir: Path, config: dict[str, Any], epoch: int | None, /
+) -> RANModel:
     """The run's generator, either as saved or rebuilt at an arbitrary epoch.
 
     `generator.keras` holds `best_epoch` alone. Auditing any *other* epoch is
@@ -270,13 +277,15 @@ def _generator_at(run_dir: Path, config: dict, epoch: int | None, /) -> RANModel
     equivalent at detector level or merely unresolved.
     """
     if epoch is None:
-        return keras.saving.load_model(run_dir / "generator.keras")
+        return keras.saving.load_model(run_dir / "generator.keras")  # pyrefly: ignore[no-any-return-implicit]
     if not (run_dir / PARAMS_FILE).exists():
-        raise SystemExit(
+        typer.echo(
+            message=f"{run_dir} predates per-epoch parameter saving, so only its"
             f"{run_dir} predates per-epoch parameter saving, so only its "
             f"selected epoch ({config['best_epoch']}) can be audited. "
-            "Re-run training to get params.npz, or drop --epoch."
+            "Re-run training to get params.npz, or drop --epoch.",
         )
+        raise typer.Exit(code=-1)
     g: RANModel = build_generator(
         dim=int(config["dim"]),
         hidden_units=int(config["hidden_units"]),
@@ -285,12 +294,17 @@ def _generator_at(run_dir: Path, config: dict, epoch: int | None, /) -> RANModel
     for var, stacked in zip(
         g.trainable_variables, load_params(run_dir).g_trainable, strict=True
     ):
-        var.assign(np.asarray(stacked[epoch]))
+        var.assign(value=cast(typ=Array, val=np.asarray(a=stacked[epoch])))
     return g
 
 
 def _run_weights(
-    run_dir: Path, pop: Populations, /, *, config: dict, epoch: int | None = None
+    run_dir: Path,
+    pop: Populations,
+    /,
+    *,
+    config: dict[str, Any],
+    epoch: int | None = None,
 ) -> tuple[EventArray, EventArray, EventArray]:
     """`(x, y, w)` for one split, weighted by a saved run's generator.
 
@@ -298,23 +312,25 @@ def _run_weights(
     weights come back through `ran.train.normalize_weights` -- the same
     normalization the training loop applies, rather than a re-derivation of it.
     """
-    g: RANModel = _generator_at(run_dir, config, epoch)
+    g: keras.Model = cast(typ=keras.Model, val=_generator_at(run_dir, config, epoch))
     raw_mc: EventArray = (
-        np.asarray(g.predict(pop.mc.z, batch_size=8192, verbose=0))
+        np.asarray(a=g.predict(pop.mc.z, batch_size=8192, verbose=0))
         .ravel()
         .astype(np.single)
     )
     x, y = _labelled(pop.data, pop.mc.x)
-    raw: EventArray = np.concatenate([np.ones(len(pop.data), np.single), raw_mc])
+    raw: EventArray = np.concatenate(
+        [np.ones(shape=len(pop.data), dtype=np.single), raw_mc]
+    )
     w: EventArray = np.asarray(
-        normalize_weights(raw, y, np.ones_like(y)), dtype=np.single
+        a=normalize_weights(raw, y, np.ones_like(a=y)), dtype=np.single
     )
     return x, y, w
 
 
 def _check_run_matches(
     run_dir: Path, variables: tuple[str, ...], n_samples: int, data_seed: int, /
-) -> dict:
+) -> dict[str, Any]:
     """Refuse to score a generator against a sample it was not trained on.
 
     Column order is the sharp edge here: `variables` indexes columns, so a
@@ -322,7 +338,7 @@ def _check_run_matches(
     consume and report nonsense about. `n_samples` matters too, because
     standardization is fitted on the sample.
     """
-    config: dict = json.loads((run_dir / "config.json").read_text())
+    config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     mismatches: list[str] = [
         f"{key}: run has {have!r}, this sample is {want!r}"
         for key, have, want in (
@@ -352,15 +368,17 @@ def diagnostic_c(
     /,
     *,
     epoch: int | None = None,
-    **kwargs,
+    **kwargs: dict[str, Any],
 ) -> None:
     """Did `g` really match detector level, or was RAN's `d` just too weak?"""
-    logger.info("")
-    logger.info("C. A fresh discriminator against a finished run's weights")
+    logger.info(msg="")
+    logger.info(msg="C. A fresh discriminator against a finished run's weights")
     logger.info(
         "   %s, epoch %s", run_dir, "best (as saved)" if epoch is None else epoch
     )
-    config: dict = _check_run_matches(run_dir, variables, n_samples, data_seed)
+    config: dict[str, Any] = _check_run_matches(
+        run_dir, variables, n_samples, data_seed
+    )
 
     _, _, w_tr = _run_weights(run_dir, train_pop, config=config, epoch=epoch)
     x_va, y_va, w_va = _run_weights(run_dir, val_pop, config=config, epoch=epoch)
@@ -377,23 +395,26 @@ def diagnostic_c(
         label="fresh d(x): x_data vs w*x_sim",
         train_w=w_tr,
         val_w=w_va,
-        **kwargs,
+        **kwargs,  # ty: ignore[invalid-argument-type]
     )
     d_out: EventArray = (
-        np.asarray(fit.model.predict(x_va, batch_size=8192, verbose=0))
+        np.asarray(a=fit.model.predict(x_va, batch_size=8192, verbose=0))
         .ravel()
         .astype(np.single)
     )
     # Scored with the training loop's own function, so this is `val_d` as
     # `history.npz` defines it and not merely something close to it.
-    bce: float = float(weighted_bce(d_out, y_va, w_va, np.ones_like(y_va)))
+    bce: Array = weighted_bce(d_out, y_va, w_va, np.ones_like(a=y_va))
     # `val_d` at the *selected* epoch, not the run's minimum over epochs. Those
     # are different generators: the saved model is the one from `best_epoch`,
     # and the minimum of `val_d` is usually some other epoch entirely, whose
     # weights this fresh `d` never saw. Comparing against the minimum reports a
     # difference between two generators as if it were a difference between two
     # discriminators, and can come out negative.
-    curve = np.asarray(np.load(run_dir / "history.npz")["val_d"], dtype=np.double)
+    curve: NDArray[np.double] = np.asarray(
+        a=np.load(file=run_dir / "history.npz")["val_d"],  # pyrefly: ignore[unknown-argument-type]
+        dtype=np.double,
+    )
     best_epoch: int = int(config["best_epoch"]) if epoch is None else epoch
     ran_val_d: float = float(curve[best_epoch])
     logger.info(
@@ -409,7 +430,7 @@ def diagnostic_c(
         "  unweighted floor from A    %.6f  (log2 - BCE = %+.6f)", floor, LOG2 - floor
     )
     present: float = LOG2 - floor
-    found: float = LOG2 - bce
+    found = float(LOG2 - bce)
     missed: float = found - (LOG2 - ran_val_d)
     logger.info(
         "  Of the %.6f nats of detector-level mismatch present before "
@@ -438,8 +459,8 @@ def _mmd2(
     reference: EventArray,
     comparison: EventArray,
     w: EventArray,
-    i_nature: NDArray,
-    i_mc: NDArray,
+    i_nature: NDArray[np.intp],
+    i_mc: NDArray[np.intp],
     /,
 ) -> tuple[float, float]:
     """Detector- or particle-level MMD^2 on the subsample, as selection sees it.
@@ -452,8 +473,8 @@ def _mmd2(
     """
     ref, comp = reference[i_nature], comparison[i_mc]
     sigmas: tuple[float, ...] = bandwidths(jnp.asarray(ref))
-    cache = build_cache(ref, comp, sigmas=sigmas)
-    mmd2, ess = weighted_mmd(cache, jnp.asarray(w[i_mc]))
+    cache: MMDCache = build_cache(ref, comp, sigmas=sigmas)
+    mmd2, ess = weighted_mmd(cache, jnp.asarray(a=w[i_mc]))
     return float(mmd2), float(ess)
 
 
@@ -476,7 +497,7 @@ def diagnostic_d(
     than a finished run's own weights, the criterion is not noisy but pointed
     the wrong way, and no subsample size fixes that.
     """
-    logger.info("")
+    logger.info(msg="")
     logger.info("D. The selection criterion, scored on the oracle's weights")
     n_mc: int = len(test_pop.mc)
     n_nature: int = len(test_pop.data)
@@ -486,18 +507,18 @@ def diagnostic_d(
     # both levels: `truth` is the particle-level view of the same events as
     # `data`, and `mc.z` of the same events as `mc.x`, so a shared pair of
     # indices compares the same physical events at both levels.
-    i_nature: NDArray = subsample_indices(seed, n_nature, m)
-    i_mc: NDArray = subsample_indices(seed + 1, n_mc, m)
-    ones: EventArray = np.ones(n_mc, dtype=np.single)
+    i_nature: NDArray[np.intp] = subsample_indices(seed, n_nature, m)
+    i_mc: NDArray[np.intp] = subsample_indices(seed + 1, n_mc, m)
+    ones: EventArray = np.ones(shape=n_mc, dtype=np.single)
 
     rows: list[tuple[str, EventArray]] = [
         ("unweighted", ones),
         ("oracle w*(z)", oracle_w),
     ]
     if run_dir is not None:
-        config = json.loads((run_dir / "config.json").read_text())
+        config: dict[str, Any] = json.loads(s=(run_dir / "config.json").read_text())
         _, y, w = _run_weights(run_dir, test_pop, config=config)
-        rows.append((f"RAN {run_dir.name}", np.asarray(w[y == 0], dtype=np.single)))
+        rows.append((f"RAN {run_dir.name}", np.asarray(a=w[y == 0], dtype=np.single)))
 
     logger.info(
         "   m = %d of %d nature / %d mc test events, median-heuristic bandwidths",
@@ -515,55 +536,51 @@ def diagnostic_d(
             "   %-22s %14.3e %14.3e %9.1f%%", label, d_mmd, p_mmd, 100.0 * ess / m
         )
     logger.info(
-        "   If the oracle's detector MMD2 is not the smallest, a detector-level"
+        msg="   If the oracle's detector MMD2 is not the smallest, a detector-level"
     )
     logger.info(
-        "   criterion cannot rank the right answer first at any subsample size."
+        msg="   criterion cannot rank the right answer first at any subsample size."
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--n-samples", type=int, default=1_000_000)
-    parser.add_argument(
-        "--var", action="append", dest="variables", choices=SUBSTRUCTURE_VARIABLES
-    )
-    parser.add_argument("--hidden-units", type=int, default=128)
-    parser.add_argument("--n-layers", type=int, default=3)
-    parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--patience", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=1024)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--data-seed", type=int, default=42)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
-        "--run-dir",
-        type=Path,
-        default=None,
-        help="a finished run to audit with diagnostic C",
-    )
-    parser.add_argument(
-        "--epoch",
-        type=int,
-        default=None,
-        help="audit this epoch instead of the selected one (needs params.npz)",
-    )
-    args = parser.parse_args()
+def main(
+    n_samples: Annotated[
+        int, typer.Option(help="the number of events to sample")
+    ] = 1_000_000,
+    var: Annotated[list[str] | None, typer.Option(help="the variables to use")] = None,
+    hidden_units: Annotated[int, typer.Option(help="the number of hidden units")] = 128,
+    n_layers: Annotated[int, typer.Option(help="the number of layers")] = 3,
+    epochs: Annotated[int, typer.Option(help="the number of epochs")] = 200,
+    patience: Annotated[int, typer.Option(help="the patience for early stopping")] = 10,
+    batch_size: Annotated[int, typer.Option(help="the batch size")] = 1024,
+    lr: Annotated[float, typer.Option(help="the learning rate")] = 1e-3,
+    data_seed: Annotated[int, typer.Option(help="the data seed")] = 42,
+    seed: Annotated[int, typer.Option(help="the random seed")] = 0,
+    run_dir: Annotated[
+        Path | None, typer.Option(help="a finished run to audit with diagnostic C")
+    ] = None,
+    epoch: Annotated[
+        int | None,
+        typer.Option(
+            help="audit this epoch instead of the selected one (needs params.npz)"
+        ),
+    ] = None,
+) -> None:
 
     configure_logging(level="info")
-    keras.utils.set_random_seed(args.seed)
+    keras.utils.set_random_seed(seed)
 
     # Canonical order, exactly as `cli._canonical_variables` fixes it: these
     # names index columns, so a permutation is a different dataset.
-    chosen: set[str] = set(args.variables or SUBSTRUCTURE_VARIABLES)
+    chosen: set[str] = set(var or SUBSTRUCTURE_VARIABLES)
     variables: tuple[str, ...] = tuple(v for v in SUBSTRUCTURE_VARIABLES if v in chosen)
 
     splits: DatasetSplits
     splits, _dim, _std = load_jet_dataset(
-        n_samples=args.n_samples,
-        batch_size=args.batch_size,
+        n_samples=n_samples,
+        batch_size=batch_size,
         variables=variables,
-        seed=args.data_seed,
+        seed=data_seed,
     )
     train_pop: Populations = splits.select(Split.TRAIN).partition()
     val_pop: Populations = splits.select(Split.VAL).partition()
@@ -571,7 +588,7 @@ def main() -> None:
 
     logger.info(
         "%d events over %s, %d train / %d val / %d test (MC side)",
-        args.n_samples,
+        n_samples,
         ", ".join(variables),
         len(train_pop.mc),
         len(val_pop.mc),
@@ -579,53 +596,55 @@ def main() -> None:
     )
     logger.info(
         "classifier: %d x %d, Adam lr=%g, batch %d, early stop patience %d",
-        args.n_layers,
-        args.hidden_units,
-        args.lr,
-        args.batch_size,
-        args.patience,
+        n_layers,
+        hidden_units,
+        lr,
+        batch_size,
+        patience,
     )
     logger.info("log 2 = %.6f", LOG2)
 
-    fit_kwargs = {
-        "hidden_units": args.hidden_units,
-        "n_layers": args.n_layers,
-        "epochs": args.epochs,
-        "batch_size": args.batch_size,
-        "lr": args.lr,
-        "patience": args.patience,
+    fit_kwargs: dict[str, Any] = {
+        "hidden_units": hidden_units,
+        "n_layers": n_layers,
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "lr": lr,
+        "patience": patience,
     }
     a: Fit = diagnostic_a(train_pop, val_pop, **fit_kwargs)
-    oracle_w = diagnostic_b(train_pop, val_pop, test_pop, variables, **fit_kwargs)
-    if args.run_dir is not None:
+    oracle_w: EventArray = diagnostic_b(
+        train_pop, val_pop, test_pop, variables, **fit_kwargs
+    )
+    if run_dir is not None:
         diagnostic_c(
-            args.run_dir,
+            run_dir,
             train_pop,
             val_pop,
             variables,
-            args.n_samples,
-            args.data_seed,
+            n_samples,
+            data_seed,
             a.val_bce,
-            epoch=args.epoch,
+            epoch=epoch,
             **fit_kwargs,
         )
-    diagnostic_d(args.run_dir, test_pop, oracle_w, args.data_seed)
+    diagnostic_d(run_dir, test_pop, oracle_w, data_seed)
 
-    logger.info("")
-    logger.info("SUMMARY")
+    logger.info(msg="")
+    logger.info(msg="SUMMARY")
     logger.info(
         "  detector-level BCE floor      %.6f   (log2 - floor = %.6f)",
         a.val_bce,
         LOG2 - a.val_bce,
     )
     logger.info(
-        "  Compare against `val_d` in a run's history.npz. RAN's `d` scoring far"
+        msg="  Compare against `val_d` in a run's history.npz. RAN's `d` scoring far"
     )
     logger.info(
-        "  above this floor means `d` is the bottleneck, not `g`; scoring at it"
+        msg="  above this floor means `d` is the bottleneck, not `g`; scoring at it"
     )
-    logger.info("  means the residual is real and `g` is doing the work.")
+    logger.info(msg="  means the residual is real and `g` is doing the work.")
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(function=main)

@@ -18,6 +18,10 @@ from ran.train import TrainResult
 from scipy.stats import wasserstein_distance
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from pathlib import Path
+
+    from numpy.typing import NDArray
     from ran.rantypes import RANModel
 
 
@@ -59,11 +63,13 @@ def test_unfolded_wasserstein_uniform_weights_equals_unweighted() -> None:
     z_gen = rng.normal(-1, 1, 5000).astype(np.single)
     w = np.ones_like(z_gen)
     got = unfolded_wasserstein(z_truth, z_gen, w)
-    expected = wasserstein_distance(z_truth, z_gen)
+    expected: float = wasserstein_distance(z_truth, z_gen)
     np.testing.assert_allclose(got, expected, rtol=1e-12)
 
 
-def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
+def test_run_ran_wiring_with_stubbed_training(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Verify run_ran's orchestration WITHOUT training any models.
 
     Real RAN training is cluster work; here train() is stubbed with an instant
@@ -71,14 +77,19 @@ def test_run_ran_wiring_with_stubbed_training(tmp_path, monkeypatch) -> None:
     computes the metric, and writes the JSON.
     """
 
-    def fake_train(_splits, *, seed=None, **_kwargs) -> TrainResult:
+    def _uniform_weights(z: NDArray[Any]) -> NDArray[Any]:
+        return np.ones((len(z), 1))
+
+    def fake_train(
+        _splits: object, *, seed: int | None = None, **_kwargs: object
+    ) -> TrainResult:
         # Generator returns uniform raw weights for any z (shape (n, 1)).
         # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
         # run_ran passes a seed through.
         return TrainResult(
             # TrainResult declares g/d as RANModel; run_ran only calls g and
             # reads seed, so this test double is sufficient at runtime.
-            g=cast("RANModel", lambda z: np.ones((len(z), 1))),
+            g=cast("RANModel", _uniform_weights),
             d=cast("RANModel", None),
             history={},
             seed=seed or 0,
@@ -114,35 +125,45 @@ def test_sweep_point_returns_columns_with_truth() -> None:
 
 
 def _write_points(
-    tmp_path, indices: list[int], s_values: list[float], *, ibu: bool = True
+    tmp_path: Path,
+    indices: list[int],
+    s_values: list[float],
+    *,
+    ibu: bool = True,
 ) -> None:
     for i, s in zip(indices, s_values, strict=False):
         record: dict[str, Any] = {"s_index": i, "s": s, "ran_wd": 0.1 * (i + 1)}
         if ibu:
             record |= {"ibu_wd": 0.2 * (i + 1), "ibu_status": "completed"}
-        (tmp_path / f"point_{i:02d}.json").write_text(json.dumps(record))
+        _ = (tmp_path / f"point_{i:02d}.json").write_text(json.dumps(record))
 
 
-def test_collect_joins_both_methods_and_writes_results_and_plot(tmp_path) -> None:
+def test_collect_joins_both_methods_and_writes_results_and_plot(
+    tmp_path: Path,
+) -> None:
     _write_points(tmp_path, [0, 1], [0.0, 10.0])
     collect(sweep_dir=tmp_path, n_points=2)
 
     assert (tmp_path / "results.npz").exists()
     assert (tmp_path / "wasserstein_vs_s.pdf").exists()
 
-    data = np.load(tmp_path / "results.npz")
+    data: Mapping[str, NDArray[Any]] = cast(
+        "Mapping[str, NDArray[Any]]", np.load(tmp_path / "results.npz")
+    )
     np.testing.assert_array_equal(data["s"], [0.0, 10.0])
     np.testing.assert_allclose(data["ran"], [0.1, 0.2])
     np.testing.assert_allclose(data["ibu"], [0.2, 0.4])
 
 
-def test_collect_rejects_a_point_missing_its_ibu_half(tmp_path) -> None:
+def test_collect_rejects_a_point_missing_its_ibu_half(tmp_path: Path) -> None:
     """A half-written point is dropped rather than plotted against a gap."""
     _write_points(tmp_path, [0], [0.0])
     _write_points(tmp_path, [1], [10.0], ibu=False)
     collect(sweep_dir=tmp_path, n_points=2)
 
-    data = np.load(tmp_path / "results.npz")
+    data: Mapping[str, NDArray[Any]] = cast(
+        "Mapping[str, NDArray[Any]]", np.load(tmp_path / "results.npz")
+    )
     np.testing.assert_array_equal(data["s"], [0.0])
     assert data["ran"].shape == data["ibu"].shape == (1,)
 

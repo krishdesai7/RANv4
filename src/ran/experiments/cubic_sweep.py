@@ -44,7 +44,7 @@ _IBU_ITERATIONS: int = 10
 def response(s: np.single, *zs: EventArray) -> tuple[EventArray, ...]:
     """Deterministic non-linear detector response r(s, z) = z + s * z**3."""
     # NumPy-stub loses specific float precision. There is no type promotion at runtime
-    return tuple(z + s * z**3.0 for z in zs)  # pyrefly: ignore[bad-return]
+    return tuple(z + s * z**3.0 for z in zs)
 
 
 def _column(a: EventArray, /) -> EventArray:
@@ -70,11 +70,12 @@ def unfolded_wasserstein(
     weights: EventArray,
 ) -> np.double:
     """Wasserstein distance between z_truth and the weighted z_gen distribution."""
-    return wasserstein_distance(
+    distance: float = wasserstein_distance(
         z_truth.ravel(),
         z_gen.ravel(),
         v_weights=weights.ravel(),
     )
+    return np.double(distance)
 
 
 def _sweep_point(
@@ -92,7 +93,7 @@ def _sweep_point(
     )
 
 
-def _write_point(sweep_dir: Path, out: dict) -> dict:
+def _write_point(sweep_dir: Path, out: dict[str, Any]) -> dict[str, Any]:
     """Write one point's record, coercing numpy scalars to builtins first.
 
     `np.float64` subclasses `float`, so `json` accepted it silently while the
@@ -103,7 +104,7 @@ def _write_point(sweep_dir: Path, out: dict) -> dict:
     record: dict[str, Any] = {
         k: v.item() if isinstance(v, np.generic) else v for k, v in out.items()
     }
-    (sweep_dir / f"point_{record['s_index']:02d}.json").write_text(
+    _ = (sweep_dir / f"point_{record['s_index']:02d}.json").write_text(
         data=json.dumps(obj=record, indent=2)
     )
     return record
@@ -150,7 +151,7 @@ def run_ran(
     batch_size: int = 1024,
     ran_epochs: int = 100,
     init_seed: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     # Deferred so that `ran sweep collect`, which only reads JSON and plots,
     # does not pay for importing keras and jax.
     from ..train import train
@@ -213,7 +214,7 @@ def _complete_points(sweep_dir: Path, n_points: int) -> list[dict[str, Any]]:
     """
     records: dict[int, dict[str, Any]] = {}
     for f in sorted(sweep_dir.glob(pattern="point_*.json")):
-        rec: dict = json.loads(s=f.read_text())
+        rec: dict[str, Any] = json.loads(s=f.read_text())
         records.setdefault(rec["s_index"], {}).update(rec)
 
     # Both methods are written in one pass, so a point either carries both or
@@ -242,12 +243,12 @@ def _plot_sweep(
     figure = Figure(figsize=(7, 5))
     figure.canvas = FigureCanvasPdf(figure)
     ax: Axes = figure.subplots()
-    ax.plot(s, ran, "o-", label="RAN")
-    ax.plot(s, ibu, "s--", label="IBU")
-    ax.set_xlabel(xlabel=r"$s$ (cubic distortion strength)")
-    ax.set_ylabel(ylabel=r"Wasserstein($z_\mathrm{truth}$, $z_\mathrm{unfolded}$)")
-    ax.set_title(label="Unfolding performance vs detector distortion")
-    ax.legend()
+    _ = ax.plot(s, ran, "o-", label="RAN")
+    _ = ax.plot(s, ibu, "s--", label="IBU")
+    _ = ax.set_xlabel(xlabel=r"$s$ (cubic distortion strength)")
+    _ = ax.set_ylabel(ylabel=r"Wasserstein($z_\mathrm{truth}$, $z_\mathrm{unfolded}$)")
+    _ = ax.set_title(label="Unfolding performance vs detector distortion")
+    _ = ax.legend()
     figure.tight_layout()
     figure.savefig(fname=sweep_dir / "wasserstein_vs_s.pdf")
 

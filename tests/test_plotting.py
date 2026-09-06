@@ -9,7 +9,7 @@ plot rather than only the shape of the data.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -19,6 +19,8 @@ from ran.plotting import plot_losses, plot_selection
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+type DrawnCalls = list[tuple[tuple[Any, ...], dict[str, Any]]]
 
 
 def _history(n: int = 12) -> dict[str, list[float]]:
@@ -33,13 +35,13 @@ def _history(n: int = 12) -> dict[str, list[float]]:
 
 
 @pytest.fixture
-def drawn(monkeypatch) -> list[tuple[tuple[Any, ...], dict[str, Any]]]:
+def drawn(monkeypatch: pytest.MonkeyPatch) -> DrawnCalls:
     """Record every `ax.plot` call instead of rendering it.
 
     `plot_losses` builds its own Figure and returns nothing, so intercepting the
     Axes is the only way to assert on what ends up in the legend.
     """
-    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    calls: DrawnCalls = []
 
     def record(_ax: Axes, *args: Any, **kwargs: Any) -> list[Any]:
         calls.append((args, kwargs))
@@ -50,24 +52,29 @@ def drawn(monkeypatch) -> list[tuple[tuple[Any, ...], dict[str, Any]]]:
 
 
 class TestLossCurves:
-    def test_validation_is_drawn_once(self, drawn, tmp_path: Path) -> None:
+    def test_validation_is_drawn_once(self, drawn: DrawnCalls, tmp_path: Path) -> None:
         plot_losses(_history(), save_path=tmp_path / "losses.pdf")
 
         labels = [k.get("label", "") for _, k in drawn]
         assert sum(label.startswith("Val") for label in labels) == 1
         assert labels == ["Train D", "Train G", "Val D"]
 
-    def test_no_two_curves_carry_the_same_data(self, drawn, tmp_path: Path) -> None:
+    def test_no_two_curves_carry_the_same_data(
+        self, drawn: DrawnCalls, tmp_path: Path
+    ) -> None:
         """The actual regression: `val_g` was a literal copy of `val_d`."""
         plot_losses(_history(), save_path=tmp_path / "losses.pdf")
 
-        series = [np.asarray(args[1], dtype=np.double) for args, _ in drawn]
+        series = [
+            np.asarray(a=cast("list[float]", args[1]), dtype=np.double)
+            for args, _ in drawn
+        ]
         for i, first in enumerate(series):
             for second in series[i + 1 :]:
                 assert not np.array_equal(first, second)
 
     def test_a_legacy_four_column_history_still_plots(
-        self, drawn, tmp_path: Path
+        self, drawn: DrawnCalls, tmp_path: Path
     ) -> None:
         """Runs saved before the merge carry a `val_g` key holding a copy of
         `val_d`. `--load-run` replots them, so reading it must stay optional ---
@@ -81,7 +88,7 @@ class TestLossCurves:
 
 
 @pytest.fixture
-def captured_axes(monkeypatch) -> list[Axes]:
+def captured_axes(monkeypatch: pytest.MonkeyPatch) -> list[Axes]:
     """Capture every Axes `plot_selection` builds via `Figure.add_subplot`,
     without mocking away the real rendering -- unlike `drawn`, this fixture
     lets matplotlib actually compute scales, transforms and view limits, which

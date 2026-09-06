@@ -13,6 +13,7 @@ from ran.data import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Any
 
     from ran.rantypes import GaussianConfig
 
@@ -42,33 +43,33 @@ class TestSigmaToCovariance:
 
     def test_vector_wrong_dim(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([1.0, 2.0, 3.0], 2)
+            _ = sigma_to_covariance([1.0, 2.0, 3.0], 2)
 
     def test_matrix_wrong_shape(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], 3)
+            _ = sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], 3)
 
     def test_not_positive_definite(self) -> None:
         """A matrix with negative eigenvalue should fail."""
         bad = [[1.0, 5.0], [5.0, 1.0]]
         with pytest.raises(np.linalg.LinAlgError):
-            sigma_to_covariance(bad, 2)
+            _ = sigma_to_covariance(bad, 2)
 
     def test_asymmetric_matrix_raises(self) -> None:
         """An asymmetric matrix should be rejected."""
         asym = [[1.0, 0.5], [999.0, 2.0]]
         with pytest.raises(ValueError, match="symmetric"):
-            sigma_to_covariance(asym, 2)
+            _ = sigma_to_covariance(asym, 2)
 
     def test_negative_scalar_raises(self) -> None:
         """Negative scalar sigma is physically nonsensical."""
         with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance(-1.0, 2)
+            _ = sigma_to_covariance(-1.0, 2)
 
     def test_negative_vector_element_raises(self) -> None:
         """Negative elements in sigma vector should be rejected."""
         with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance([1.0, -0.5], 2)
+            _ = sigma_to_covariance([1.0, -0.5], 2)
 
 
 class TestParseGaussianConfig:
@@ -81,12 +82,12 @@ class TestParseGaussianConfig:
     input, so it never round-trips through `GaussianConfig.model_dump()`.
     """
 
-    def _write_yaml(self, data: dict, tmp_path: Path) -> Path:
-        p = tmp_path / "config.yaml"
-        p.write_text(yaml.dump(data))
+    def _write_yaml(self, data: dict[str, Any], tmp_path: Path) -> Path:
+        p: Path = tmp_path / "config.yaml"
+        _ = p.write_text(yaml.dump(data))
         return p
 
-    def test_valid_2d_config(self, tmp_path) -> None:
+    def test_valid_2d_config(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
@@ -102,7 +103,7 @@ class TestParseGaussianConfig:
         assert params.cov_true.shape == (2, 2)
         assert params.cov_detector.shape == (2, 2)
 
-    def test_scalar_sigma(self, tmp_path) -> None:
+    def test_scalar_sigma(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0],
             "mu_true": [0.5],
@@ -116,7 +117,7 @@ class TestParseGaussianConfig:
         np.testing.assert_array_almost_equal(params.cov_gen, [[1.0]])
         np.testing.assert_array_almost_equal(params.cov_detector, [[0.25]])
 
-    def test_missing_key(self, tmp_path) -> None:
+    def test_missing_key(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0],
             "mu_true": [0.5],
@@ -124,9 +125,9 @@ class TestParseGaussianConfig:
         }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="missing"):
-            parse_gaussian_config(path)
+            _ = parse_gaussian_config(path)
 
-    def test_dim_mismatch(self, tmp_path) -> None:
+    def test_dim_mismatch(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0, 1.0],
             "mu_true": [0.5],
@@ -136,7 +137,7 @@ class TestParseGaussianConfig:
         }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="dim"):
-            parse_gaussian_config(path)
+            _ = parse_gaussian_config(path)
 
 
 class TestGaussianConfigFromRunConfig:
@@ -216,7 +217,7 @@ class TestGaussianConfigFromRunConfig:
 
     def test_missing_covariance_key_is_named(self) -> None:
         with pytest.raises(ValueError, match="cov_detector"):
-            gaussian_config_from_run_config(
+            _ = gaussian_config_from_run_config(
                 {
                     "mu_gen": [0.0],
                     "mu_true": [0.5],
@@ -228,4 +229,4 @@ class TestGaussianConfigFromRunConfig:
 
     def test_missing_mu_is_reported_as_missing(self) -> None:
         with pytest.raises(ValueError, match="missing"):
-            gaussian_config_from_run_config({"sigma_gen": 1.0}, dim=1)
+            _ = gaussian_config_from_run_config({"sigma_gen": 1.0}, dim=1)

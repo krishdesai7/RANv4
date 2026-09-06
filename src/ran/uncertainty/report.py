@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import matplotlib as mpl
 import numpy as np
@@ -51,10 +51,13 @@ from .variance import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from logging import Logger
     from pathlib import Path
     from typing import Any
 
+    from matplotlib.axes import Axes
+    from matplotlib.image import AxesImage
     from numpy.typing import NDArray
 
     from ..rantypes import EventArray, Populations
@@ -202,17 +205,18 @@ def _plot_correlations(
     axes = figure.subplots(
         nrows=(len(names) + 2) // 3, ncols=min(len(names), 3), squeeze=False
     )
-    for ax, name in zip(axes.ravel(), names, strict=False):
-        image = ax.imshow(
+    flat_axes: Sequence[Axes] = cast("Sequence[Axes]", list(axes.ravel()))
+    for ax, name in zip(flat_axes, names, strict=False):
+        image: AxesImage = ax.imshow(
             matrices[name], cmap="RdBu_r", vmin=-1.0, vmax=1.0, origin="lower"
         )
-        ax.set_title(label=f"{name}  (closure floor {null[name]:+.3f})", fontsize=9)
-        ax.set_xlabel(xlabel="bin")
-        ax.set_ylabel(ylabel="bin")
-        figure.colorbar(image, ax=ax, fraction=0.046)
-    for ax in axes.ravel()[len(names) :]:
+        _ = ax.set_title(label=f"{name}  (closure floor {null[name]:+.3f})", fontsize=9)
+        _ = ax.set_xlabel(xlabel="bin")
+        _ = ax.set_ylabel(ylabel="bin")
+        _ = figure.colorbar(image, ax=ax, fraction=0.046)
+    for ax in flat_axes[len(names) :]:
         ax.set_axis_off()
-    figure.suptitle(t="Bootstrap correlation of the unfolded spectrum")
+    _ = figure.suptitle(t="Bootstrap correlation of the unfolded spectrum")
     figure.tight_layout()
     figure.savefig(fname=path)
 
@@ -259,7 +263,7 @@ def collect(
     # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a key
     # could in principle be "allow_pickle", which is declared bool.
     np.savez(file=design_dir / "variance.npz", **saved)  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
-    (design_dir / "variance.json").write_text(
+    _ = (design_dir / "variance.json").write_text(
         data=json.dumps(
             obj={
                 "design": spec._asdict(),

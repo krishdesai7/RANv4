@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -85,11 +85,14 @@ def _unfolded_to_bin_weights(unfolded: EventArray, prior: EventArray) -> EventAr
         raise ValueError("unfolded and prior must be finite")
     if np.any(a=unfolded < 0) or np.any(a=prior < 0):
         raise ValueError("unfolded and prior must be nonnegative")
-    if np.any(a=(prior == 0) & (unfolded > EPS)):
+    zero_prior_mass: NDArray[np.bool_] = cast(
+        "NDArray[np.bool_]", (prior == 0) & (unfolded > EPS)
+    )
+    if np.any(a=zero_prior_mass):
         raise ValueError("unfolded mass in a zero-prior bin")
 
     weights: EventArray = np.zeros_like(a=unfolded)
-    np.divide(unfolded, prior, out=weights, where=prior > 0)
+    _ = np.divide(unfolded, prior, out=weights, where=prior > 0)
     return weights
 
 
@@ -150,7 +153,7 @@ def _next_pure_edge(
     # Among those elements, count the ones satisfying min(gen, reco) >= lo.
     prefix: NDArray[np.ulong] = np.empty(shape=lower_by_upper.size + 1, dtype=np.ulong)
     prefix[0] = 0
-    np.cumsum(
+    _ = np.cumsum(
         a=lower_by_upper >= lo,
         dtype=np.ulong,
         out=prefix[1:],
@@ -158,20 +161,21 @@ def _next_pure_edge(
     n_both: NDArray[np.ulong] = prefix[upper_stop]
 
     purity: NDArray[np.double] = np.zeros(shape=n_candidates, dtype=np.double)
-    np.divide(
+    _ = np.divide(
         n_both,
         n_truth,
         out=purity,
         where=n_truth != 0,
     )
 
-    qualifying: NDArray[np.intp] = np.flatnonzero(
-        a=(n_truth != 0) & (purity > purity_threshold)
+    resolved: NDArray[np.bool_] = cast(
+        "NDArray[np.bool_]", (n_truth != 0) & (purity > purity_threshold)
     )
+    qualifying: NDArray[np.intp] = np.flatnonzero(a=resolved)
     if qualifying.size == 0:
         return None
 
-    return candidates[qualifying[0]]
+    return np.single(candidates[qualifying[0]])
 
 
 def _purity_bins(
@@ -251,16 +255,17 @@ def _ibu(
     posterior: EventArray = prior.copy()
 
     for _ in range(n_iterations):
-        # The NumPy-stub loses the specific floating precision
-        # There is no type promotion at runtime
-        marginal: EventArray = response.T @ posterior  # pyrefly: ignore[bad-assignment]
-        if strict and np.any(a=(marginal == 0) & (data_hist != 0)):
+        marginal: EventArray = response.T @ posterior
+        unsupported: NDArray[np.bool_] = cast(
+            "NDArray[np.bool_]", (marginal == 0) & (data_hist != 0)
+        )
+        if strict and np.any(a=unsupported):
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
         # `out=` makes the value of the skipped entries zero.
         likelihood: EventArray = np.zeros_like(a=posterior)
-        np.divide(
+        _ = np.divide(
             data_hist,
             marginal,
             out=likelihood,
@@ -392,7 +397,7 @@ def evaluate_single(
 
     if out_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
-        return json.loads(s=out_path.read_text())
+        return cast("dict[str, MetricRecord]", json.loads(s=out_path.read_text()))
 
     raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
     config: RunConfig = parse_run_config(raw_config)
@@ -416,7 +421,7 @@ def evaluate_single(
         # built by f-string, so their type is plain `str`.
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
-        },  # pyrefly: ignore[bad-argument-type]
+        },
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",

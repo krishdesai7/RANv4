@@ -8,6 +8,8 @@ from ran.cli import app, baseline_app, sweep_app, uncertainty_app
 from typer.testing import CliRunner
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from typer.main import Typer
 
 runner = CliRunner()
@@ -47,35 +49,37 @@ def test_registered_command_trees_are_exact() -> None:
     ],
     ids="-".join,
 )
-def test_every_leaf_command_has_help(command) -> None:
+def test_every_leaf_command_has_help(command: tuple[str, ...]) -> None:
     result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0
 
 
-def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> None:
+def test_train_converts_typer_values_for_the_workflow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """`ran.cli` imports `run` at module scope, so patch the name it calls.
 
     Replacing `sys.modules["ran.workflow"]` would only work if the command
     re-imported on every invocation, which it deliberately no longer does.
     """
-    calls = []
+    calls: list[dict[str, object]] = []
     configured_levels: list[str] = []
 
     def capture_log_level(*, level: str) -> None:
         configured_levels.append(level)
 
     def fake_run(
-        batch_size,
-        n_samples,
-        config,
-        dataset,
-        variables,
-        load_run,
-        hidden_units,
-        n_layers,
-        seed,
-        data_seed,
-        **hyperparameters,
+        batch_size: object,
+        n_samples: object,
+        config: object,
+        dataset: object,
+        variables: object,
+        load_run: object,
+        hidden_units: object,
+        n_layers: object,
+        seed: object,
+        data_seed: object,
+        **hyperparameters: object,
     ) -> None:
         calls.append(
             {
@@ -142,31 +146,33 @@ def test_train_converts_typer_values_for_the_workflow(monkeypatch, tmp_path) -> 
     assert calls[0]["plots"] is True
 
 
-def test_train_forwards_an_explicit_run_dir(monkeypatch, tmp_path) -> None:
+def test_train_forwards_an_explicit_run_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A sweep names each run's directory so arms can be told apart.
 
     Without it every run lands on a second-resolution timestamp and concurrent
     arms overwrite each other -- see TestNewRunDir in tests/test_workflow.py.
     """
-    calls = []
+    calls: list[dict[str, object]] = []
 
-    def fake_run(*args, **kwargs) -> None:
+    def fake_run(*args: object, **kwargs: object) -> None:
         del args
         calls.append(kwargs)
 
     monkeypatch.setattr(cli, "run", fake_run)
 
-    wanted = tmp_path / "hp_lrg" / "lrg3e-4_seed05"
+    wanted: Path = tmp_path / "hp_lrg" / "lrg3e-4_seed05"
     result = runner.invoke(app, ["train", "--run-dir", str(wanted)])
 
     assert result.exit_code == 0
     assert calls[0]["run_dir"] == wanted
 
 
-def test_train_defaults_to_no_explicit_run_dir(monkeypatch) -> None:
-    calls = []
+def test_train_defaults_to_no_explicit_run_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, object]] = []
 
-    def fake_run(*args, **kwargs) -> None:
+    def fake_run(*args: object, **kwargs: object) -> None:
         del args
         calls.append(kwargs)
 

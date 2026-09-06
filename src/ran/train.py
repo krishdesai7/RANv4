@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import operator
 import os
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -23,14 +22,16 @@ from .models import build_discriminator, build_generator
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time
 from .rantypes import COMPILE_CACHE_DIR, Variables
+from .timing import is_enabled, phase
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from logging import Logger
     from pathlib import Path
-    from typing import Final
+    from typing import Any, Final
 
     from jax._src.pjit import JitWrapped
+    from jax.stages import Compiled
     from jaxtyping import PRNGKeyArray
     from numpy.typing import NDArray
 
@@ -66,7 +67,7 @@ _HISTORY_KEYS: Final[tuple[str, str, str]] = ("train_d", "train_g", "val_d")
 # The min-max equilibrium: `d` at chance, so the reweighted distributions are
 # indistinguishable to it. No longer what selection scores against -- kept for
 # the test that shows the old BCE criterion disagrees with MMD selection.
-LOG2: Final[float] = math.log(2.0)
+LOG2: Final[float] = np.log(2.0)
 
 # Fixed subsample size for the detector-level MMD comparison selection reads.
 # The unbiased estimator has a resolution floor around 5e-4 in MMD^2, measured
@@ -141,16 +142,16 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
     ~27 MB for 100 epochs of both networks at 3x128, uncompressed for the same
     reason the dataset caches are: these are incompressible floats.
     """
-    flat: dict[str, NDArray] = {
+    flat: dict[str, NDArray[Any]] = {
         f"{field}:{i}": np.asarray(a)
         for field, arrays in params._asdict().items()
-        for i, a in enumerate(arrays)
+        for i, a in enumerate(iterable=arrays)
     }
     path: Path = run_dir / PARAMS_FILE
     # Same unpack-into-savez suppression `workflow._save_run` carries: a
     # str-keyed dict could in principle hold "allow_pickle", which is declared
     # bool. These keys are all `field:index`, so it cannot.
-    np.savez(path, **flat)  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
+    np.savez(file=path, **flat)  # ty:ignore[invalid-argument-type]
     return path
 
 
@@ -162,15 +163,15 @@ def load_params(run_dir: Path, /) -> EpochParams:
     `stateless_call` in the order it gave them out, and a permuted list is a
     silently wrong model rather than an error.
     """
-    with np.load(run_dir / PARAMS_FILE) as f:
-        keys: list[str] = list(f.keys())
+    with np.load(file=run_dir / PARAMS_FILE) as f:
+        keys: list[str] = list(f.keys())  # pyrefly: ignore[unknown-argument-type]
         return EpochParams(
             **{
                 field: [
-                    jnp.asarray(f[k])
+                    jnp.asarray(a=f[k])  # pyrefly: ignore[unknown-argument-type]
                     for k in sorted(
-                        (k for k in keys if k.split(":")[0] == field),
-                        key=lambda k: int(k.split(":")[1]),
+                        (k for k in keys if k.split(sep=":")[0] == field),
+                        key=lambda k: int(k.split(sep=":")[1]),  # pyrefly: ignore[unknown-argument-type]
                     )
                 ]
                 for field in EpochParams._fields
@@ -187,14 +188,18 @@ class RunCarry(NamedTuple):
 
 @jaxtyped(typechecker=beartype)
 def normalize_weights(
-    raw_w: Float[Array | NDArray, " n"],
-    y: Float[Array | NDArray, " n"],
-    mask: Float[Array | NDArray, " n"],
+    raw_w: Float[Array | NDArray[np.single], " n"],
+    y: Float[Array | NDArray[np.single], " n"],
+    mask: Float[Array | NDArray[np.single], " n"],
     /,
 ) -> Float[Array, " n"]:
     one: Float[Array, " n"] = jnp.ones_like(a=y)
     n_mc: Float[Array, ""] = jnp.sum(a=mask * (one - y))
-    w_mc_norm: Float[Array | NDArray, " n"] = (
+    # `np.double`, alone among the annotations here: the numpy stubs promote
+    # `ndarray * <unknown>` to float64, so a `np.single` union member does not
+    # typecheck. At runtime `n_mc` is a JAX array and takes the operation, so
+    # this is always `Array` -- the double is a stub artefact, not a dtype.
+    w_mc_norm: Float[Array | NDArray[np.double], " n"] = (
         raw_w * n_mc / (jnp.sum(a=mask * raw_w * (one - y)) + EPS)
     )
     return jnp.multiply(mask, y + (one - y) * w_mc_norm)
@@ -202,9 +207,9 @@ def normalize_weights(
 
 @jaxtyped(typechecker=beartype)
 def weight_dispersion(
-    w: Float[Array | NDArray, " n"],
-    y: Float[Array | NDArray, " n"],
-    mask: Float[Array | NDArray, " n"],
+    w: Float[Array | NDArray[np.single], " n"],
+    y: Float[Array | NDArray[np.single], " n"],
+    mask: Float[Array | NDArray[np.single], " n"],
     /,
 ) -> Float[Array, ""]:
     """How far the generator has travelled from `w = 1`, as one number.
@@ -228,7 +233,7 @@ def weight_dispersion(
     protect at small `w`.
     """
     one: Float[Array, " n"] = jnp.ones_like(a=y)
-    mc: Float[Array | NDArray, " n"] = mask * (one - y)
+    mc: Float[Array | NDArray[np.single], " n"] = mask * (one - y)
     n_mc: Float[Array, ""] = jnp.sum(a=mc)
     mean_w: Float[Array, ""] = jnp.sum(a=mc * w) / (n_mc + EPS)
     return jnp.sum(a=mc * jnp.square(w - mean_w)) / (n_mc + EPS)
@@ -236,25 +241,25 @@ def weight_dispersion(
 
 @jaxtyped(typechecker=beartype)
 def bce_sums(
-    d_out: Float[Array | NDArray, " n"],
-    y: Float[Array | NDArray, " n"],
-    w: Float[Array | NDArray, " n"],
-    mask: Float[Array | NDArray, " n"],
+    d_out: Float[Array | NDArray[np.single], " n"],
+    y: Float[Array | NDArray[np.single], " n"],
+    w: Float[Array | NDArray[np.single], " n"],
+    mask: Float[Array | NDArray[np.single], " n"],
     /,
 ) -> tuple[Float[Array, ""], Float[Array, ""]]:
     one: Float[Array, " n"] = jnp.ones_like(a=d_out)
-    terms: Float[Array | NDArray, " n"] = w * y * jnp.log(d_out + EPS) + w * (
-        one - y
-    ) * jnp.log(one - d_out + EPS)
-    return -jnp.sum(mask * terms), jnp.sum(mask)
+    terms: Float[Array | NDArray[np.single], " n"] = w * y * jnp.log(
+        d_out + EPS
+    ) + w * (one - y) * jnp.log(one - d_out + EPS)
+    return -jnp.sum(a=mask * terms), jnp.sum(a=mask)
 
 
 @jaxtyped(typechecker=beartype)
 def weighted_bce(
-    d_out: Float[Array | NDArray, " n"],
-    y: Float[Array | NDArray, " n"],
-    w: Float[Array | NDArray, " n"],
-    mask: Float[Array | NDArray, " n"],
+    d_out: Float[Array | NDArray[np.single], " n"],
+    y: Float[Array | NDArray[np.single], " n"],
+    w: Float[Array | NDArray[np.single], " n"],
+    mask: Float[Array | NDArray[np.single], " n"],
     /,
 ) -> Float[Array, ""]:
     total, count = bce_sums(d_out, y, w, mask)
@@ -304,7 +309,7 @@ def _make_steps(
             inputs=x,
             training=True,
         )
-        loss = weighted_bce(jnp.squeeze(d_out, axis=-1), y, w, mask)
+        loss: Float[Array, ""] = weighted_bce(jnp.squeeze(a=d_out, axis=-1), y, w, mask)
         return loss, d_non_trainable
 
     @jaxtyped(typechecker=beartype)
@@ -426,7 +431,7 @@ def _make_steps(
             inputs=x,
             training=False,
         )
-        return bce_sums(jnp.squeeze(d_out, axis=-1), y, w, mask)
+        return bce_sums(jnp.squeeze(a=d_out, axis=-1), y, w, mask)
 
     return disc_step, gen_step, eval_step
 
@@ -447,7 +452,7 @@ def _make_pass(
         state: TrainState, idx: Int[Array, " b"]
     ) -> tuple[TrainState, Float[Array, ""]]:
         z, x, y = gather(train, idx)
-        return disc_step(state, z, x, y, jnp.ones_like(y))
+        return disc_step(state, z, x, y, jnp.ones_like(a=y))
 
     def _group(
         state: TrainState, group_idx: Int[Array, "s b"]
@@ -577,11 +582,27 @@ def _run(
     fused: bool,
 ) -> tuple[RunCarry, Float[Array, "epochs metrics"], EpochParams]:
     """Drive the epoch loop, either inside XLA or from Python."""
-    steps: Int[Array, " epochs"] = jnp.arange(n_epochs, dtype=jnp.int32)
+    steps: Int[Array, " epochs"] = jnp.arange(start=n_epochs, dtype=jnp.int32)
     if fused:
+        run: JitWrapped = jax.jit(lambda c, xs: lax.scan(epoch, c, xs))  # pyrefly: ignore[unknown-argument-type]
+        if is_enabled():
+            # Ahead-of-time, so the timer can see where compile ends and
+            # execution begins. `lower().compile()` then calling the compiled
+            # object is what `run(carry, steps)` does internally, persistent
+            # cache included -- it is the same work, split at a boundary an
+            # ordinary call does not expose. Gated, so the default path stays
+            # the single call `TestFusion` pins.
+            with phase("compile") as timer:
+                compiled: Compiled = timer.block(run.lower(carry, steps).compile())
+            with phase("epochs") as timer:
+                carry, (rows, params) = cast(
+                    typ="tuple[RunCarry, tuple[Array, EpochParams]]",
+                    val=timer.block(compiled(carry, steps)),  # pyrefly: ignore[unknown-argument-type]
+                )
+            return carry, rows, params
         carry, (rows, params) = cast(
             typ="tuple[RunCarry, tuple[Array, EpochParams]]",
-            val=jax.jit(lambda c, xs: lax.scan(epoch, c, xs))(carry, steps),
+            val=run(carry, steps),
         )
         return carry, rows, params
     step: JitWrapped = jax.jit(epoch)
@@ -591,16 +612,18 @@ def _run(
         carry, (row, params) = step(carry, steps[i])
         rows_out.append(row)
         params_out.append(params)
-    stacked = cast(
-        "EpochParams",
-        jax.tree.map(lambda *leaves: jnp.stack(leaves), *params_out),
+    stacked: EpochParams = cast(
+        typ="EpochParams",
+        val=jax.tree.map(lambda *leaves: jnp.stack(arrays=leaves), *params_out),
     )
-    return carry, jnp.stack(rows_out), stacked
+    return carry, jnp.stack(arrays=rows_out), stacked
 
 
 def _restore(g: RANModel, d: RANModel, params: EpochParams, epoch: int, /) -> None:
     """Write one epoch's parameters back into the live Keras models."""
-    chosen = cast("EpochParams", jax.tree.map(operator.itemgetter(epoch), params))
+    chosen: EpochParams = cast(
+        typ="EpochParams", val=jax.tree.map(f=operator.itemgetter(epoch), tree=params)
+    )
     _assign(g.trainable_variables, values=chosen.g_trainable)
     _assign(g.non_trainable_variables, values=chosen.g_non_trainable)
     _assign(d.trainable_variables, values=chosen.d_trainable)
@@ -622,8 +645,8 @@ def _detector_arrays(
     x_data: EventArray = zxy.x[nature]
     x_sim: EventArray = zxy.x[mc]
     z_gen: EventArray = zxy.z[mc]
-    i_d = subsample_indices(seed, x_data.shape[0], m)
-    i_m = subsample_indices(seed + 1, x_sim.shape[0], m)
+    i_d: NDArray[np.intp] = subsample_indices(seed, x_data.shape[0], m)
+    i_m: NDArray[np.intp] = subsample_indices(seed + 1, x_sim.shape[0], m)
     return x_data[i_d], x_sim[i_m], z_gen[i_m]
 
 
@@ -642,10 +665,10 @@ def _weights_per_epoch(
         raw, _ = g.stateless_call(
             trainable_variables=trainable,
             non_trainable_variables=non_trainable,
-            inputs=jnp.asarray(z),
+            inputs=jnp.asarray(a=z),
             training=False,
         )
-        return jnp.squeeze(raw, axis=-1)
+        return jnp.squeeze(a=raw, axis=-1)
 
     n_epochs: int = params.g_trainable[0].shape[0]
     return jnp.stack(
@@ -678,16 +701,16 @@ def _select_by_mmd(
     x_data, x_sim, z_gen = _detector_arrays(
         splits.val.as_arrays(), splits.train.seed, MMD_SUBSAMPLE
     )
-    sigmas: tuple[float, ...] = bandwidths(jnp.asarray(x_data))
+    sigmas: tuple[float, ...] = bandwidths(jnp.asarray(a=x_data))
     cache: MMDCache = build_cache(
-        jnp.asarray(x_data), jnp.asarray(x_sim), sigmas=sigmas
+        jnp.asarray(a=x_data), jnp.asarray(a=x_sim), sigmas=sigmas
     )
     raw_w: Float[Array, "epochs m"] = _weights_per_epoch(g, params, z_gen)
     mmd, ess = mmd_curve(cache, raw_w)
     history["val_mmd"] = mmd.tolist()
     history["val_ess"] = ess.tolist()
 
-    best_epoch: int = int(np.argmin(mmd))
+    best_epoch: int = int(np.argmin(a=mmd))
     logger.info(
         "Restoring epoch %d of %d  (val MMD^2 %.3e, ESS %.0f)",
         best_epoch + 1,
@@ -726,7 +749,7 @@ def _use_compilation_cache() -> None:
 
 
 def _unpack_history(history: Float[Array, "epochs metrics"]) -> dict[str, list[float]]:
-    rows: NDArray = np.asarray(a=history)
+    rows: NDArray[Any] = np.asarray(a=history)
     return {key: rows[:, i].tolist() for i, key in enumerate(iterable=_HISTORY_KEYS)}
 
 
@@ -752,7 +775,10 @@ def train(
     keras.utils.set_random_seed(seed)
 
     batch_size: int = splits.train.batch_size
-    data: DeviceSplits = DeviceSplits.from_splits(splits)
+    with phase("transfer") as timer:
+        # The single host->device transfer of a run. Blocked inside the clock,
+        # or an async copy is charged to whatever runs next.
+        data: DeviceSplits = timer.block(DeviceSplits.from_splits(splits))
 
     g: RANModel = build_generator(dim=dim, hidden_units=hidden_units, n_layers=n_layers)
     d: RANModel = build_discriminator(
@@ -778,18 +804,22 @@ def train(
     evaluate: Callable[[TrainState, EvalSplit], Float[Array, ""]] = _make_eval(
         eval_step
     )
-    epoch = _make_epoch(data, one_pass, evaluate, n_epochs=n_epochs)
+    epoch: Callable[
+        [RunCarry, Int[Array, ""]],
+        tuple[RunCarry, tuple[Float[Array, " metrics"], EpochParams]],
+    ] = _make_epoch(data, one_pass, evaluate, n_epochs=n_epochs)
 
     # Batch order follows `data_seed`, not the init seed: an ensemble loop over
     # `--seed` must see identical data on every arm.
     carry = RunCarry(state=state, key=jax.random.key(data.data_seed))
 
     _final, rows, params = _run(carry, epoch, n_epochs=n_epochs, fused=fused)
-    history: dict[str, list[float]] = _unpack_history(rows)
+    history: dict[str, list[float]] = _unpack_history(history=rows)
 
-    best_epoch, mmd_test, sigmas = _select_by_mmd(
-        g, d, splits, params, history, n_epochs, seed
-    )
+    with phase("select"):
+        best_epoch, mmd_test, sigmas = _select_by_mmd(
+            g, d, splits, params, history, n_epochs, seed
+        )
 
     logger.info("Init seed %d", seed)
     return TrainResult(g, d, history, seed, best_epoch, params, mmd_test, sigmas)

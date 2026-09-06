@@ -91,7 +91,7 @@ class TestColumnOrderFollowsTheRequest:
         produce a column order no caller could predict or reproduce.
         """
         with pytest.raises(TypeError, match="ordered sequence, not a set"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N,
                 batch_size=32,
                 cache_dir=cache,
@@ -102,7 +102,7 @@ class TestColumnOrderFollowsTheRequest:
     def test_duplicates_are_refused(self, cache: Path) -> None:
         """Two columns of identical data under one name would look plausible."""
         with pytest.raises(ValueError, match="duplicates"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N, batch_size=32, cache_dir=cache, variables=("m", "m")
             )
 
@@ -110,7 +110,7 @@ class TestColumnOrderFollowsTheRequest:
         self, cache: Path
     ) -> None:
         with pytest.raises(ValueError, match="unknown jet variables"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N, batch_size=32, cache_dir=cache, variables=("m", "pt")
             )
 

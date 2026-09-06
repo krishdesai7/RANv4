@@ -38,11 +38,13 @@ uv run benchmarks/averaging.py --run-dir runs/2026-08-29T213609Z --floor 1e-3
 ```
 """
 
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- run config is JSON (dict[str, Any]); numpy stubs return Any for elementwise ops
 from __future__ import annotations
 
 import os
 
-os.environ.setdefault(key="KERAS_BACKEND", value="jax")
+os.environ.setdefault(key="KERAS_BACKEND", value="jax")  # pyrefly: ignore[unused-call-result]
 
 import json
 import logging
@@ -65,6 +67,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from logging import Logger
     from pathlib import Path
+    from typing import Any
 
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EventArray, Populations, RANModel
@@ -106,7 +109,7 @@ def _strategies(
 ) -> list[Strategy]:
     """The single-epoch pick, the two averages, and the truth-fitted ceiling."""
     normalized: NDArray[np.double] = _normalized(per_epoch)
-    tied: NDArray[np.intp] = np.flatnonzero(val_mmd <= val_mmd.min() + floor)
+    tied: NDArray[np.intp] = np.flatnonzero(a=val_mmd <= val_mmd.min() + floor)
     out: list[Strategy] = [
         Strategy(
             name="selected",
@@ -116,13 +119,13 @@ def _strategies(
         ),
         Strategy(
             name="tied-mean",
-            weights=normalized[tied].mean(axis=0),
+            weights=normalized[tied].mean(axis=0, dtype=np.single),
             n_epochs=len(tied),
             note=f"epochs within {floor:.0e} of the detector minimum",
         ),
         Strategy(
             name="all-mean",
-            weights=normalized.mean(axis=0),
+            weights=normalized.mean(axis=0, dtype=np.single),
             n_epochs=len(normalized),
             note="every epoch",
         ),
@@ -158,7 +161,7 @@ def _mmd_scorer(test_pop: Populations, seed: int, /) -> Callable[[EventArray], f
     i_nat: NDArray[np.intp] = subsample_indices(seed, n_nat, m)
     i_mc: NDArray[np.intp] = subsample_indices(seed + 1, n_mc, m)
     ref, comp = test_pop.data[i_nat], test_pop.mc.x[i_mc]
-    cache: MMDCache = build_cache(ref, comp, sigmas=bandwidths(jnp.asarray(ref)))
+    cache: MMDCache = build_cache(ref, comp, sigmas=bandwidths(jnp.asarray(a=ref)))
 
     def score(w: EventArray, /) -> float:
         return float(weighted_mmd(cache, jnp.asarray(a=w[i_mc]))[0])
@@ -200,7 +203,7 @@ def _report(
     return means[0], means[1]
 
 
-def _load_splits(config: dict, /) -> tuple[DatasetSplits, tuple[str, ...]]:
+def _load_splits(config: dict[str, Any], /) -> tuple[DatasetSplits, tuple[str, ...]]:
     """Rebuild exactly the dataset the run trained on."""
     if config["dataset"] == "jets":
         variables: tuple[str, ...] = tuple(config["variables"])
@@ -229,7 +232,7 @@ def _load_splits(config: dict, /) -> tuple[DatasetSplits, tuple[str, ...]]:
 
 
 def main(
-    path: Annotated[Path, typer.Argument(..., help="The run directory")],
+    path: Annotated[Path, typer.Argument(help="The run directory")],
     floor: Annotated[
         float,
         typer.Option("--floor", "-f", help="detector-MMD width defining the tied set"),
@@ -237,7 +240,7 @@ def main(
 ) -> None:
     configure_logging(level="info")
 
-    config: dict = json.loads((path / "config.json").read_text())
+    config: dict[str, Any] = json.loads((path / "config.json").read_text())
     history: np.lib.npyio.NpzFile = np.load(file=path / "history.npz")
     splits, variables = _load_splits(config)
     test_pop: Populations = splits.select(Split.TEST).partition()

@@ -38,7 +38,7 @@ def test_response_statistic_rejects_invalid_probabilities(
     bad_probability: float,
 ) -> None:
     with pytest.raises(ValueError, match="probabilities"):
-        response_statistic(
+        _ = response_statistic(
             labels=np.array([1.0, 1.0, 0.0, 0.0]),
             p_z=np.array([0.5, bad_probability, 0.5, 0.5]),
             p_zx=np.array([0.75, 0.75, 0.25, 0.25]),

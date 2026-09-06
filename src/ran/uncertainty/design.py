@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import numpy as np
 
@@ -53,7 +53,7 @@ from ..rantypes import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from logging import Logger
     from pathlib import Path
     from typing import Any
@@ -314,9 +314,10 @@ _PER_CELL_KEYS: frozenset[str] = frozenset(
 
 def _read_cell(path: Path, /) -> tuple[NDArray[np.double], dict[str, Any]]:
     with np.load(file=path) as cell:
+        arrays: Mapping[str, NDArray[Any]] = cast("Mapping[str, NDArray[Any]]", cell)
         return (
-            np.asarray(a=cell["weights"], dtype=np.double),
-            json.loads(s=str(object=cell["meta"].item())),
+            np.asarray(a=arrays["weights"], dtype=np.double),
+            json.loads(s=str(object=arrays["meta"].item())),
         )
 
 

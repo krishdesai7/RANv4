@@ -48,7 +48,7 @@ cannot resolve this" into "this is exactly zero".
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import numpy as np
 
@@ -152,8 +152,8 @@ def decompose(t: NDArray[np.double] | EventArray, /) -> VarianceComponents:
     )
 
     return VarianceComponents(
-        data=(ms_data - ms_interaction) / n_init,
-        init=(ms_init - ms_interaction) / n_data,
+        data=cast("NDArray[np.double]", (ms_data - ms_interaction) / n_init),
+        init=cast("NDArray[np.double]", (ms_init - ms_interaction) / n_data),
         interaction=ms_interaction,
     )
 
@@ -189,8 +189,8 @@ def component_covariances(t: NDArray[np.double] | EventArray, /) -> Covariances:
     between_data: NDArray[np.double] = _cov(grid.mean(axis=1), ddof=1)
     between_init: NDArray[np.double] = _cov(grid.mean(axis=0), ddof=1)
     return Covariances(
-        data=between_data - interaction / n_init,
-        init=between_init - interaction / n_data,
+        data=cast("NDArray[np.double]", between_data - interaction / n_init),
+        init=cast("NDArray[np.double]", between_init - interaction / n_data),
         interaction=interaction,
     )
 
@@ -228,12 +228,12 @@ def quantile_edges(column: EventArray, /, *, n_bins: int) -> NDArray[np.double]:
     )
     # Nudge the outer edges so `np.histogram`'s half-open bins keep the
     # extreme events, which the quantile puts exactly on the boundary.
-    unique: NDArray[np.double] = np.unique(edges)
+    unique: NDArray[np.double] = np.unique(ar=edges)
     if unique.size < 2:
         raise ValueError("column is constant; there is nothing to bin")
     span: np.double = unique[-1] - unique[0]
-    unique[0] -= span * 1e-9
-    unique[-1] += span * 1e-9
+    unique[0] -= span * 1e-9  # pyrefly: ignore[unknown-argument-type]
+    unique[-1] += span * 1e-9  # pyrefly: ignore[unknown-argument-type]
     return unique
 
 

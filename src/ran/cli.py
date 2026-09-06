@@ -169,7 +169,7 @@ def sweep_ran_command(
     ran_epochs: Annotated[int, typer.Option("--ran-epochs", "-e", min=1)] = 100,
     init_seed: Annotated[int | None, typer.Option("--init-seed", "-I")] = None,
 ) -> None:
-    run_ran(
+    _ = run_ran(
         s_index,
         sweep_dir,
         n_samples,
@@ -218,7 +218,7 @@ def uncertainty_run_command(
     """Train one (bootstrap dataset, init seed) cell of the design."""
     from .uncertainty import DesignSpec, run_cell
 
-    run_cell(
+    _ = run_cell(
         cell,
         design_dir,
         DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
@@ -250,7 +250,7 @@ def uncertainty_collect_command(
     """Decompose a finished design and write its table, npz and figure."""
     from .uncertainty import DesignSpec, collect
 
-    collect(
+    _ = collect(
         design_dir,
         DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
         n_bins=n_bins,

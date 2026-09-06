@@ -39,11 +39,13 @@ uv run benchmarks/sliced.py --run-dir runs/… --subsample 50000
 ```
 """
 
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- run config is JSON (dict[str, Any]); numpy stubs return Any for elementwise ops
 from __future__ import annotations
 
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "jax")
+os.environ.setdefault("KERAS_BACKEND", "jax")  # pyrefly: ignore[unused-call-result]
 
 import argparse
 import json
@@ -62,6 +64,8 @@ from rich.console import Console
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, Populations
 
@@ -135,8 +139,8 @@ def sliced_wasserstein(
     scale = np.where(ref.std(axis=0) > 0.0, ref.std(axis=0), 1.0)
 
     dirs = _directions(seed, ref.shape[1], n_projections)
-    ref_proj = ((ref - centre) / scale) @ dirs.T
-    comp_proj = ((comp - centre) / scale) @ dirs.T
+    ref_proj: NDArray[np.double] = ((ref - centre) / scale) @ dirs.T
+    comp_proj: NDArray[np.double] = ((comp - centre) / scale) @ dirs.T
     return float(
         np.mean(
             [
@@ -265,7 +269,7 @@ def null_floors(
     )
 
 
-def _load_splits(config: dict, /) -> tuple[DatasetSplits, tuple[str, ...]]:
+def _load_splits(config: dict[str, Any], /) -> tuple[DatasetSplits, tuple[str, ...]]:
     """Rebuild exactly the dataset the run trained on."""
     if config["dataset"] == "jets":
         variables: tuple[str, ...] = tuple(config["variables"])
@@ -293,24 +297,24 @@ def _load_splits(config: dict, /) -> tuple[DatasetSplits, tuple[str, ...]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--run-dir", type=Path, required=True)
-    parser.add_argument("--n-projections", type=int, default=128)
-    parser.add_argument("--repeats", type=int, default=4)
-    parser.add_argument(
+    _ = parser.add_argument("--run-dir", type=Path, required=True)
+    _ = parser.add_argument("--n-projections", type=int, default=128)
+    _ = parser.add_argument("--repeats", type=int, default=4)
+    _ = parser.add_argument(
         "--subsample",
         type=int,
         default=100_000,
         help="cap on events per side; the merged sort is the cost",
     )
-    parser.add_argument("--seed", type=int, default=0)
+    _ = parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     configure_logging(level="info")
 
     run_dir: Path = args.run_dir
-    config: dict = json.loads((run_dir / "config.json").read_text())
+    config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     splits, variables = _load_splits(config)
     pop: Populations = splits.select(Split.TEST).partition()
-    generator = keras.saving.load_model(run_dir / "generator.keras")
+    generator: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
 
     rng = np.random.default_rng(args.seed)
     n = min(args.subsample, pop.mc.z.shape[0], pop.data.shape[0])
@@ -329,12 +333,12 @@ def main() -> None:
         args.repeats,
     )
 
-    levels: dict[str, tuple] = {
+    levels: dict[str, tuple[Any, Any]] = {
         "detector": (pop.data[i_data], pop.mc.x[i_mc]),
     }
     # The floor is drawn from the *full* reference population so both null
     # draws can be `n` -- the size of the comparison it calibrates.
-    floor_pools: dict[str, NDArray] = {"detector": pop.data}
+    floor_pools: dict[str, NDArray[Any]] = {"detector": pop.data}
     if pop.has_truth:
         levels["particle"] = (pop.truth[i_data], pop.mc.z[i_mc])
         floor_pools["particle"] = pop.truth

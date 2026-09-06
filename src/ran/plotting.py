@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import matplotlib as mpl
 import numpy as np
@@ -13,15 +14,23 @@ from matplotlib.font_manager import fontManager
 from .evaluate import _get_weights
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from logging import Logger
+    from typing import Final
 
     from matplotlib.axes import Axes
+    from matplotlib.container import BarContainer
     from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+    from matplotlib.patches import Polygon
     from numpy.typing import NDArray
 
     from .data import ArrayDataset
     from .rantypes import EventArray, Populations, RANModel, VarInfo
+
+    type AxesHist = tuple[
+        NDArray[np.double],
+        NDArray[np.double],
+        BarContainer | Polygon | list[BarContainer | Polygon],
+    ]
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -93,30 +102,39 @@ def _hist_ratio_panel(
     title: str,
     w_ibu: EventArray | None = None,
 ) -> None:
-    h_nature: tuple = ax.hist(
-        x_nature,
-        bins=bins,
-        alpha=0.35,
-        color="C0",
-        label=nature_label,
+    h_nature: AxesHist = cast(
+        typ=AxesHist,
+        val=ax.hist(
+            x_nature,
+            bins=bins,
+            alpha=0.35,
+            color="C0",
+            label=nature_label,
+        ),
     )
-    h_mc: tuple = ax.hist(
-        x_mc,
-        bins=h_nature[1],
-        alpha=0.35,
-        color="C1",
-        label=mc_label,
+    h_mc: AxesHist = cast(
+        typ=AxesHist,
+        val=ax.hist(
+            x_mc,
+            bins=cast(typ=Sequence[float], val=h_nature[1]),
+            alpha=0.35,
+            color="C1",
+            label=mc_label,
+        ),
     )
-    h_ran: tuple = ax.hist(
-        x_mc,
-        bins=h_nature[1],
-        weights=w_ran,
-        histtype="step",
-        color="black",
-        linestyle="-",
-        linewidth=4,
-        alpha=0.35,
-        label="RAN",
+    h_ran: AxesHist = cast(
+        typ=AxesHist,
+        val=ax.hist(
+            x_mc,
+            bins=cast(typ=Sequence[float], val=h_nature[1]),
+            weights=w_ran,
+            histtype="step",
+            color="black",
+            linestyle="-",
+            linewidth=4,
+            alpha=0.35,
+            label="RAN",
+        ),
     )
 
     bin_edges: NDArray[np.double] = h_nature[1]
@@ -135,7 +153,7 @@ def _hist_ratio_panel(
     ratio_mc[safe] = h_mc[0][safe] / h_nature[0][safe]
     ratio_ran[safe] = h_ran[0][safe] / h_nature[0][safe]
 
-    ax_r.plot(
+    _ = ax_r.plot(
         centres,
         ratio_mc,
         color="C1",
@@ -143,7 +161,7 @@ def _hist_ratio_panel(
         linestyle="--",
         alpha=0.35,
     )
-    ax_r.plot(
+    _ = ax_r.plot(
         centres,
         ratio_ran,
         color="black",
@@ -153,25 +171,28 @@ def _hist_ratio_panel(
     )
 
     if w_ibu is not None:
-        h_ibu: tuple = ax.hist(
-            x_mc,
-            bins=h_nature[1],
-            weights=w_ibu,
-            histtype="step",
-            color="green",
-            linestyle=":",
-            linewidth=4,
-            alpha=0.35,
-            label="IBU",
+        h_ibu: AxesHist = cast(
+            typ=AxesHist,
+            val=ax.hist(
+                x_mc,
+                bins=cast(typ=Sequence[float], val=h_nature[1]),
+                weights=w_ibu,
+                histtype="step",
+                color="green",
+                linestyle=":",
+                linewidth=4,
+                alpha=0.35,
+                label="IBU",
+            ),
         )
-        ax.set_ylabel(ylabel="Events")
-        ax.legend()
-        ax.set_title(label=title)
+        _ = ax.set_ylabel(ylabel="Events")
+        _ = ax.legend()
+        _ = ax.set_title(label=title)
         ratio_ibu: NDArray[np.double] = np.full_like(
             a=h_ibu[0], fill_value=np.nan, dtype=np.double
         )
         ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
-        ax_r.plot(
+        _ = ax_r.plot(
             centres,
             ratio_ibu,
             color="green",
@@ -179,11 +200,11 @@ def _hist_ratio_panel(
             linestyle="--",
             alpha=0.75,
         )
-    ax_r.axhline(y=1, color="gray", linewidth=0.5, alpha=0.75)
+    _ = ax_r.axhline(y=1, color="gray", linewidth=0.5, alpha=0.75)
     width: float = 0.5
-    ax_r.set_ylim(bottom=1 - width, top=1 + width)
-    ax_r.set_ylabel(ylabel=f"Ratio to\n{nature_label}")
-    ax_r.set_xlabel(xlabel)
+    _ = ax_r.set_ylim(bottom=1 - width, top=1 + width)
+    _ = ax_r.set_ylabel(ylabel=f"Ratio to\n{nature_label}")
+    _ = ax_r.set_xlabel(xlabel)
 
 
 def _save_fig(figure: Figure, save_path: Path) -> None:
@@ -221,7 +242,7 @@ def _panel_spec(
     style: _LevelStyle,
 ) -> _PanelSpec:
     """Decide what dimension `i` shows: the arrays, binning, and labels."""
-    if var_info:
+    if var_info is not None:
         cfg: VarInfo = var_info[i]
         mu: float = cfg["mu"]
         sigma: float = cfg["sigma"]
@@ -348,14 +369,14 @@ def plot_losses(
     )
     val_d: NDArray[np.double] = np.array(object=history["val_d"], dtype=np.double)
     train_g: NDArray[np.double] = np.array(object=history["train_g"], dtype=np.double)
-    ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
-    ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
+    _ = ax.plot(epochs, train_d, label="Train D", color="C0", ls=":", lw=1)
+    _ = ax.plot(epochs, train_g, label="Train G", color="C1", ls=":", lw=1)
     # One validation curve, because there is one validation number: `eval_step`
     # scores both networks with a single weighted BCE, so a "Val G" line would
     # be this one drawn twice. Older runs carry a `val_g` key holding exactly
     # that copy --- it is deliberately not read.
-    ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
-    ax.axhline(
+    _ = ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
+    _ = ax.axhline(
         y=np.log(2),
         color="gray",
         linestyle="-",
@@ -363,10 +384,10 @@ def plot_losses(
         zorder=10,
         label=r"$\log(2)$",
     )
-    ax.set_xlabel(xlabel="Epoch")
-    ax.set_ylabel(ylabel="WeightedBCE")
-    ax.set_title(label="Training History")
-    ax.legend()
+    _ = ax.set_xlabel(xlabel="Epoch")
+    _ = ax.set_ylabel(ylabel="WeightedBCE")
+    _ = ax.set_title(label="Training History")
+    _ = ax.legend()
 
     figure.tight_layout()
     figure.savefig(fname=save_path, bbox_inches="tight")
@@ -396,7 +417,7 @@ def plot_selection(
     figure.canvas = FigureCanvasPdf(figure)
     ax: Axes = figure.add_subplot(111)
 
-    ax.plot(
+    _ = ax.plot(
         epochs,
         np.array(history["val_mmd"], dtype=np.double),
         label="Detector MMD$^2$ (criterion)",
@@ -404,7 +425,7 @@ def plot_selection(
         lw=2,
     )
     if "val_mmd_particle" in history:
-        ax.plot(
+        _ = ax.plot(
             epochs,
             np.array(history["val_mmd_particle"], dtype=np.double),
             label="Particle MMD$^2$ (diagnostic)",
@@ -413,29 +434,29 @@ def plot_selection(
             lw=2,
         )
     if best_epoch >= 0:
-        ax.axvline(
+        _ = ax.axvline(
             best_epoch,
             color="k",
             ls=":",
             lw=1,
             label=f"selected (epoch {best_epoch + 1})",
         )
-    ax.set_yscale("symlog", linthresh=SELECTION_MMD_LINTHRESH)
-    ax.set_xlabel("Epoch")
-    ax.set_ylabel(r"MMD$^2$")
+    ax.set_yscale(value="symlog", linthresh=SELECTION_MMD_LINTHRESH)
+    _ = ax.set_xlabel(xlabel="Epoch")
+    _ = ax.set_ylabel(ylabel=r"MMD$^2$")
 
     ess: Axes = ax.twinx()
-    ess.plot(
+    _ = ess.plot(
         epochs,
         np.array(history["val_ess"], dtype=np.double),
         color="C7",
         lw=1,
         alpha=0.6,
     )
-    ess.set_ylabel("Effective sample size", color="C7")
+    _ = ess.set_ylabel(ylabel="Effective sample size", color="C7")
     ess.tick_params(axis="y", labelcolor="C7")
 
-    ax.legend(loc="best")
+    _ = ax.legend(loc="best")
     figure.tight_layout()
-    figure.savefig(save_path)
+    figure.savefig(fname=save_path)
     logger.info("Saved %s", save_path)

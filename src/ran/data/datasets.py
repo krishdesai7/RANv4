@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import jax
 import jax.numpy as jnp
@@ -18,12 +18,14 @@ from ..rantypes import (
     GaussianConfig,
     Populations,
 )
+from ..timing import note
 from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from logging import Logger
     from pathlib import Path
-    from typing import Final, LiteralString, SupportsFloat
+    from typing import Any, Final, LiteralString, SupportsFloat
 
     from jax import Array
     from jaxtyping import Float
@@ -138,7 +140,7 @@ class RANDataset:
         """Recursively round floats in a nested list/scalar for stable hashing."""
         if isinstance(obj, list):
             return [RANDataset._round_nested(v, ndigits) for v in obj]
-        return np.round(a=float(obj), decimals=ndigits)
+        return float(np.round(a=float(obj), decimals=ndigits))
 
     def _cache_key(self, parsed: GaussianConfig, n_samples: int) -> str:
         """Hash the promoted covariance matrices for a canonical cache key."""
@@ -222,16 +224,21 @@ class RANDataset:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         if cache_path.exists():
+            note("gaussian cache hit", to="data")
             logger.info("Loading dataset from cache: %s", cache_path)
             with np.load(file=cache_path) as cached:
+                arrays: Mapping[str, NDArray[Any]] = cast(
+                    "Mapping[str, NDArray[Any]]", cached
+                )
                 data: ZXY = ZXY(
                     Events(
-                        z=cached["z"].astype(dtype=self.dtype),
-                        x=cached["x"].astype(dtype=self.dtype),
+                        z=arrays["z"].astype(dtype=self.dtype),
+                        x=arrays["x"].astype(dtype=self.dtype),
                     ),
-                    y=cached["y"],
+                    y=arrays["y"],
                 )
         else:
+            note("gaussian generated", to="data")
             z_true, z_gen, x_data, x_sim = _draw_gaussian(
                 self.seed,
                 mu_true=parsed.mu_true,

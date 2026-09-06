@@ -64,7 +64,7 @@ class TestNullFloor:
 
     def test_it_refuses_a_sample_too_small_to_split(self) -> None:
         with pytest.raises(ValueError, match="two disjoint"):
-            null_floor(_one_population(100), m=256, repeats=4, seed=0)
+            _ = null_floor(_one_population(100), m=256, repeats=4, seed=0)
 
 
 class TestFloorEstimate:
@@ -93,19 +93,23 @@ class TestPoolOverlap:
     value it is checked against would look wrong for the wrong reason.
     """
 
-    def test_warns_when_the_draws_cover_too_much_of_the_pool(self, caplog) -> None:
+    def test_warns_when_the_draws_cover_too_much_of_the_pool(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         x = _one_population(1000)
 
         with caplog.at_level("WARNING"):
-            null_floor(x, m=400, repeats=4, seed=0)
+            _ = null_floor(x, m=400, repeats=4, seed=0)
 
         assert "2m/N" in caplog.text
 
-    def test_stays_quiet_when_the_pool_is_ample(self, caplog) -> None:
+    def test_stays_quiet_when_the_pool_is_ample(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         x = _one_population(20_000)
 
         with caplog.at_level("WARNING"):
-            null_floor(x, m=400, repeats=4, seed=0)
+            _ = null_floor(x, m=400, repeats=4, seed=0)
 
         assert "2m/N" not in caplog.text
 
@@ -132,7 +136,7 @@ class TestFloorUncertainty:
     def test_reports_the_standard_error_of_the_spread_itself(self) -> None:
         estimate = FloorEstimate(values=tuple(float(v) for v in range(65)))
 
-        expected = estimate.sd / np.sqrt(2.0 * (len(estimate.values) - 1))
+        expected: float = estimate.sd / np.sqrt(2.0 * (len(estimate.values) - 1))
 
         assert estimate.sd_error == pytest.approx(expected)
 

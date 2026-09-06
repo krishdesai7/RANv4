@@ -83,14 +83,16 @@ search-path = ["src", "."]
 site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
-# Benchmarks rebind `ran.models` builders to the same functions recompiled at
-# another dtype. That is the measurement, and no checker can follow it. They are
-# still linted and formatted; they are just not part of the typed surface.
-project-excludes = ["benchmarks/**"]
+preset = "all"
+treat-all-caps-as-final = true
+permissive-ignores = true
 
+[tool.pyrefly.errors]
+explicit-any = false # npt.NDArray[T] is an alias for np.ndarray[tuple[Any, ...], T]
+implicit-bool = false # complaints about np.bool to python bool conversions
+implicit-any-lambda = false # Python does not allow lambda without type hints
 
-[tool.ty.src]
-exclude = ["benchmarks/**"]
+[tool.ty]
 
 
 [tool.ruff]

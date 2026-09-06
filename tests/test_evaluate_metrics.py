@@ -23,7 +23,7 @@ def test_normalized_histograms_treats_1d_samples_as_one_feature() -> None:
 def test_normalized_histograms_rejects_mixed_rank_inputs() -> None:
     # A generator: the body, and the error it raises, only run once consumed.
     with pytest.raises(IndexError):
-        list(
+        _ = list(
             _normalized_histograms(
                 np.array([0.0, 1.0]),
                 np.array([[0.0, 1.0], [1.0, 0.0]]),

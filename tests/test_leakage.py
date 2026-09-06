@@ -14,8 +14,8 @@ class ReachedTrainingError(Exception):
 
 
 @pytest.fixture
-def no_training(monkeypatch) -> None:
-    def _stub(*_args, **_kwargs):
+def no_training(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _stub(*_args: object, **_kwargs: object) -> None:
         raise ReachedTrainingError
 
     monkeypatch.setattr(leakage, "train", _stub)

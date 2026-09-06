@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
+    from numpy.typing import ArrayLike
     from ran.rantypes import GaussianConfig
 
 
@@ -31,10 +32,32 @@ class TestSigmaToCovariance:
         expected = 2.25 * np.eye(3)
         np.testing.assert_array_almost_equal(cov, expected)
 
+    @pytest.mark.parametrize("spelling", [2.0, [2.0], [[2.0]]])
+    def test_single_element_is_a_scalar_sigma(self, spelling: ArrayLike) -> None:
+        """One element is one sigma at any nesting depth, and is squared.
+
+        `[[2.0]]` used to reach the matrix branch and pass through unsquared,
+        so the same sigma gave 4.0 written two ways and 2.0 written a third.
+        """
+        cov = sigma_to_covariance(spelling, 3)
+        np.testing.assert_array_almost_equal(cov, 4.0 * np.eye(3))
+
     def test_vector(self) -> None:
         cov = sigma_to_covariance([1.0, 2.0], 2)
         expected = np.diag([1.0, 4.0])
         np.testing.assert_array_almost_equal(cov, expected)
+
+    @pytest.mark.parametrize("dim", [0, -1])
+    def test_degenerate_dim_rejected(self, dim: int) -> None:
+        """There is no 0x0 covariance; `np.identity(0)` would return one."""
+        with pytest.raises(ValueError, match="at least 1"):
+            _ = sigma_to_covariance(0.5, dim)
+
+    @pytest.mark.parametrize("empty", [[], [[]]])
+    def test_empty_sigma_rejected(self, empty: ArrayLike) -> None:
+        """Empty needs no branch: the length and shape checks already catch it."""
+        with pytest.raises(ValueError, match="dim"):
+            _ = sigma_to_covariance(empty, 2)
 
     def test_matrix_passthrough(self) -> None:
         mat = [[1.0, 0.5], [0.5, 2.0]]
@@ -62,13 +85,13 @@ class TestSigmaToCovariance:
             _ = sigma_to_covariance(asym, 2)
 
     def test_negative_scalar_raises(self) -> None:
-        """Negative scalar sigma is physically nonsensical."""
-        with pytest.raises(ValueError, match="negative"):
+        """A non-positive scalar sigma is physically nonsensical."""
+        with pytest.raises(ValueError, match="positive"):
             _ = sigma_to_covariance(-1.0, 2)
 
     def test_negative_vector_element_raises(self) -> None:
-        """Negative elements in sigma vector should be rejected."""
-        with pytest.raises(ValueError, match="negative"):
+        """Non-positive elements in a sigma vector should be rejected."""
+        with pytest.raises(ValueError, match="positive"):
             _ = sigma_to_covariance([1.0, -0.5], 2)
 
 
@@ -184,6 +207,26 @@ class TestGaussianConfigFromRunConfig:
             dim=2,
         )
         np.testing.assert_array_almost_equal(params.cov_gen, [[1.0, 0.5], [0.5, 2.25]])
+
+    def test_master_era_1x1_sigma_key_is_still_a_covariance(self) -> None:
+        """The 1D case of the format above, which the size-1 rule nearly broke.
+
+        `sigma_to_covariance` reads `[[0.81]]` as one sigma and squares it. A
+        master-era `sigma_gen` holding a 1x1 *covariance* must not be squared,
+        so the reader keeps the 2-D rule rather than delegating that call.
+        """
+        params = gaussian_config_from_run_config(
+            {
+                "mu_gen": [0.5],
+                "mu_true": [0.0],
+                "sigma_gen": [[0.81]],
+                "sigma_true": [[1.0]],
+                "sigma_detector": [[0.25]],
+            },
+            dim=1,
+        )
+        np.testing.assert_array_almost_equal(params.cov_gen, [[0.81]])
+        np.testing.assert_array_almost_equal(params.cov_detector, [[0.25]])
 
     def test_ancient_scalar_sigma_is_promoted(self) -> None:
         """The oldest runs stored a raw sigma, which still needs squaring."""

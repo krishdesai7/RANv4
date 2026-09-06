@@ -61,14 +61,13 @@ def _draw_gaussian(
     k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), num=4)
 
     z_true: Float[Array, "n d"] = jax.random.multivariate_normal(
-        k_true, mu_true, cov_true, (n_samples,), method="svd"
+        k_true, mu_true, cov_true, shape=(n_samples,), method="svd"
     )
     z_gen: Float[Array, "n d"] = jax.random.multivariate_normal(
-        k_gen, mu_gen, cov_gen, (n_samples,), method="svd"
+        k_gen, mu_gen, cov_gen, shape=(n_samples,), method="svd"
     )
 
-    chol_det: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector))
-    smear: Float[Array, "d d"] = chol_det.T
+    smear: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector)).T
 
     x_data: Float[Array, "n d"] = (
         z_true + jax.random.normal(key=k_data, shape=z_true.shape) @ smear

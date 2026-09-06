@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import yaml
-from scipy.linalg import cholesky
 
 from ..rantypes import REQUIRED_KEYS, GaussianConfig
 
@@ -16,29 +15,54 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
 
+def _check_dim(dim: int, /) -> None:
+    """A covariance is square and non-degenerate, so there is no 0-dimensional one."""
+    if dim < 1:
+        raise ValueError(f"dim must be at least 1, got {dim}")
+
+
 def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
-    """(σ²)I from a single sigma."""
+    """Cov = σ²·I  from a single sigma, however it is spelled.
+
+    `0.5`, `[0.5]` and `[[0.5]]` are the same single sigma, so all three land
+    here and all three are squared. Dispatching on `size` rather than `ndim` is
+    what makes that true of the last one.
+    """
     val: np.double = arr.ravel()[0]
-    if val < 0:
-        raise ValueError(f"sigma scalar must be non-negative, got {val}")
+    if val <= 0:
+        raise ValueError(f"sigma scalar must be positive, got {val}")
     return val**2 * np.identity(n=dim, dtype=np.double)
 
 
 def _diagonal_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
-    """diag(σ²) from a per-dimension sigma vector."""
+    """Cov = diag(σ²) from a per-dimension σ vector."""
     if arr.shape[0] != dim:
         raise ValueError(f"sigma vector has length {arr.shape[0]}, expected {dim = }")
-    if np.any(a=arr < 0):
-        raise ValueError("sigma vector elements must be non-negative")
+    if np.any(a=arr <= 0):
+        raise ValueError("sigma vector elements must be positive")
     return np.diag(v=arr**2).astype(np.double)
 
 
 def _full_covariance(arr: NDArray[np.double], dim: int, /) -> NDArray[np.double]:
-    """An already-formed covariance matrix, checked for shape and symmetry."""
+    """An already-formed covariance matrix, checked for shape, symmetry and PD.
+
+    The other two branches build their matrix from strictly positive sigmas, so
+    positive definiteness is theirs by construction; a full matrix is the only
+    one that can arrive without it. The factorization is called for its side
+    effect -- `LinAlgError` on a non-PD matrix.
+
+    This is also the `cov_*` reader for `gaussian_config_from_run_config`, which
+    calls it directly rather than through `sigma_to_covariance`. That matters:
+    what arrives here is an already-squared covariance, so it is passed through
+    untouched, where the same numbers reaching `sigma_to_covariance` would be
+    sigmas and would be squared.
+    """
+    _check_dim(dim)
     if arr.shape != (dim, dim):
         raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
     if not np.allclose(a=arr, b=arr.T):
         raise ValueError("sigma matrix must be symmetric")
+    _ = np.linalg.cholesky(arr)
     return arr
 
 
@@ -47,20 +71,25 @@ def sigma_to_covariance(
     dim: int,
     /,
 ) -> NDArray[np.double]:
-    arr: NDArray[np.double] = np.atleast_1d(np.asarray(a=sigma, dtype=np.double))
-    if arr.ndim == 0 or (arr.ndim == 1 and arr.size == 1):
-        cov: NDArray[np.double] = _scalar_covariance(arr, dim)
-    elif arr.ndim == 1:
-        cov = _diagonal_covariance(arr, dim)
-    elif arr.ndim == 2:
-        cov = _full_covariance(arr, dim)
-    else:
-        raise ValueError(f"sigma must be 0D, 1D, or 2D, got {arr.ndim = }")
+    """Promote a sigma in any of its three spellings to a covariance matrix.
 
-    # Called for its side effect: raises `LinAlgError` if `cov` is not positive
-    # definite, which is the validation this function exists to perform.
-    _ = cholesky(a=cov, lower=True)
-    return cov
+    A single element is one sigma at any nesting depth (`σ²·I`), a 1-D array of
+    `dim` of them is per-dimension (`diag(σ²)`), and a `dim x dim` array is an
+    already-formed covariance. An empty sigma needs no branch of its own: it is
+    caught by the length check on the vector branch, or the shape check on the
+    matrix branch, once `dim` is known to be at least 1.
+    """
+    _check_dim(dim)
+    arr: NDArray[np.double] = np.asarray(a=sigma, dtype=np.double)
+    if arr.size == 1:
+        return _scalar_covariance(arr, dim)
+    if arr.ndim == 1:
+        return _diagonal_covariance(arr, dim)
+    if arr.ndim == 2:
+        return _full_covariance(arr, dim)
+    raise ValueError(
+        f"sigma must be a single scalar, 1D vector, or 2D matrix, got {arr.ndim = }"
+    )
 
 
 def gaussian_config_from_run_config(
@@ -76,7 +105,18 @@ def gaussian_config_from_run_config(
                 np.asarray(a=params[f"cov_{name}"], dtype=np.double), dim
             )
         if f"sigma_{name}" in params:
-            return sigma_to_covariance(params[f"sigma_{name}"], dim)
+            raw: NDArray[np.double] = np.asarray(
+                a=params[f"sigma_{name}"], dtype=np.double
+            )
+            # master's `__main__` wrote covariances under the `sigma_*` names,
+            # and 2-D-ness is the only thing that tells the two apart. That rule
+            # lives here rather than in `sigma_to_covariance`, where a single
+            # element is now a sigma however deeply nested -- without this, a
+            # reloaded 1D master-era run would have its `[[0.81]]` squared a
+            # second time and quietly regenerate a different dataset.
+            if raw.ndim == 2:
+                return _full_covariance(raw, dim)
+            return sigma_to_covariance(raw, dim)
         raise ValueError(f"gaussian_params has neither cov_{name} nor sigma_{name}")
 
     return GaussianConfig(

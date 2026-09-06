@@ -446,7 +446,14 @@ class TestDrawFiguresSelection:
         )
 
         assert not calls["plot_selection"]
-        assert calls["plot_levels"]
+        assert len(calls["plot_levels"]) == 1
+        _, level_kwargs = calls["plot_levels"][0]
+        assert level_kwargs == {
+            "detector_path": tmp_path / "detector_level.pdf",
+            "particle_path": tmp_path / "particle_level.pdf",
+            "var_info": None,
+            "ibu_weights": None,
+        }
         assert calls["plot_losses"]
 
     def test_val_mmd_present_draws_selection_with_best_epoch(

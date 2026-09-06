@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 import pytest
 from matplotlib.axes import Axes
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from ran.data import ArrayDataset
 from ran.plotting import (
@@ -29,6 +30,9 @@ from ran.rantypes import Events, Populations
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from numpy.typing import NDArray
+    from ran.rantypes import RANModel
 
 type DrawnCalls = list[tuple[tuple[Any, ...], dict[str, Any]]]
 
@@ -78,11 +82,10 @@ def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
     assert calls == [(out, {})]
 
 
-def test_multilevel_figure_uses_fixed_physical_edge_margins(
+def test_multilevel_figure_keeps_rendered_content_inside_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Default fractional margins turn into several blank inches as the
-    stacked figure grows taller; the outer panels should use the page instead.
+    """Fixed margins must contain labels and titles, not just axes rectangles.
     """
     captured: list[Figure] = []
 
@@ -101,38 +104,44 @@ def test_multilevel_figure_uses_fixed_physical_edge_margins(
         _DETECTOR,
         tmp_path / "levels.pdf",
         None,
-        None,
+        [np.ones(4, dtype=np.single), np.ones(4, dtype=np.single)],
     )
 
     figure = captured[0]
-    top = max(ax.get_position().y1 for ax in figure.axes)
-    bottom = min(ax.get_position().y0 for ax in figure.axes)
-    assert top >= 0.95
-    assert bottom <= 0.05
+    canvas = FigureCanvasAgg(figure)
+    canvas.draw()
+    renderer = canvas.get_renderer()
+    page = figure.bbox
+    for ax in figure.axes:
+        content = ax.get_tightbbox(renderer)
+        assert content.x0 >= page.x0
+        assert content.y0 >= page.y0
+        assert content.x1 <= page.x1
+        assert content.y1 <= page.y1
 
 
-def test_plot_levels_evaluates_generator_once(tmp_path: Path) -> None:
-    """Detector and particle panels use identical generator weights, so the
-    combined workflow must not repeat the forward pass.
+def test_plot_levels_evaluates_generator_once_per_chunk(tmp_path: Path) -> None:
+    """Chunking may call the model repeatedly, but the second figure must not
+    repeat those calls for the identical generator population.
     """
-    z_gen = np.array([[-1.0], [0.0], [1.0]], dtype=np.single)
+    z_gen = np.linspace(-1.0, 1.0, num=10_001, dtype=np.single)[:, None]
     x_sim = z_gen + np.single(0.1)
-    truth = np.array([[-0.8], [0.1], [1.2]], dtype=np.single)
+    truth = z_gen + np.single(0.2)
     data = truth + np.single(0.1)
     populations = Populations.create(mc=Events(z_gen, x_sim), data=data, truth=truth)
     dataset = ArrayDataset(populations.interleave(), batch_size=2)
     calls = 0
 
-    def generator(z: np.ndarray) -> np.ndarray:
+    def generator(z: NDArray[np.single]) -> NDArray[np.single]:
         nonlocal calls
         calls += 1
         return np.ones((len(z), 1), dtype=np.single)
 
     detector = tmp_path / "detector.pdf"
     particle = tmp_path / "particle.pdf"
-    plot_levels(dataset, generator, detector, particle)  # ty: ignore[invalid-argument-type]
+    plot_levels(dataset, cast("RANModel", generator), detector, particle)
 
-    assert calls == 1
+    assert calls == 2
     assert detector.exists()
     assert particle.exists()
 
@@ -153,13 +162,16 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
         del save_path
         captured.append(figure)
 
+    def generator(z: NDArray[np.single]) -> NDArray[np.single]:
+        return np.ones((len(z), 1), dtype=np.single)
+
     monkeypatch.setattr("ran.plotting._save_fig", capture)
     plot_levels(
         dataset,
-        lambda z: np.ones((len(z), 1), dtype=np.single),
+        cast("RANModel", generator),
         tmp_path / "detector.pdf",
         tmp_path / "particle.pdf",
-    )  # ty: ignore[invalid-argument-type]
+    )
 
     assert captured[0].get_figheight() == captured[1].get_figheight()
 

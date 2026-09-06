@@ -291,13 +291,14 @@ def _plot_level(
     height: float = style.height_per_dim * dim
     figure = Figure(figsize=(8, height))
     figure.canvas = FigureCanvasPdf(figure)
-    edge_margin: float = 0.5 / height
     outer_grid: GridSpec = figure.add_gridspec(
         nrows=dim,
         ncols=1,
         hspace=0.35,
-        bottom=edge_margin,
-        top=1 - edge_margin,
+        left=0.14,
+        right=0.96,
+        bottom=0.75 / height,
+        top=1 - 0.5 / height,
     )
     for i in range(dim):
         inner_grid: GridSpecFromSubplotSpec = outer_grid[i].subgridspec(

@@ -31,10 +31,10 @@ def _scipy_wd_per_dim(
     ref: np.ndarray, comp: np.ndarray, weights: np.ndarray | None = None
 ) -> np.ndarray:
     """`_wd_per_dim`'s pre-port body, kept here as the oracle."""
-    ref_2d = ref.reshape(-1, 1) if ref.ndim == 1 else ref
-    comp_2d = comp.reshape(-1, 1) if comp.ndim == 1 else comp
+    ref_2d: NDArray[np.double] = ref.reshape(-1, 1) if ref.ndim == 1 else ref
+    comp_2d: NDArray[np.double] = comp.reshape(-1, 1) if comp.ndim == 1 else comp
     return np.array(
-        [
+        object=[
             wasserstein_distance(ref_2d[:, i], comp_2d[:, i], v_weights=weights)
             for i in range(ref_2d.shape[1])
         ]
@@ -44,21 +44,21 @@ def _scipy_wd_per_dim(
 class TestNormalizedHistograms:
     def test_treats_1d_samples_as_one_feature(self) -> None:
         p, q = _normalized_histograms(
-            np.array([0.0, 0.0, 1.0, 1.0]),
-            np.array([0.0, 1.0, 1.0, 1.0]),
+            ref=np.array(object=[0.0, 0.0, 1.0, 1.0]),
+            comp=np.array(object=[0.0, 1.0, 1.0, 1.0]),
             n_bins=2,
         )
 
         assert p.shape == (1, 2)
         assert q.shape == (1, 2)
-        np.testing.assert_allclose(p, [[0.5, 0.5]])
-        np.testing.assert_allclose(q, [[0.25, 0.75]])
+        np.testing.assert_allclose(actual=p, desired=[[0.5, 0.5]])
+        np.testing.assert_allclose(actual=q, desired=[[0.25, 0.75]])
 
     def test_rejects_mixed_rank_inputs(self) -> None:
-        with pytest.raises(ValueError, match="same rank"):
+        with pytest.raises(expected_exception=ValueError, match="same rank"):
             _ = _normalized_histograms(
-                np.array([0.0, 1.0]),
-                np.array([[0.0, 1.0], [1.0, 0.0]]),
+                ref=np.array(object=[0.0, 1.0]),
+                comp=np.array(object=[[0.0, 1.0], [1.0, 0.0]]),
                 n_bins=2,
             )
 

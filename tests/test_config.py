@@ -39,24 +39,29 @@ class TestSigmaToCovariance:
         `[[2.0]]` used to reach the matrix branch and pass through unsquared,
         so the same sigma gave 4.0 written two ways and 2.0 written a third.
         """
-        cov = sigma_to_covariance(spelling, 3)
-        np.testing.assert_array_almost_equal(cov, 4.0 * np.eye(3))
+        cov: NDArray[np.double] = sigma_to_covariance(spelling, 3)
+        np.testing.assert_array_almost_equal(actual=cov, desired=4.0 * np.eye(N=3))
 
     def test_vector(self) -> None:
-        cov = sigma_to_covariance([1.0, 2.0], 2)
-        expected = np.diag([1.0, 4.0])
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance([1.0, 2.0], 2)
+        expected: NDArray[np.double] = np.diag(v=[1.0, 4.0])
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
 
-    @pytest.mark.parametrize("dim", [0, -1])
+    @pytest.mark.parametrize(argnames="dim", argvalues=[0, -1])
     def test_degenerate_dim_rejected(self, dim: int) -> None:
-        """There is no 0x0 covariance; `np.identity(0)` would return one."""
-        with pytest.raises(ValueError, match="at least 1"):
+        """There is no 0x0 covariance, and numpy will not object to one.
+
+        `np.identity(-1)` raises, but `np.identity(0)` and `np.diag([])` both
+        return a legal `(0, 0)` array, so leaning on numpy catches only half of
+        this -- which is what made the `dim=0` case of this test fail.
+        """
+        with pytest.raises(expected_exception=ValueError, match="at least 1"):
             _ = sigma_to_covariance(0.5, dim)
 
-    @pytest.mark.parametrize("empty", [[], [[]]])
+    @pytest.mark.parametrize(argnames="empty", argvalues=[[], [[]]])
     def test_empty_sigma_rejected(self, empty: ArrayLike) -> None:
         """Empty needs no branch: the length and shape checks already catch it."""
-        with pytest.raises(ValueError, match="dim"):
+        with pytest.raises(expected_exception=ValueError, match="dim"):
             _ = sigma_to_covariance(empty, 2)
 
     def test_matrix_passthrough(self) -> None:

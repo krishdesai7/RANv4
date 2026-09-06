@@ -69,6 +69,7 @@ module-name = "ran"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
 filterwarnings = [
     # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a
     # `copy` kwarg, so every `model.save()` trips this from inside Keras's own
@@ -103,7 +104,7 @@ implicit-bool = false # complaints about np.bool to python bool conversions
 implicit-any-lambda = false # Python does not allow lambda with type hints
 
 [tool.ty]
-
+src.exclude = ["legacy"]
 
 [tool.ruff]
 src = ["."]

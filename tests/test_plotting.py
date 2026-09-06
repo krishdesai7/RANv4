@@ -113,6 +113,7 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
     page = figure.bbox
     for ax in figure.axes:
         content = ax.get_tightbbox(renderer)
+        assert content is not None
         assert content.x0 >= page.x0
         assert content.y0 >= page.y0
         assert content.x1 <= page.x1

@@ -15,12 +15,6 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
 
-def _check_dim(dim: int, /) -> None:
-    """A covariance is square and non-degenerate, so there is no 0-dimensional one."""
-    if dim < 1:
-        raise ValueError(f"dim must be at least 1, got {dim}")
-
-
 def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """Cov = σ²·I  from a single sigma, however it is spelled.
 
@@ -57,7 +51,6 @@ def _full_covariance(arr: NDArray[np.double], dim: int, /) -> NDArray[np.double]
     untouched, where the same numbers reaching `sigma_to_covariance` would be
     sigmas and would be squared.
     """
-    _check_dim(dim)
     if arr.shape != (dim, dim):
         raise ValueError(f"sigma matrix has shape {arr.shape}, expected {dim = }")
     if not np.allclose(a=arr, b=arr.T):
@@ -75,11 +68,8 @@ def sigma_to_covariance(
 
     A single element is one sigma at any nesting depth (`σ²·I`), a 1-D array of
     `dim` of them is per-dimension (`diag(σ²)`), and a `dim x dim` array is an
-    already-formed covariance. An empty sigma needs no branch of its own: it is
-    caught by the length check on the vector branch, or the shape check on the
-    matrix branch, once `dim` is known to be at least 1.
+    already-formed covariance.
     """
-    _check_dim(dim)
     arr: NDArray[np.double] = np.asarray(a=sigma, dtype=np.double)
     if arr.size == 1:
         return _scalar_covariance(arr, dim)
@@ -87,6 +77,7 @@ def sigma_to_covariance(
         return _diagonal_covariance(arr, dim)
     if arr.ndim == 2:
         return _full_covariance(arr, dim)
+    # dim == 0 or dim > 2
     raise ValueError(
         f"sigma must be a single scalar, 1D vector, or 2D matrix, got {arr.ndim = }"
     )

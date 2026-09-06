@@ -240,15 +240,16 @@ class TestEnvironment:
         assert not timing._enabled_from_env({})
 
 
-@pytest.mark.writes_default_cache
 class TestTrainIntegration:
     """The nested phases inside `train`, and the risk that (ahead-of-time)
     compilation introduced to expose them changes the numbers.
 
-    Marked because these are the only tests here that actually call `train`,
-    which points XLA's persistent cache at `COMPILE_CACHE_DIR`. On a read-only
-    default cache that is a warning per compile rather than a failure, but it
-    is the same dependency the dataset and workflow tests are gated on.
+    Deliberately not gated on a writable default cache. These call `train`,
+    which points XLA's persistent cache at `COMPILE_CACHE_DIR`, but an
+    unwritable one costs a recompile and a warning rather than the run --- and
+    the warning is filtered in `pyproject.toml`. Skipping them would trade the
+    one check that says a timed run is bit-identical to an untimed one for a
+    cosmetic line.
     """
 
     @staticmethod

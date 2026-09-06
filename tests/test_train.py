@@ -395,7 +395,6 @@ class TestTrainSteps:
         assert int(count) == len(batch[2])
 
 
-@pytest.mark.writes_default_cache
 def test_train_runs_and_returns_usable_models(tmp_path: Path) -> None:
     """A few epochs on a tiny problem: shapes, history, and a saveable model."""
     n = 512

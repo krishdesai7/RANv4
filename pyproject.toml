@@ -74,6 +74,14 @@ filterwarnings = [
     # `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1. Python's
     # default filters hide it outside pytest, so this only silences test output.
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
+    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`, and an
+    # unwritable one is deliberately a warning rather than a failure -- a
+    # sandboxed or read-only `.cache/` costs the run nothing but a recompile.
+    # JAX emits it per compile from whichever test compiles first, so gating the
+    # ~18 tests that call `train()` on a writable cache would trade real
+    # coverage (`TestFusion` among them) for a cosmetic line. Both spellings:
+    # JAX warns separately on the read and the write path.
+    "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
 ]
 
 

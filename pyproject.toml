@@ -44,7 +44,7 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.6",
     "rust-just>=1.58.0",
-    "types-pyyaml>=6.0.12.20260815",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 release = [
     "rooster>=0.1.1",
@@ -98,7 +98,7 @@ permissive-ignores = true
 [tool.pyrefly.errors]
 explicit-any = false # npt.NDArray[T] is an alias for np.ndarray[tuple[Any, ...], T]
 implicit-bool = false # complaints about np.bool to python bool conversions
-implicit-any-lambda = false # Python does not allow lambda without type hints
+implicit-any-lambda = false # Python does not allow lambda with type hints
 
 [tool.ty]
 

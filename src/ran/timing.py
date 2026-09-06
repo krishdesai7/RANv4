@@ -68,7 +68,7 @@ class _Open:
 
     def note(self, detail: str, /) -> None:
         """Annotate the phase, e.g. which branch of a cache check it took."""
-        self.detail = detail
+        self.detail: str = detail
 
     def block[T](self, value: T, /) -> T:
         """Wait for JAX to finish producing `value`, inside the clock.
@@ -81,7 +81,7 @@ class _Open:
         """
         import jax
 
-        return cast("T", jax.block_until_ready(value))
+        return cast(typ="T", val=jax.block_until_ready(x=value))
 
 
 class _Noop(_Open):
@@ -113,7 +113,7 @@ class _Recorder:
         self.depth: int = 0
         # Sampled at construction -- before the run has had a chance to compile
         # anything into it.
-        self.compile_cache_warm: bool = any(COMPILE_CACHE_DIR.glob("*"))
+        self.compile_cache_warm: bool = any(COMPILE_CACHE_DIR.glob(pattern="*"))
 
 
 _recorder: _Recorder | None = _Recorder() if _enabled_from_env(os.environ) else None
@@ -230,10 +230,10 @@ def report(console: Console | None = None, /) -> None:
         return
     total: float = _total_seconds(_recorder.records)
     table = Table(title="Wall clock by phase")
-    table.add_column("Phase")
-    table.add_column("Seconds", justify="right")
-    table.add_column("Share", justify="right")
-    table.add_column("Detail")
+    table.add_column(header="Phase")
+    table.add_column(header="Seconds", justify="right")
+    table.add_column(header="Share", justify="right")
+    table.add_column(header="Detail")
     for record in _ordered(_recorder.records):
         share: str = f"{100.0 * record.seconds / total:.1f}%" if total > 0 else "-"
         detail: str = record.detail or ""
@@ -272,4 +272,4 @@ def write(run_dir: Path, /) -> None:
             for p in _ordered(_recorder.records)
         ],
     }
-    _ = (run_dir / "timings.json").write_text(json.dumps(obj=payload, indent=2))
+    _ = (run_dir / "timings.json").write_text(data=json.dumps(obj=payload, indent=2))

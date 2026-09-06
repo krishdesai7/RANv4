@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from numpy.typing import ArrayLike
+    from numpy.typing import ArrayLike, NDArray
     from ran.rantypes import GaussianConfig
 
 
@@ -23,16 +23,16 @@ class TestSigmaToCovariance:
     """Test the three sigma forms: scalar, vector, matrix."""
 
     def test_scalar_1d(self) -> None:
-        cov = sigma_to_covariance(2.0, 1)
-        expected = np.array([[4.0]])
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance(2.0, 1)
+        expected: NDArray[np.double] = np.array(object=[[4.0]])
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
 
     def test_scalar_3d(self) -> None:
-        cov = sigma_to_covariance(1.5, 3)
-        expected = 2.25 * np.eye(3)
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance(1.5, 3)
+        expected: NDArray[np.double] = 2.25 * np.eye(N=3)
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
 
-    @pytest.mark.parametrize("spelling", [2.0, [2.0], [[2.0]]])
+    @pytest.mark.parametrize(argnames="spelling", argvalues=[2.0, [2.0], [[2.0]]])
     def test_single_element_is_a_scalar_sigma(self, spelling: ArrayLike) -> None:
         """One element is one sigma at any nesting depth, and is squared.
 
@@ -107,11 +107,11 @@ class TestParseGaussianConfig:
 
     def _write_yaml(self, data: dict[str, Any], tmp_path: Path) -> Path:
         p: Path = tmp_path / "config.yaml"
-        _ = p.write_text(yaml.dump(data))
+        _ = p.write_text(data=yaml.dump(data))
         return p
 
     def test_valid_2d_config(self, tmp_path: Path) -> None:
-        cfg = {
+        cfg: dict[str, list[float] | list[list[float]]] = {
             "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
             "sigma_gen": [1.0, 1.5],

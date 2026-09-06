@@ -26,11 +26,11 @@ if TYPE_CHECKING:
     from .data import ArrayDataset
     from .rantypes import EventArray, Populations, RANModel, VarInfo
 
-    type AxesHist = tuple[
-        NDArray[np.double],
-        NDArray[np.double],
-        BarContainer | Polygon | list[BarContainer | Polygon],
-    ]
+type AxesHist = tuple[
+    NDArray[np.double],
+    NDArray[np.double],
+    BarContainer | Polygon | list[BarContainer | Polygon],
+]
 
 logger: Logger = logging.getLogger(name=__name__)
 

@@ -85,8 +85,7 @@ def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
 def test_multilevel_figure_keeps_rendered_content_inside_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fixed margins must contain labels and titles, not just axes rectangles.
-    """
+    """Fixed margins must contain labels and titles, not just axes rectangles."""
     captured: list[Figure] = []
 
     def capture(figure: Figure, save_path: Path) -> None:

@@ -6,9 +6,10 @@ and `jensenshannon` are what the numbers in every run predating the port were
 produced by, and a port that shifts them is a port that invalidates the archive.
 """
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
-from numpy.typing import NDArray
 from ran.evaluate import (
     _bin_edges,
     _js_from_histograms,
@@ -21,6 +22,9 @@ from ran.evaluate import (
 )
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 def _scipy_wd_per_dim(

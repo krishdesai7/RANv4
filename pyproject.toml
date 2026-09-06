@@ -95,6 +95,7 @@ infer-return-types = "checked"
 preset = "all"
 treat-all-caps-as-final = true
 permissive-ignores = true
+project-excludes = ["legacy"]
 
 [tool.pyrefly.errors]
 explicit-any = false # npt.NDArray[T] is an alias for np.ndarray[tuple[Any, ...], T]
@@ -107,7 +108,7 @@ implicit-any-lambda = false # Python does not allow lambda with type hints
 [tool.ruff]
 src = ["."]
 line-length = 88
-extend-exclude = ["*.ipynb"]
+extend-exclude = ["*.ipynb", "legacy"]
 
 [tool.ruff.lint]
 future-annotations = true

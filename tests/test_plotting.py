@@ -75,6 +75,34 @@ def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
     assert calls == [(out, {})]
 
 
+def test_plot_levels_evaluates_generator_once(tmp_path: Path) -> None:
+    """Detector and particle panels use identical generator weights, so the
+    combined workflow must not repeat the forward pass.
+    """
+    from ran.plotting import plot_levels
+
+    z_gen = np.array([[-1.0], [0.0], [1.0]], dtype=np.single)
+    x_sim = z_gen + np.single(0.1)
+    truth = np.array([[-0.8], [0.1], [1.2]], dtype=np.single)
+    data = truth + np.single(0.1)
+    populations = Populations.create(mc=Events(z_gen, x_sim), data=data, truth=truth)
+    dataset = ArrayDataset(populations.interleave(), batch_size=2)
+    calls = 0
+
+    def generator(z: np.ndarray) -> np.ndarray:
+        nonlocal calls
+        calls += 1
+        return np.ones((len(z), 1), dtype=np.single)
+
+    detector = tmp_path / "detector.pdf"
+    particle = tmp_path / "particle.pdf"
+    plot_levels(dataset, generator, detector, particle)  # ty: ignore[invalid-argument-type]
+
+    assert calls == 1
+    assert detector.exists()
+    assert particle.exists()
+
+
 def _history(n: int = 12) -> dict[str, list[float]]:
     """What `train` returns now: one validation column, not two."""
     rng = np.random.default_rng(0)

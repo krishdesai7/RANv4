@@ -20,9 +20,8 @@ from .data import (
 from .evaluate import evaluate_run
 from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
 from .plotting import (
-    plot_detector_level,
+    plot_levels,
     plot_losses,
-    plot_particle_level,
     plot_selection,
 )
 from .rantypes import (
@@ -275,17 +274,11 @@ def _draw_figures(
     if not plots:
         return
     ibu_weights: list[EventArray] | None = _load_baseline_weights(run_dir, dim)
-    plot_detector_level(
+    plot_levels(
         splits.test,
         g,
-        save_path=run_dir / "detector_level.pdf",
-        var_info=var_info,
-        ibu_weights=ibu_weights,
-    )
-    plot_particle_level(
-        splits.test,
-        g,
-        save_path=run_dir / "particle_level.pdf",
+        detector_path=run_dir / "detector_level.pdf",
+        particle_path=run_dir / "particle_level.pdf",
         var_info=var_info,
         ibu_weights=ibu_weights,
     )

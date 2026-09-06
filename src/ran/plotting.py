@@ -107,6 +107,7 @@ def _hist_ratio_panel(
         val=ax.hist(
             x_nature,
             bins=bins,
+            histtype="stepfilled",
             alpha=0.35,
             color="C0",
             label=nature_label,
@@ -117,6 +118,7 @@ def _hist_ratio_panel(
         val=ax.hist(
             x_mc,
             bins=cast(typ=Sequence[float], val=h_nature[1]),
+            histtype="stepfilled",
             alpha=0.35,
             color="C1",
             label=mc_label,
@@ -209,7 +211,7 @@ def _hist_ratio_panel(
 
 def _save_fig(figure: Figure, save_path: Path) -> None:
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(fname=save_path, bbox_inches="tight")
+    figure.savefig(fname=save_path)
     logger.info("Saved %s", save_path)
 
 
@@ -349,6 +351,37 @@ def plot_particle_level(
         w=_get_weights(g, z_gen=test.mc.z),
         style=_PARTICLE,
         save_path=save_path,
+        var_info=var_info,
+        ibu_weights=ibu_weights,
+    )
+
+
+def plot_levels(
+    test_dataset: ArrayDataset,
+    g: RANModel,
+    detector_path: Path = Path("plots/detector_level.pdf"),
+    particle_path: Path = Path("plots/particle_level.pdf"),
+    var_info: list[VarInfo] | None = None,
+    ibu_weights: list[EventArray] | None = None,
+) -> None:
+    """Draw both physics levels from one partition and generator evaluation."""
+    test: Populations = _collect_data(test_dataset)
+    weights: EventArray = _get_weights(g, z_gen=test.mc.z)
+    _plot_level(
+        nature=test.data,
+        mc=test.mc.x,
+        w=weights,
+        style=_DETECTOR,
+        save_path=detector_path,
+        var_info=var_info,
+        ibu_weights=ibu_weights,
+    )
+    _plot_level(
+        nature=test.require_truth(),
+        mc=test.mc.z,
+        w=weights,
+        style=_PARTICLE,
+        save_path=particle_path,
         var_info=var_info,
         ibu_weights=ibu_weights,
     )

@@ -603,7 +603,9 @@ How is the wall clock time distributed between host numpy and the training loop?
 uv run benchmarks/boundary.py
 ```
 
-The primary metric is the ratio of host numpy time to training loop time. Training scales with the accelerator; the scipy metrics and the npz cache write do not. On CPU numpy looks cheap. On an A100 the same numpy may be most of the run, which is what decides whether porting `_wd_per_dim`/`_js_per_dim` to jax.numpy is worthwhile.
+The primary metric is the ratio of host numpy time to training loop time. Training scales with the accelerator; host numpy and the npz cache write do not. On CPU numpy looks cheap. On an A100 the same numpy may be most of the run.
+
+That ratio is what decided the metric port, and the port has happened: `_wd_per_dim`, `_js_per_dim` and `_triangular_per_dim` are `jnp` and run on device. The benchmark still imports those same helpers, so it now measures the ported path rather than the question that motivated it --- what is left on the host is the npz write and the `dim x n_bins` divergence reductions.
 
 ## `precision.py`
 

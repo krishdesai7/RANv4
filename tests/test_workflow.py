@@ -75,14 +75,23 @@ def stub_heavy(monkeypatch: pytest.MonkeyPatch) -> Recorded:
         del args, kwargs
         recorded.plots.append(save_path)
 
+    def fake_plot_levels(
+        *args: tuple[Any, ...],
+        detector_path: Path,
+        particle_path: Path,
+        **kwargs: dict[str, Any],
+    ) -> None:
+        del args, kwargs
+        recorded.plots.extend((detector_path, particle_path))
+
     def fake_evaluate(run_dir: Path, force: bool) -> None:
         recorded.evaluated = (run_dir, force)
 
     monkeypatch.setattr(
         target=workflow, name="_load_artifacts", value=fake_load_artifacts
     )
-    for name in ("plot_detector_level", "plot_particle_level", "plot_losses"):
-        monkeypatch.setattr(workflow, name, value=fake_plot)
+    monkeypatch.setattr(workflow, "plot_levels", value=fake_plot_levels)
+    monkeypatch.setattr(workflow, "plot_losses", value=fake_plot)
     monkeypatch.setattr(target=workflow, name="evaluate_run", value=fake_evaluate)
     return recorded
 
@@ -381,9 +390,8 @@ def test_run_omits_val_mmd_particle_without_truth(
 
 class _StubSplits:
     """Just enough of `DatasetSplits` for `_draw_figures` to read `.test`
-    without touching it -- `plot_detector_level`/`plot_particle_level` are
-    monkeypatched out in these tests, but `_draw_figures` still evaluates
-    `splits.test` as the call argument.
+    without touching it -- `plot_levels` is monkeypatched out in these tests,
+    but `_draw_figures` still evaluates `splits.test` as the call argument.
     """
 
     test: None = None
@@ -402,8 +410,7 @@ class TestDrawFiguresSelection:
         monkeypatch: pytest.MonkeyPatch,
     ) -> dict[str, list[tuple[tuple[Any, ...], dict[str, Any]]]]:
         calls: dict[str, list[tuple[tuple[Any, ...], dict[str, Any]]]] = {
-            "plot_detector_level": [],
-            "plot_particle_level": [],
+            "plot_levels": [],
             "plot_losses": [],
             "plot_selection": [],
         }
@@ -439,8 +446,7 @@ class TestDrawFiguresSelection:
         )
 
         assert not calls["plot_selection"]
-        assert calls["plot_detector_level"]
-        assert calls["plot_particle_level"]
+        assert calls["plot_levels"]
         assert calls["plot_losses"]
 
     def test_val_mmd_present_draws_selection_with_best_epoch(

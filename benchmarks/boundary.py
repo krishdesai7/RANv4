@@ -1,9 +1,12 @@
 """Where a run's wall clock actually goes, and how much of it jnp could claim.
 
-This exists to answer one question: is it worth porting the scipy metrics in
+This existed to answer one question: is it worth porting the scipy metrics in
 `ran.evaluate` to jnp now that nothing forces the host/device split any more?
-The answer is a *fraction*, not a duration -- a faster GPU shrinks the training
-term and leaves the scipy term alone, so the ratio is what generalises.
+The answer was yes and the port has happened, so what this measures now is the
+residue -- the npz write, and the per-dimension divergence reductions that stay
+on the host in float64 because they are free there. The number to read is still
+a *fraction*, not a duration: a faster GPU shrinks the training term and leaves
+the host term alone, so the ratio is what generalises.
 
 Three things this is careful about, each of which an earlier version got wrong:
 
@@ -17,7 +20,9 @@ Three things this is careful about, each of which an earlier version got wrong:
   `evaluate` actually scores (test, ~20% of the sample) and over the same 12
   passes it makes: three metrics, two levels, before and after. Re-implementing
   that inline is how the earlier version came to measure four passes over five
-  times too many rows.
+  times too many rows. Note that `evaluate_run` itself no longer makes those 12
+  passes --- it goes through `_metrics_per_dim`, which shares one histogram
+  between the two divergences --- so this is an upper bound on what it spends.
 * Metric cost is fixed per run while training cost scales with epochs, so the
   fraction is meaningless without the epoch count attached to it.
 """

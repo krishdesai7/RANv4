@@ -14,7 +14,11 @@ Import the submodule needed (`from ran.workflow import run`); the CLI re-exports
 
 Computes distance metrics on test sets for completed runs.
 
-Computes per-dimension 1D Wasserstein distances and Jensen-Shannon divergences, both before and after reweighting. Uses only memory-efficient algorithms: sorted-CDF Wasserstein (O(n log n)) and histogram-based JS divergence.
+Computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and triangular discriminators, both before and after reweighting.
+
+**Every one of them runs on device.** The metrics were scipy and `np.histogram` in a Python loop over columns, which at the shipped 500k jet configuration was 63% of the `evaluate` phase and half of it Wasserstein alone. They are now `jnp`, vectorized across dimensions so one dispatch does every column, and the only thing that crosses back to the host is the handful of numbers per dimension they reduce to. Measured at 100k-vs-100k in 6D: 1.23s of metrics became ~0.28s of compute plus a one-time XLA compile, before any GPU.
+
+Two things did *not* change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move *toward* float64 truth, because `np.histogram` accumulates in the weights' dtype and RAN's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
 
 Usage:
 
@@ -52,37 +56,48 @@ Load the dataset splits from the config.
 
 - `DatasetSplits` The loaded dataset splits.
 
-### `_normalized_histograms(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
+### `_bin_edges(ref: EventArray | JaxArray, comp: EventArray | JaxArray, n_bins: int) -> NDArray[np.single]`
 
-Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence-metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
+`(dim, n_bins + 1)` uniform edges spanning each dimension's combined range, built on the host with `np.linspace` so both histograms bin against exactly the same numbers.
+
+They are **float32 on purpose**. `JAX_ENABLE_X64=0` truncates a float64 array on its way into a traced function, so float64 edges would be re-rounded at the boundary and the bin a value lands in would stop matching the edges the host computed. Deciding the width in the dtype the comparison happens in is what keeps the two ends one function.
+
+### `_counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray`
+
+Weighted bin counts per column, `(dim, n_bins)`. `searchsorted(..., "right") - 1` reproduces `np.histogram`'s placement against explicit edges, and the clip is its closed last bin, where the maxima land.
+
+The weights are **centered before they are scattered** and the mean added back through the exact count. Scattering them raw sums ~200 magnitudes per bin in float32 --- which is what `np.histogram` did --- while centering leaves the scatter summing residuals, an order of magnitude smaller, and the integer count is exact in float32 out to 2**24. The mean carries its own error and does not matter: it multiplies every bin of a column by the same factor, which `_normalize` divides straight back out.
+
+### `_cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxArray`
+
+$\int |F_{ref} - F_{comp}| \, dt$ per column: the 1D Wasserstein-1 distance, vectorized over columns so one dispatch does every dimension.
+
+The two CDFs are **never accumulated separately**. Each climbs to 1 while their difference stays at the order of the distance being measured, so subtracting them afterwards cancels away most of a float32 mantissa. Cumulatively summing the signed weights instead keeps the running value at the size of the answer, which makes the float32 error relative to it rather than to 1 --- and costs one scan instead of two.
+
+### `_wd_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
+
+1D Wasserstein distance per dimension. `weights` reweights `comp` only, and is normalized, so scaling all of them by a constant cannot change a distance.
+
+### `_normalized_histograms(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
+
+Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
 
 **Arguments:**
 
 - `ref: EventArray` The reference data.
 - `comp: EventArray` The comparison data.
-- `weights: EventArray | None` The weights to use for the comparison data.
+- `weights: EventArray | JaxArray | None` The weights to use for the comparison data.
 - `n_bins: int` The number of bins to use for the histograms.
 
 **Returns:**
 
 - `tuple[NDArray[np.double], NDArray[np.double]]` The $(p, q)$ probability histograms for each dimension of `ref`/`comp`
 
-### `_js_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
+### `_js_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
 Returns JS divergence (squared JS distance) per dimension.
 
-**Arguments:**
-
-- `ref: EventArray` The reference data.
-- `comp: EventArray` The comparison data.
-- `weights: EventArray | None` The weights to use for the comparison data.
-- `n_bins: int` The number of bins to use for the histograms.
-
-**Returns:**
-
-- `NDArray[np.double]` The JS divergence per dimension.
-
-### `_triangular_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
+### `_triangular_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
 Triangular discriminator (Vincze-LeCam divergence) per dimension.
 
@@ -90,16 +105,15 @@ $$\Delta(p,q) = \sum_{i=1}^{n} \frac{(p_i - q_i)^2}{p_i + q_i} \times 10^3$$
 
 where $p_i, q_i$ are histogram probability masses. The bin-width factor cancels analytically, so this works directly on normalized histograms.
 
-**Arguments:**
+### `class MetricSet(NamedTuple)`
 
-- `ref: EventArray` The reference data.
-- `comp: EventArray` The comparison data.
-- `weights: EventArray | None` The weights to use for the comparison data.
-- `n_bins: int` The number of bins to use for the histograms.
+Every metric `metrics.json` records --- `wasserstein`, `jensenshannon`, `triangular` --- one entry per dimension. The field order is the order the keys are written in.
 
-**Returns:**
+### `_metrics_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> MetricSet`
 
-- `NDArray[np.double]` The triangular discriminator per dimension.
+All three metrics in one device pass, and the path `evaluate_run` takes.
+
+The two divergences read the **same** pair of histograms. Called through `_js_per_dim` and `_triangular_per_dim` they would each build their own --- two identical scatters over the full sample, for two reductions over `dim x n_bins` values. The single-metric helpers stay for the callers that want one number: `leakage`, the IBU baseline, and the benchmarks.
 
 ### `evaluate_run(run_dir: Path = RUN_DIR, force: bool = False) -> None`
 

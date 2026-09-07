@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -355,7 +355,8 @@ def _run_and_evaluate(
     weights: NDArray[np.single] = np.empty(
         shape=(config.dim, len(test.mc)), dtype=np.single
     )
-    metrics: dict[str, MetricRecord] = {}
+    detector: dict[str, MetricRecord] = {}
+    particle: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
@@ -372,16 +373,22 @@ def _run_and_evaluate(
         )
         weights[dimension] = test_weights
         outcomes.append(unfolding.outcome)
-        metrics[f"detector_{variable_name}"] = evaluate_dimension(
+        detector[f"detector_{variable_name}"] = evaluate_dimension(
             reference=test.data[:, dimension],
             comparison=test.mc.x[:, dimension],
             weights=test_weights,
         )
-        metrics[f"particle_{variable_name}"] = evaluate_dimension(
+        particle[f"particle_{variable_name}"] = evaluate_dimension(
             reference=test_truth[:, dimension],
             comparison=test.mc.z[:, dimension],
             weights=test_weights,
         )
+
+    # Every detector entry, then every particle entry -- the order
+    # `evaluate.evaluate_run` writes. Two files in the same nominal format with
+    # different key orders is the shape of bug that surfaces the first time
+    # someone zips them positionally.
+    metrics: dict[str, MetricRecord] = detector | particle
 
     return IBUResult(
         metrics=metrics,
@@ -419,6 +426,14 @@ def evaluate_single(
     )
 
     json.dump(obj=result.metrics, fp=out_path.open(mode="w"), indent=2)
+
+    # `outcomes` records the variables IBU's purity binning gave up on and
+    # returned unchanged. Without it, a report showing `IBU == Sim` and a 0.0%
+    # improvement reads as a measurement rather than a refusal.
+    _ = (artifacts_dir(run_dir) / "ibu_outcomes.json").write_text(
+        data=json.dumps(obj=[asdict(obj=o) for o in result.outcomes], indent=2)
+    )
+
     weights_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     np.savez(
         weights_path,

@@ -1,19 +1,22 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
+from ran import evaluate
 from ran.baselines import _shared as shared
 from ran.baselines import ibu
-from ran.data import ArrayDataset
-from ran.rantypes import ZXY, DatasetSplits, Events
+from ran.data import ArrayDataset, RANDataset
+from ran.models import build_generator
+from ran.rantypes import ZXY, DatasetSplits, Events, Populations, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from numpy.typing import NDArray
-    from ran.rantypes.events import Populations
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -451,3 +454,82 @@ def test_run_and_evaluate_validates_controls_before_loading_data(
             n_iterations=n_iterations,
             purity_threshold=purity_threshold,
         )
+
+
+def _jets_like_splits(dim: int, n: int = 64, seed: int = 51) -> DatasetSplits:
+    """A `Populations` with truth, shaped like a jets run but requiring no
+    Zenodo download -- see `TestParticleCurve._truthless_splits` in
+    `tests/test_workflow.py` for the same construction without truth.
+    """
+    rng: np.random.Generator = np.random.default_rng(seed=seed)
+    z_gen: NDArray[np.single] = rng.normal(size=(n, dim)).astype(dtype=np.single)
+    x_sim: NDArray[np.single] = (z_gen + rng.normal(0, 0.4, size=(n, dim))).astype(
+        dtype=np.single
+    )
+    x_data: NDArray[np.single] = rng.normal(size=(n, dim)).astype(dtype=np.single)
+    truth: NDArray[np.single] = (z_gen + rng.normal(0, 0.1, size=(n, dim))).astype(
+        dtype=np.single
+    )
+    pops: Populations = Populations.create(
+        mc=Events(z_gen, x_sim), data=x_data, truth=truth
+    )
+    return RANDataset(batch_size=8, seed=seed).splits_from_data(pops.interleave())
+
+
+def _run_with_ibu(
+    tmp_path: Path, variables: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """A run directory with real `metrics.json`/`metrics_ibu.json` output, with
+    the dataset load stubbed so the test needs no jets download.
+    """
+    dim: int = len(variables)
+    splits: DatasetSplits = _jets_like_splits(dim)
+    monkeypatch.setattr(evaluate, "_load_splits", lambda *_a, **_k: splits)
+    monkeypatch.setattr(shared, "_load_splits", lambda *_a, **_k: splits)
+
+    run_dir: Path = tmp_path / "run"
+    config: dict[str, Any] = {
+        "dataset": "jets",
+        "dim": dim,
+        "variables": list(variables),
+        "n_samples": 64,
+        "batch_size": 8,
+        "data_seed": 51,
+    }
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _ = (run_dir / "config.json").write_text(data=json.dumps(config))
+
+    generator = build_generator(dim=dim, hidden_units=4, n_layers=1)
+    generator.save(artifacts_dir(run_dir) / "generator.keras")
+
+    _ = evaluate.evaluate_run(run_dir)
+    _ = ibu.evaluate_single(run_dir)
+    return run_dir
+
+
+def test_ibu_and_ran_agree_on_metric_key_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same nominal format, two orders, is how a positional zip goes wrong."""
+    run_dir: Path = _run_with_ibu(tmp_path, ("m", "w"), monkeypatch)
+
+    ran_keys = list(json.loads((run_dir / "artifacts/metrics.json").read_text()))
+    ibu_keys = list(json.loads((run_dir / "artifacts/metrics_ibu.json").read_text()))
+    assert ibu_keys == ran_keys
+    assert ibu_keys == ["detector_m", "detector_w", "particle_m", "particle_w"]
+
+
+def test_ibu_records_which_variables_it_gave_up_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 0% improvement from a skipped variable must not read as a measurement."""
+    run_dir: Path = _run_with_ibu(tmp_path, ("m", "w"), monkeypatch)
+
+    outcomes: list[dict[str, Any]] = json.loads(
+        (run_dir / "artifacts/ibu_outcomes.json").read_text()
+    )
+    assert {o["variable_name"] for o in outcomes} == {"m", "w"}
+    assert all(o["status"] in {"completed", "skipped"} for o in outcomes)
+    assert all(
+        set(o) == {"variable_name", "status", "n_bins", "skip_reason"} for o in outcomes
+    )

@@ -78,6 +78,11 @@ ALPHA_RAN: Final[float] = 0.90
 # rather than being an arbitrary cutoff.
 SELECTION_MMD_LINTHRESH: Final[float] = 5e-4
 
+# Width of the centred rolling median drawn over the raw MMD traces in
+# `plot_selection`. The raw series stays visible underneath at low alpha --
+# this is a legibility aid, not a smoothing of the reported criterion.
+SELECTION_SMOOTHING_WINDOW: Final[int] = 5
+
 
 LN2: Final[float] = math.log(2)
 # The equilibrium band. Every series a converged run produces sits within a
@@ -566,45 +571,78 @@ def plot_losses(
     _save_fig(figure, save_path=Path(save_path))
 
 
-def plot_selection(
-    history: dict[str, list[float]],
-    best_epoch: int,
-    save_path: Path = Path("plots/selection.pdf"),
+def _rolling_median(values: NDArray[np.double], window: int, /) -> NDArray[np.double]:
+    """Centred rolling median, edges held at the nearest full window."""
+    pad: int = window // 2
+    padded: NDArray[np.double] = np.pad(values, pad_width=pad, mode="edge")
+    return np.array(
+        [np.median(padded[i : i + window]) for i in range(values.size)],
+        dtype=np.double,
+    )
+
+
+def _mmd_series(
+    ax: Axes,
+    epochs: NDArray[np.uintc],
+    values: NDArray[np.double],
+    *,
+    color: str,
+    ls: str,
+    label: str,
 ) -> None:
-    """The two MMD curves and the epoch selection landed on.
+    """Raw trace at low alpha, rolling median on top carrying the label."""
+    _ = ax.plot(epochs, values, color=color, ls=ls, lw=1, alpha=0.3)
+    smoothed = _rolling_median(values, SELECTION_SMOOTHING_WINDOW)
+    _ = ax.plot(epochs, smoothed, color=color, ls=ls, lw=2, label=label)
 
-    Detector-level MMD is the criterion; particle-level is the diagnostic.
-    Where they diverge -- detector still falling while particle turns up -- is
-    the ill-posedness made visible, and it is the plot that answers whether
-    truth-free selection costs anything. The particle curve is absent for a
-    real measurement, which has no truth to score against, so it is optional.
 
-    ESS shares the figure because the adversarial objective is linear in the
-    weights and therefore maximized at a simplex vertex: a falling MMD bought
-    by a collapsing effective sample size is not an improvement.
-    """
+def _mmd_inset(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> None:
+    """Detector-vs-particle scatter: the correlation two overlaid noisy time
+    series cannot show. Only drawn when a particle-level curve exists."""
+    detector = np.array(history["val_mmd"], dtype=np.double)
+    particle = np.array(history["val_mmd_particle"], dtype=np.double)
+    inset: Axes = ax.inset_axes((0.62, 0.62, 0.35, 0.35))
+    _ = inset.scatter(detector, particle, s=8, alpha=0.6, color=COLOR_MC)
+    if 0 <= best_epoch < detector.size:
+        _ = inset.scatter(
+            detector[best_epoch], particle[best_epoch], s=40, color="k", marker="x"
+        )
+    _ = inset.set_xlabel("Detector MMD$^2$", fontsize="x-small")
+    _ = inset.set_ylabel("Particle MMD$^2$", fontsize="x-small")
+    inset.tick_params(labelsize="x-small")
+
+
+def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> None:
+    """Top panel: detector (criterion) and particle (diagnostic) MMD^2, each
+    as a raw trace plus a rolling median, the resolution floor shaded, and the
+    selected epoch marked. The legend sits outside the axes."""
     epochs: NDArray[np.uintc] = np.arange(len(history["val_mmd"]), dtype=np.uintc)
 
-    figure: Figure = Figure(figsize=(8, 5))
-    figure.canvas = FigureCanvasPdf(figure)
-    ax: Axes = figure.add_subplot(111)
-
-    _ = ax.plot(
+    _mmd_series(
+        ax,
         epochs,
         np.array(history["val_mmd"], dtype=np.double),
+        color=COLOR_NATURE,
+        ls="-",
         label="Detector MMD$^2$ (criterion)",
-        color="C0",
-        lw=2,
     )
     if "val_mmd_particle" in history:
-        _ = ax.plot(
+        _mmd_series(
+            ax,
             epochs,
             np.array(history["val_mmd_particle"], dtype=np.double),
-            label="Particle MMD$^2$ (diagnostic)",
-            color="C3",
+            color=COLOR_IBU,
             ls="--",
-            lw=2,
+            label="Particle MMD$^2$ (diagnostic)",
         )
+
+    _ = ax.axhspan(
+        ymin=0,
+        ymax=SELECTION_MMD_LINTHRESH,
+        color="0.85",
+        zorder=0,
+        label="estimator resolution floor",
+    )
     if best_epoch >= 0:
         _ = ax.axvline(
             best_epoch,
@@ -614,20 +652,89 @@ def plot_selection(
             label=f"selected (epoch {best_epoch + 1})",
         )
     ax.set_yscale(value="symlog", linthresh=SELECTION_MMD_LINTHRESH)
-    _ = ax.set_xlabel(xlabel="Epoch")
     _ = ax.set_ylabel(ylabel=r"MMD$^2$")
+    ax.tick_params(axis="x", labelbottom=False)
+    _clip_ticks_to_view(ax)
+    _ = ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
 
-    ess: Axes = ax.twinx()
-    _ = ess.plot(
-        epochs,
-        np.array(history["val_ess"], dtype=np.double),
-        color="C7",
-        lw=1,
-        alpha=0.6,
-    )
-    _ = ess.set_ylabel(ylabel="Effective sample size", color="C7")
-    ess.tick_params(axis="y", labelcolor="C7")
 
-    _ = ax.legend(loc="best")
+def _clip_ticks_to_view(ax: Axes) -> None:
+    """Drop major y-ticks the locator placed outside the current view.
+
+    `SymmetricalLogLocator` generates a fixed decade ladder around
+    `linthresh` regardless of how narrow the data range actually is -- a
+    real run's detector MMD^2 can sit entirely within one decade, and the
+    unfiltered ladder then draws tick labels far above the axes, off the top
+    of the figure. `get_yticks()` already evaluates the locator against the
+    current view; this just keeps the ones inside it.
+    """
+    low, high = ax.get_ylim()
+    ticks = np.asarray(ax.get_yticks(), dtype=np.double)
+    in_view = ticks[(ticks >= low) & (ticks <= high)]
+    if in_view.size:
+        _ = ax.set_yticks(in_view)
+
+
+def _ess_panel(ax: Axes, history: dict[str, list[float]]) -> None:
+    """Bottom panel: effective sample size as a percentage of epoch 0. A
+    falling MMD bought by a collapsing ESS is not an improvement."""
+    epochs: NDArray[np.uintc] = np.arange(len(history["val_ess"]), dtype=np.uintc)
+    ess: NDArray[np.double] = np.array(history["val_ess"], dtype=np.double)
+    ess_pct: NDArray[np.double] = 100 * ess / ess[0]
+
+    _ = ax.plot(epochs, ess_pct, color=COLOR_MC, lw=1.5)
+    _ = ax.set_xlabel(xlabel="Epoch")
+    # Rotated 90 deg, a two-line label's rendered height is set by its
+    # *longest line's width*, not by the font size alone -- at the module's
+    # default 18pt, "Effective sample size" alone is taller than this short
+    # (height-ratio 3) panel, and spills into the x-tick labels below it.
+    # Shrinking just this label keeps the panel proportions the brief calls
+    # for instead of stealing height from it.
+    _ = ax.set_ylabel(ylabel="Effective sample size\n(% of epoch 0)", fontsize=10)
+    low, high = min(float(ess_pct.min()), 100.0), max(float(ess_pct.max()), 100.0)
+    pad = 0.05 * (high - low if high > low else 1.0)
+    _ = ax.set_ylim(low - pad, high + pad)
+    _clip_ticks_to_view(ax)
+
+
+def plot_selection(
+    history: dict[str, list[float]],
+    best_epoch: int,
+    save_path: Path = Path("plots/selection.pdf"),
+) -> None:
+    """Two panels answering three separate questions: which epoch was
+    selected and does the criterion justify it (top); does the truth-free
+    detector-level criterion track the particle-level one, shown as a
+    correlation scatter rather than two overlaid noisy time series (inset,
+    when truth is available); and did the effective sample size collapse
+    while MMD fell (bottom).
+
+    Detector-level MMD is the criterion; particle-level is the diagnostic.
+    The particle curve is absent for a real measurement, which has no truth
+    to score against, so it -- and the inset it feeds -- are optional.
+    """
+    figure: Figure = Figure(figsize=(8, 6))
+    figure.canvas = FigureCanvasPdf(figure)
+    # An explicit `hspace` on the GridSpec is what `tight_layout` calls "not
+    # compatible" and warns about below -- it wants to compute that spacing
+    # itself. Letting it do so (via `subplots_adjust` after the fact instead)
+    # was tried and produces a visibly worse layout: `tight_layout` reserves
+    # far more horizontal margin than the outside legend actually needs, once
+    # nothing pins the panel spacing before it runs. The explicit `hspace`
+    # here is deliberate, and the warning is benign -- verified against a
+    # real run's history in the task report.
+    gridspec: GridSpec = figure.add_gridspec(nrows=2, height_ratios=[7, 3], hspace=0.08)
+    mmd_ax: Axes = figure.add_subplot(gridspec[0])
+    ess_ax: Axes = figure.add_subplot(gridspec[1], sharex=mmd_ax)
+
+    _mmd_panel(mmd_ax, history, best_epoch)
+    _ess_panel(ess_ax, history)
+
+    # tight_layout only sizes axes it manages; an inset added beforehand
+    # trips a second, unrelated "not compatible" warning and can throw its
+    # own position off, so the inset is added afterward instead.
     figure.tight_layout()
+    if "val_mmd_particle" in history:
+        _mmd_inset(mmd_ax, history, best_epoch)
+
     _save_fig(figure, save_path=Path(save_path))

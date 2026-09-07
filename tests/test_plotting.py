@@ -571,6 +571,51 @@ def captured_axes(monkeypatch: pytest.MonkeyPatch) -> list[Axes]:
     return captured
 
 
+def _noisy_history(n_epochs: int = 40) -> dict[str, list[float]]:
+    """A synthetic history with the oscillation the real criterion has:
+    detector MMD^2 falling on average but noisy by a wide factor epoch to
+    epoch, a correlated particle-level curve, and a decaying ESS."""
+    rng = np.random.default_rng(0)
+    epochs = np.arange(n_epochs, dtype=np.double)
+    trend = 0.05 * np.exp(-epochs / 15) + 1e-4
+    detector = trend * rng.uniform(0.3, 1.7, size=n_epochs)
+    particle = trend * rng.uniform(0.3, 1.7, size=n_epochs) + 0.02
+    ess = 900.0 * np.exp(-epochs / 60)
+    return {
+        "train_d": [0.69] * n_epochs,
+        "train_g": [0.69] * n_epochs,
+        "val_d": [0.69] * n_epochs,
+        "val_mmd": detector.tolist(),
+        "val_mmd_particle": particle.tolist(),
+        "val_ess": ess.tolist(),
+    }
+
+
+def _drawn_selection(
+    history: dict[str, list[float]], best_epoch: int, path: Path
+) -> Figure:
+    """Render `plot_selection` for real and return the Figure it built, by
+    intercepting `Figure.add_subplot` the way `captured_axes` does -- this
+    lets matplotlib actually compute positions and extents rather than
+    mocking the draw away."""
+    captured: list[Axes] = []
+    original_add_subplot = Figure.add_subplot
+
+    def record_and_call(self: Figure, *args: Any, **kwargs: Any) -> Axes:
+        ax = original_add_subplot(self, *args, **kwargs)
+        captured.append(ax)
+        return ax
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Figure, "add_subplot", record_and_call)
+        plot_selection(history, best_epoch=best_epoch, save_path=path)
+
+    figure = cast("Figure", captured[0].figure)
+    figure.canvas = FigureCanvasAgg(figure)
+    figure.canvas.draw()
+    return figure
+
+
 class TestSelectionPlot:
     def test_selection_plot_survives_a_missing_particle_curve(
         self, tmp_path: Path
@@ -627,6 +672,50 @@ class TestSelectionPlot:
             "y-limits must reach the negative data; a log axis clips the view "
             "to the smallest positive value and silently drops the rest"
         )
+
+    def test_selection_splits_mmd_and_ess_into_two_panels(self, tmp_path: Path) -> None:
+        """Three noisy series on one axis with a twin scale read as
+        seismographs."""
+        figure = _drawn_selection(
+            _noisy_history(), best_epoch=38, path=tmp_path / "selection.pdf"
+        )
+        panels = [a for a in figure.axes if a.get_xlabel() or a.get_ylabel()]
+
+        assert any("MMD" in a.get_ylabel() for a in panels)
+        assert any("Effective sample size" in a.get_ylabel() for a in panels)
+        # The ESS panel is its own axes, not a twin of the MMD one.
+        ess = next(a for a in panels if "Effective sample size" in a.get_ylabel())
+        mmd = next(a for a in panels if "MMD" in a.get_ylabel())
+        assert ess.get_position().y1 <= mmd.get_position().y0 + 1e-6
+
+    def test_the_correlation_inset_appears_only_with_truth(
+        self, tmp_path: Path
+    ) -> None:
+        """A real measurement has no particle-level curve to scatter
+        against."""
+        with_truth = _drawn_selection(_noisy_history(), 38, tmp_path / "a.pdf")
+        history = _noisy_history()
+        del history["val_mmd_particle"]
+        without = _drawn_selection(history, 38, tmp_path / "b.pdf")
+
+        # `inset_axes` registers as a `child_axes` of its parent rather than
+        # appearing in `Figure.axes` (matplotlib 3.11), so the inset's
+        # presence is checked there instead of via a top-level axes count.
+        mmd_with = next(a for a in with_truth.axes if "MMD" in a.get_ylabel())
+        mmd_without = next(a for a in without.axes if "MMD" in a.get_ylabel())
+        assert len(mmd_with.child_axes) == len(mmd_without.child_axes) + 1
+
+    def test_the_legend_is_outside_the_axes(self, tmp_path: Path) -> None:
+        """It used to cover the bottom third of the plot."""
+        figure = _drawn_selection(_noisy_history(), 38, tmp_path / "selection.pdf")
+        canvas = cast("FigureCanvasAgg", figure.canvas)
+        mmd = next(a for a in figure.axes if "MMD" in a.get_ylabel())
+        legend = mmd.get_legend()
+        assert legend is not None
+        renderer = canvas.get_renderer()
+        legend_box = legend.get_window_extent(renderer)
+        axes_box = mmd.get_window_extent(renderer)
+        assert legend_box.x0 >= axes_box.x1 - 1.0
 
     def test_negative_best_epoch_skips_the_selection_marker(
         self, captured_axes: list[Axes], tmp_path: Path

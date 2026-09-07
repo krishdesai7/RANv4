@@ -309,6 +309,54 @@ class TestMerge:
         payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
         assert [p["name"] for p in payload["phases"]] == ["train"]
 
+    def test_a_bare_list_payload_is_replaced_rather_than_raised_on(
+        self, tmp_path: Path
+    ) -> None:
+        """Valid JSON, but not the object shape `_merged_phases` expects."""
+        (tmp_path / "artifacts").mkdir()
+        _ = (tmp_path / "artifacts/timings.json").write_text("[1, 2, 3]")
+
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        assert [p["name"] for p in payload["phases"]] == ["train"]
+
+    def test_a_phase_missing_depth_is_replaced_rather_than_raised_on(
+        self, tmp_path: Path
+    ) -> None:
+        """A `phases` entry without `depth` would otherwise `KeyError` inside
+        the total or `_merged_phases`."""
+        (tmp_path / "artifacts").mkdir()
+        _ = (tmp_path / "artifacts/timings.json").write_text(
+            json.dumps({"phases": [{"name": "old", "seconds": 1.0}]})
+        )
+
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        assert [p["name"] for p in payload["phases"]] == ["train"]
+
+    def test_a_non_numeric_seconds_is_replaced_rather_than_raised_on(
+        self, tmp_path: Path
+    ) -> None:
+        """A non-numeric `seconds` would otherwise `TypeError` inside the sum
+        that computes `total_seconds`."""
+        (tmp_path / "artifacts").mkdir()
+        _ = (tmp_path / "artifacts/timings.json").write_text(
+            json.dumps({"phases": [{"name": "old", "seconds": "oops", "depth": 0}]})
+        )
+
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        assert [p["name"] for p in payload["phases"]] == ["train"]
+
 
 class TestEnvironment:
     @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])

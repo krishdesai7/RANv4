@@ -19,6 +19,7 @@ the run started, sampled before the first compile could fill it.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from contextlib import contextmanager
@@ -32,8 +33,11 @@ from .rantypes import COMPILE_CACHE_DIR, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
+    from logging import Logger
     from pathlib import Path
     from typing import Any, LiteralString
+
+logger: Logger = logging.getLogger(name=__name__)
 
 TIMING_ENV_VAR: Final[LiteralString] = "RAN_TIMING"
 
@@ -262,16 +266,46 @@ def report(console: Console | None = None, /) -> None:
     (console or Console()).print(table)
 
 
+def _is_valid_phase(phase: object, /) -> bool:
+    """Whether a parsed phase record has what `_merged_phases` and the total
+    read without raising: a name to merge on, a depth to sum by, a number to
+    sum."""
+    return (
+        isinstance(phase, dict)
+        and isinstance(phase.get("name"), str)
+        and isinstance(phase.get("depth"), int)
+        and isinstance(phase.get("seconds"), int | float)
+    )
+
+
+def _is_valid_payload(payload: object, /) -> bool:
+    """Whether a parsed `timings.json` has the shape `write` needs.
+
+    Valid JSON in the wrong shape --- a bare list, a `phases` entry missing
+    `depth`, a non-numeric `seconds` --- would otherwise raise inside
+    `_merged_phases` or the total, from exactly the `finally` block this layer
+    must never take down.
+    """
+    if not isinstance(payload, dict):
+        return False
+    phases: object = payload.get("phases", [])
+    if not isinstance(phases, list):
+        return False
+    return all(_is_valid_phase(p) for p in cast("list[object]", phases))
+
+
 def _existing(path: Path, /) -> dict[str, Any]:
     """What is already on disk, or an empty payload.
 
-    A malformed file is treated as absent rather than raised on: this layer
-    exists to describe a run, and must never be what ends one.
+    A malformed file --- unparseable text, or well-formed JSON in the wrong
+    shape --- is treated as absent rather than raised on: this layer exists to
+    describe a run, and must never be what ends one.
     """
     try:
-        return cast("dict[str, Any]", json.loads(s=path.read_text()))
+        payload: Any = json.loads(s=path.read_text())
     except OSError, ValueError:
         return {}
+    return cast("dict[str, Any]", payload) if _is_valid_payload(payload) else {}
 
 
 def _merged_phases(
@@ -305,7 +339,13 @@ def write(run_dir: Path, /, *, pass_name: str) -> None:
     """
     if _recorder is None or not _recorder.records:
         return
-    path: Path = artifacts_dir(run_dir) / "timings.json"
+    try:
+        path: Path = artifacts_dir(run_dir) / "timings.json"
+    except OSError as error:
+        # An unwritable run directory must not take the run down over a
+        # report of its own timing -- log and move on.
+        logger.warning("Could not create %s: %s", run_dir, error)
+        return
     previous: dict[str, Any] = _existing(path)
     fresh: list[dict[str, Any]] = [
         {
@@ -330,4 +370,9 @@ def write(run_dir: Path, /, *, pass_name: str) -> None:
         "compile_cache_warm": warm,
         "phases": phases,
     }
-    _ = path.write_text(data=json.dumps(obj=payload, indent=2))
+    try:
+        _ = path.write_text(data=json.dumps(obj=payload, indent=2))
+    except OSError as error:
+        # An unwritable or full run directory must not take the run down over
+        # a report of its own timing -- log and move on.
+        logger.warning("Could not write %s: %s", path, error)

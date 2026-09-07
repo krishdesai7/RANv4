@@ -596,26 +596,61 @@ def _mmd_series(
     _ = ax.plot(epochs, smoothed, color=color, ls=ls, lw=2, label=label)
 
 
-def _mmd_inset(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> None:
+def _mmd_scatter(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> None:
     """Detector-vs-particle scatter: the correlation two overlaid noisy time
-    series cannot show. Only drawn when a particle-level curve exists."""
+    series cannot show. Only drawn when a particle-level curve exists.
+
+    Lives in its own axes in the figure's right column rather than as an
+    `inset_axes` over the MMD panel -- an opaque box sitting on top of the
+    curves it is meant to explain hides exactly the criterion points it is
+    there to relate, the same defect the legend caused before it moved
+    outside the axes.
+    """
     detector = np.array(history["val_mmd"], dtype=np.double)
     particle = np.array(history["val_mmd_particle"], dtype=np.double)
-    inset: Axes = ax.inset_axes((0.62, 0.62, 0.35, 0.35))
-    _ = inset.scatter(detector, particle, s=8, alpha=0.6, color=COLOR_MC)
+    _ = ax.scatter(detector, particle, s=8, alpha=0.6, color=COLOR_MC)
     if 0 <= best_epoch < detector.size:
-        _ = inset.scatter(
+        _ = ax.scatter(
             detector[best_epoch], particle[best_epoch], s=40, color="k", marker="x"
         )
-    _ = inset.set_xlabel("Detector MMD$^2$", fontsize="x-small")
-    _ = inset.set_ylabel("Particle MMD$^2$", fontsize="x-small")
-    inset.tick_params(labelsize="x-small")
+    _ = ax.set_xlabel("Detector MMD$^2$", fontsize="x-small")
+    _ = ax.set_ylabel("Particle MMD$^2$", fontsize="x-small")
+    ax.tick_params(labelsize="x-small")
+
+
+def _mmd_values(history: dict[str, list[float]]) -> NDArray[np.double]:
+    """Every plotted raw MMD value, detector and particle (when present)."""
+    detector = np.array(history["val_mmd"], dtype=np.double)
+    if "val_mmd_particle" in history:
+        particle = np.array(history["val_mmd_particle"], dtype=np.double)
+        return np.concatenate([detector, particle])
+    return detector
+
+
+def _mmd_ylim(history: dict[str, list[float]]) -> tuple[float, float]:
+    """Y-limits sized to the plotted data, not to the resolution floor.
+
+    The floor's `axhspan` used to set the view's lower bound at `ymin=0`
+    regardless of where the data actually sat, which on a real run put 63% of
+    the panel's height in the (empty) floor band and crushed every curve into
+    the top third. Padding 20% past the data's own min/max instead lets the
+    floor be clipped by the view -- still drawn, just no longer the majority
+    of the panel. Padding is taken as a fraction of `abs(value)` rather than
+    a flat multiply, so it still widens (not narrows) the view when the
+    unbiased MMD estimator's noise puts the extreme value below zero.
+    """
+    values = _mmd_values(history)
+    data_min, data_max = float(values.min()), float(values.max())
+    bottom = data_min - 0.2 * abs(data_min)
+    top = data_max + 0.2 * abs(data_max)
+    return bottom, top
 
 
 def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> None:
     """Top panel: detector (criterion) and particle (diagnostic) MMD^2, each
     as a raw trace plus a rolling median, the resolution floor shaded, and the
-    selected epoch marked. The legend sits outside the axes."""
+    selected epoch marked. Y-limits are sized to the data (see `_mmd_ylim`);
+    the legend is drawn separately, in the figure's right column."""
     epochs: NDArray[np.uintc] = np.arange(len(history["val_mmd"]), dtype=np.uintc)
 
     _mmd_series(
@@ -654,8 +689,8 @@ def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> No
     ax.set_yscale(value="symlog", linthresh=SELECTION_MMD_LINTHRESH)
     _ = ax.set_ylabel(ylabel=r"MMD$^2$")
     ax.tick_params(axis="x", labelbottom=False)
+    _ = ax.set_ylim(*_mmd_ylim(history))
     _clip_ticks_to_view(ax)
-    _ = ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
 
 
 def _clip_ticks_to_view(ax: Axes) -> None:
@@ -697,44 +732,74 @@ def _ess_panel(ax: Axes, history: dict[str, list[float]]) -> None:
     _clip_ticks_to_view(ax)
 
 
+def _selection_legend(legend_ax: Axes, mmd_ax: Axes) -> None:
+    """Draw the MMD panel's legend into its own axes instead of `mmd_ax`.
+
+    `legend_ax` carries no data of its own -- it exists to host the legend at
+    a fixed spot in the figure's right column, entirely outside both plotted
+    panels, so it is turned off rather than left with empty spines and ticks.
+    """
+    handles, labels = mmd_ax.get_legend_handles_labels()
+    _ = legend_ax.axis("off")
+    _ = legend_ax.legend(handles=handles, labels=labels, loc="center", frameon=True)
+
+
 def plot_selection(
     history: dict[str, list[float]],
     best_epoch: int,
     save_path: Path = Path("plots/selection.pdf"),
 ) -> None:
     """Two panels answering three separate questions: which epoch was
-    selected and does the criterion justify it (top); does the truth-free
-    detector-level criterion track the particle-level one, shown as a
-    correlation scatter rather than two overlaid noisy time series (inset,
-    when truth is available); and did the effective sample size collapse
-    while MMD fell (bottom).
+    selected and does the criterion justify it (top left); does the
+    truth-free detector-level criterion track the particle-level one, shown
+    as a correlation scatter rather than two overlaid noisy time series
+    (bottom right, when truth is available); and did the effective sample
+    size collapse while MMD fell (bottom left).
 
     Detector-level MMD is the criterion; particle-level is the diagnostic.
     The particle curve is absent for a real measurement, which has no truth
-    to score against, so it -- and the inset it feeds -- are optional.
+    to score against, so it -- and the scatter it feeds -- are optional.
+
+    The legend lives in its own axes in the top right, rather than inside
+    the MMD axes: a legend drawn over the data was the original complaint
+    ("covers the bottom third of the plot"), and a `bbox_to_anchor` placed
+    outside the axes worked but left the right side of the figure empty --
+    exactly where the scatter needed to go instead of on top of the curves.
     """
-    figure: Figure = Figure(figsize=(8, 6))
+    figure: Figure = Figure(figsize=(9, 6))
     figure.canvas = FigureCanvasPdf(figure)
-    # An explicit `hspace` on the GridSpec is what `tight_layout` calls "not
-    # compatible" and warns about below -- it wants to compute that spacing
-    # itself. Letting it do so (via `subplots_adjust` after the fact instead)
-    # was tried and produces a visibly worse layout: `tight_layout` reserves
-    # far more horizontal margin than the outside legend actually needs, once
-    # nothing pins the panel spacing before it runs. The explicit `hspace`
-    # here is deliberate, and the warning is benign -- verified against a
-    # real run's history in the task report.
-    gridspec: GridSpec = figure.add_gridspec(nrows=2, height_ratios=[7, 3], hspace=0.08)
-    mmd_ax: Axes = figure.add_subplot(gridspec[0])
-    ess_ax: Axes = figure.add_subplot(gridspec[1], sharex=mmd_ax)
+    has_particle = "val_mmd_particle" in history
+
+    # Neither the outer 1x2 split nor either nested column passes an
+    # explicit `wspace`/`hspace` to `add_gridspec` itself -- only to a
+    # `SubplotSpec.subgridspec` nested inside a cell. `tight_layout` marks a
+    # `GridSpec` "locally modified" (and falls back to undersized margins,
+    # once silently, now emitting the warning this replaces) exactly when
+    # spacing is set on the gridspec it inspects directly; a nested
+    # subgridspec's own spacing does not trip that check. `_draw_panel`
+    # above uses the same trick for the same reason.
+    outer: GridSpec = figure.add_gridspec(nrows=1, ncols=2, width_ratios=[7, 4])
+    left: GridSpecFromSubplotSpec = outer[0].subgridspec(
+        nrows=2, ncols=1, height_ratios=[7, 3], hspace=0.08
+    )
+    mmd_ax: Axes = figure.add_subplot(left[0])
+    ess_ax: Axes = figure.add_subplot(left[1], sharex=mmd_ax)
+
+    right_rows: int = 2 if has_particle else 1
+    right: GridSpecFromSubplotSpec = outer[1].subgridspec(
+        nrows=right_rows,
+        ncols=1,
+        height_ratios=[1, 1] if has_particle else [1],
+        hspace=0.35,
+    )
+    legend_ax: Axes = figure.add_subplot(right[0])
 
     _mmd_panel(mmd_ax, history, best_epoch)
     _ess_panel(ess_ax, history)
+    _selection_legend(legend_ax, mmd_ax)
+    if has_particle:
+        scatter_ax: Axes = figure.add_subplot(right[1])
+        _mmd_scatter(scatter_ax, history, best_epoch)
 
-    # tight_layout only sizes axes it manages; an inset added beforehand
-    # trips a second, unrelated "not compatible" warning and can throw its
-    # own position off, so the inset is added afterward instead.
     figure.tight_layout()
-    if "val_mmd_particle" in history:
-        _mmd_inset(mmd_ax, history, best_epoch)
-
     _save_fig(figure, save_path=Path(save_path))

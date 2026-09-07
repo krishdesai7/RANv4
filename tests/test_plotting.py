@@ -698,24 +698,67 @@ class TestSelectionPlot:
         del history["val_mmd_particle"]
         without = _drawn_selection(history, 38, tmp_path / "b.pdf")
 
-        # `inset_axes` registers as a `child_axes` of its parent rather than
-        # appearing in `Figure.axes` (matplotlib 3.11), so the inset's
-        # presence is checked there instead of via a top-level axes count.
-        mmd_with = next(a for a in with_truth.axes if "MMD" in a.get_ylabel())
-        mmd_without = next(a for a in without.axes if "MMD" in a.get_ylabel())
-        assert len(mmd_with.child_axes) == len(mmd_without.child_axes) + 1
+        # The scatter is its own top-level axes (in the right column) rather
+        # than an `inset_axes` over the MMD panel -- see the "hides the data
+        # it sits on" fix below -- so its presence shows up directly in
+        # `Figure.axes`.
+        assert len(with_truth.axes) == len(without.axes) + 1
 
     def test_the_legend_is_outside_the_axes(self, tmp_path: Path) -> None:
         """It used to cover the bottom third of the plot."""
         figure = _drawn_selection(_noisy_history(), 38, tmp_path / "selection.pdf")
         canvas = cast("FigureCanvasAgg", figure.canvas)
-        mmd = next(a for a in figure.axes if "MMD" in a.get_ylabel())
-        legend = mmd.get_legend()
+        mmd = next(a for a in figure.axes if a.get_ylabel() == r"MMD$^2$")
+        legend_ax = next(a for a in figure.axes if a.get_legend() is not None)
+        legend = legend_ax.get_legend()
         assert legend is not None
         renderer = canvas.get_renderer()
         legend_box = legend.get_window_extent(renderer)
         axes_box = mmd.get_window_extent(renderer)
-        assert legend_box.x0 >= axes_box.x1 - 1.0
+        assert not legend_box.overlaps(axes_box)
+
+    def test_the_scatter_does_not_hide_criterion_points(self, tmp_path: Path) -> None:
+        """The original complaint was a legend covering the bottom third of
+        the plot; an opaque inset scatter sitting on top of the MMD curves
+        it explains is the same defect wearing a different shape."""
+        figure = _drawn_selection(_noisy_history(), 38, tmp_path / "selection.pdf")
+        canvas = cast("FigureCanvasAgg", figure.canvas)
+        renderer = canvas.get_renderer()
+        mmd = next(a for a in figure.axes if a.get_ylabel() == r"MMD$^2$")
+        scatter_ax = next(
+            a for a in figure.axes if a.get_xlabel() == "Detector MMD$^2$"
+        )
+        scatter_box = scatter_ax.get_window_extent(renderer)
+
+        for line in mmd.get_lines():
+            points = mmd.transData.transform(
+                np.column_stack([line.get_xdata(), line.get_ydata()])
+            )
+            inside = (
+                (points[:, 0] >= scatter_box.x0)
+                & (points[:, 0] <= scatter_box.x1)
+                & (points[:, 1] >= scatter_box.y0)
+                & (points[:, 1] <= scatter_box.y1)
+            )
+            assert not inside.any()
+
+    def test_the_mmd_panel_is_not_mostly_empty_floor(self, tmp_path: Path) -> None:
+        """The resolution floor used to set the view's lower bound at zero
+        regardless of the data, leaving most of the panel empty and the
+        curves crushed into the top third."""
+        figure = _drawn_selection(_noisy_history(), 38, tmp_path / "selection.pdf")
+        canvas = cast("FigureCanvasAgg", figure.canvas)
+        renderer = canvas.get_renderer()
+        mmd = next(a for a in figure.axes if a.get_ylabel() == r"MMD$^2$")
+        axes_box = mmd.get_window_extent(renderer)
+
+        detector = np.asarray(_noisy_history()["val_mmd"], dtype=np.double)
+        min_point_y = mmd.transData.transform((0.0, detector.min()))[1]
+        # Display y grows upward from the axes' bottom edge (`y0`); the
+        # fraction of the panel *below* the lowest data point is the gap
+        # between that edge and the point's pixel row.
+        below_fraction: float = (min_point_y - axes_box.y0) / axes_box.height
+        assert below_fraction < 0.25
 
     def test_negative_best_epoch_skips_the_selection_marker(
         self, captured_axes: list[Axes], tmp_path: Path

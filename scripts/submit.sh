@@ -7,10 +7,10 @@
 #SBATCH -c32
 
 # Sized from a measured run, not guessed: 12 vars / 500k / 100 epochs reports
-# 18.7s total in timings.json (train 11.2, plots 3.2, evaluate 3.1). Scaling
-# rows by 3.2x and the net by ~7x for -u128 -l3 puts the whole pipeline --
-# train, IBU, the reload that replots with the baseline overlaid, evaluate --
-# near 4 minutes. 15 gives ~4x margin.
+# 18.7s total across timings.json's three merged passes (train 11.2, plots 3.2,
+# evaluate 3.1). Scaling rows by 3.2x and the net by ~7x for -u128 -l3 puts the
+# whole pipeline -- train, IBU, the reload that replots with the baseline
+# overlaid, evaluate -- near 4 minutes. 15 gives ~4x margin.
 #
 # Requesting more is not free even though NERSC charges elapsed time rather
 # than the request: `-t` is what Slurm's backfill scheduler matches against, so
@@ -29,7 +29,11 @@ cd "${PROJECT_DIR}"
 echo "RAN_CACHE_DIR = ${RAN_CACHE_DIR:-<unset: using ./.cache>}"
 
 # Report where the wall clock went. `timings.json` lands in the run directory
-# alongside config.json, so it joins against it without walking a tree.
+# alongside config.json, so it joins against it without walking a tree. This
+# script makes three passes over that directory (train, IBU baseline, then a
+# reload to redraw the figures with the baseline overlaid), and each pass
+# merges its phases into the same file by name rather than overwriting it, so
+# the file accumulates all three passes' phases instead of only the last one's.
 export RAN_TIMING=1
 
 # The full 12: the OmniFold six plus q, f_ch, lha, ang2, ptd, n_ch.

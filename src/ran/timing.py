@@ -133,6 +133,20 @@ def enable(active: bool = True, /) -> None:
     _recorder = _Recorder() if active else None
 
 
+def reset() -> None:
+    """Discard recorded phases between passes, leaving enabled/disabled as is.
+
+    `write` merges a pass's phases into whatever is already on disk, so a
+    caller that runs more than one pass in the same process (a test, or a
+    launcher that never re-execs between phases) needs a way to start the next
+    pass's recording clean without also flipping timing off. A no-op when
+    timing is off, since there is nothing to discard.
+    """
+    global _recorder
+    if _recorder is not None:
+        _recorder = _Recorder()
+
+
 def phases() -> tuple[Phase, ...]:
     """Completed phases in closing order: children before their parent."""
     return () if _recorder is None else tuple(_recorder.records)
@@ -248,8 +262,41 @@ def report(console: Console | None = None, /) -> None:
     (console or Console()).print(table)
 
 
-def write(run_dir: Path, /) -> None:
-    """Write `timings.json`. A no-op when timing is off or nothing was timed.
+def _existing(path: Path, /) -> dict[str, Any]:
+    """What is already on disk, or an empty payload.
+
+    A malformed file is treated as absent rather than raised on: this layer
+    exists to describe a run, and must never be what ends one.
+    """
+    try:
+        return cast("dict[str, Any]", json.loads(s=path.read_text()))
+    except OSError, ValueError:
+        return {}
+
+
+def _merged_phases(
+    previous: dict[str, Any], fresh: list[dict[str, Any]], /
+) -> list[dict[str, Any]]:
+    """`fresh` replaces any same-named record from `previous`; the rest survives."""
+    replaced: frozenset[str] = frozenset(p["name"] for p in fresh)
+    kept: list[dict[str, Any]] = [
+        p
+        for p in cast("list[dict[str, Any]]", previous.get("phases", []))
+        if p["name"] not in replaced
+    ]
+    return kept + fresh
+
+
+def write(run_dir: Path, /, *, pass_name: str) -> None:
+    """Merge this pass's phases into `timings.json`. A no-op when timing is off
+    or nothing was timed.
+
+    `scripts/submit.sh` makes three passes over one run directory -- train,
+    baseline, then reload for the figures -- and an overwriting writer meant
+    the reload pass destroyed the training numbers on every pipeline run.
+    Phases merge by name: this pass's record replaces a same-named one from an
+    earlier pass and leaves the rest untouched. `pass_name` is what makes a
+    merged file legible, saying which invocation produced each row.
 
     Flat, with a `depth` field rather than nested objects, so a sweep can join
     it against `config.json` without walking a tree. Every number here comes
@@ -258,20 +305,29 @@ def write(run_dir: Path, /) -> None:
     """
     if _recorder is None or not _recorder.records:
         return
+    path: Path = artifacts_dir(run_dir) / "timings.json"
+    previous: dict[str, Any] = _existing(path)
+    fresh: list[dict[str, Any]] = [
+        {
+            "name": p.name,
+            "seconds": p.seconds,
+            "depth": p.depth,
+            "detail": p.detail,
+            "failed": p.failed,
+            "pass": pass_name,
+        }
+        for p in _ordered(_recorder.records)
+    ]
+    phases: list[dict[str, Any]] = _merged_phases(previous, fresh)
+    # A reload pass samples the compile cache before it can compile anything
+    # into it, so it never has a real value to report; keep the training
+    # pass's reading rather than overwrite it with nothing.
+    warm: bool | None = _recorder.compile_cache_warm
+    if warm is None:
+        warm = previous.get("compile_cache_warm")
     payload: dict[str, Any] = {
-        "total_seconds": _total_seconds(_recorder.records),
-        "compile_cache_warm": _recorder.compile_cache_warm,
-        "phases": [
-            {
-                "name": p.name,
-                "seconds": p.seconds,
-                "depth": p.depth,
-                "detail": p.detail,
-                "failed": p.failed,
-            }
-            for p in _ordered(_recorder.records)
-        ],
+        "total_seconds": sum(p["seconds"] for p in phases if p["depth"] == 0),
+        "compile_cache_warm": warm,
+        "phases": phases,
     }
-    _ = (artifacts_dir(run_dir) / "timings.json").write_text(
-        data=json.dumps(obj=payload, indent=2)
-    )
+    _ = path.write_text(data=json.dumps(obj=payload, indent=2))

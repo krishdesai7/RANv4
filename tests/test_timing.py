@@ -41,6 +41,14 @@ def _clean_recorder() -> Iterator[None]:
     timing.enable(False)
 
 
+@pytest.fixture
+def timing_on() -> Iterator[None]:
+    """Timing on for the duration of the test, off again after."""
+    timing.enable(True)
+    yield
+    timing.enable(False)
+
+
 class TestDisabled:
     def test_is_default(self) -> None:
         assert not timing.is_enabled()
@@ -68,7 +76,7 @@ class TestDisabled:
     def test_write_makes_no_file(self, tmp_path: Path) -> None:
         with timing.phase("data"):
             pass
-        timing.write(tmp_path)
+        timing.write(tmp_path, pass_name="train")
         assert not (tmp_path / "artifacts" / "timings.json").exists()
 
 
@@ -191,7 +199,7 @@ class TestWrite:
         timing.enable(True)
         with timing.phase("train"), timing.phase("loop"):
             pass
-        timing.write(tmp_path)
+        timing.write(tmp_path, pass_name="train")
         payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert [p["name"] for p in payload["phases"]] == ["train", "loop"]
         assert [p["depth"] for p in payload["phases"]] == [0, 1]
@@ -202,7 +210,7 @@ class TestWrite:
         timing.enable(True)
         with timing.phase("train"), timing.phase("loop"):
             pass
-        timing.write(tmp_path)
+        timing.write(tmp_path, pass_name="train")
         payload: dict[str, Any] = json.loads(
             (tmp_path / "artifacts" / "timings.json").read_text()
         )
@@ -215,7 +223,7 @@ class TestWrite:
         timing.enable(True)
         with timing.phase("train"):
             pass
-        timing.write(tmp_path)
+        timing.write(tmp_path, pass_name="train")
         payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert "compile_cache_warm" in payload
 
@@ -224,9 +232,82 @@ class TestWrite:
         timing.enable(True)
         with timing.phase("data"):
             pass
-        timing.write(tmp_path)
+        timing.write(tmp_path, pass_name="train")
         payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert isinstance(payload["phases"][0]["seconds"], float)
+
+
+@pytest.mark.usefixtures("timing_on")
+class TestMerge:
+    """`scripts/submit.sh` makes three passes over one run directory, and an
+    overwriting writer meant the reload pass destroyed the training numbers on
+    every pipeline run."""
+
+    def test_a_reload_pass_does_not_destroy_the_training_numbers(
+        self, tmp_path: Path
+    ) -> None:
+        """`scripts/submit.sh` makes three passes over one directory."""
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+        timing.reset()
+
+        with timing.phase("plots"):
+            pass
+        timing.write(tmp_path, pass_name="load")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        by_name = {p["name"]: p for p in payload["phases"]}
+        assert by_name.keys() == {"train", "plots"}
+        assert by_name["train"]["pass"] == "train"
+        assert by_name["plots"]["pass"] == "load"
+
+    def test_a_rerun_phase_replaces_its_earlier_record(self, tmp_path: Path) -> None:
+        with timing.phase("plots"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+        first: dict[str, Any] = json.loads(
+            (tmp_path / "artifacts/timings.json").read_text()
+        )
+        timing.reset()
+
+        with timing.phase("plots"):
+            pass
+        timing.write(tmp_path, pass_name="load")
+        second: dict[str, Any] = json.loads(
+            (tmp_path / "artifacts/timings.json").read_text()
+        )
+
+        assert len(second["phases"]) == 1
+        assert second["phases"][0]["pass"] == "load"
+        assert second["phases"][0]["seconds"] != first["phases"][0]["seconds"]
+
+    def test_the_total_sums_the_merged_top_level_phases(self, tmp_path: Path) -> None:
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+        timing.reset()
+        with timing.phase("plots"):
+            pass
+        timing.write(tmp_path, pass_name="load")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        top = [p["seconds"] for p in payload["phases"] if p["depth"] == 0]
+        assert payload["total_seconds"] == pytest.approx(sum(top))
+
+    def test_a_corrupt_timings_file_is_replaced_rather_than_raised_on(
+        self, tmp_path: Path
+    ) -> None:
+        """The timing layer must never be what takes a run down."""
+        (tmp_path / "artifacts").mkdir()
+        _ = (tmp_path / "artifacts/timings.json").write_text("{not json")
+
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        assert [p["name"] for p in payload["phases"]] == ["train"]
 
 
 class TestEnvironment:

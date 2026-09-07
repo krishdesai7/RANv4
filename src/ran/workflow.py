@@ -454,7 +454,7 @@ def run(
     finally:
         report()
         if written_to is not None:
-            write(written_to)
+            write(written_to, pass_name="load" if load_run is not None else "train")
 
 
 def _pipeline(

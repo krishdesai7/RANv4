@@ -152,6 +152,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**.py" = ["assert"]
+# `pass_name` is a `timing.write` parameter naming which pipeline pass
+# produced a phase record ("train" / "load"), not a credential; bandit's
+# hardcoded-password check matches on the "pass" substring in the arg name.
+"tests/test_timing.py" = ["hardcoded-password-func-arg", "hardcoded-password-string"]
 # Benchmarks report to a terminal and are read by a human running them by hand;
 # routing that through the logging config would bury the numbers.
 "benchmarks/**.py" = ["T20"]

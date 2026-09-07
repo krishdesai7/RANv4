@@ -204,9 +204,6 @@ def _hist_ratio_panel(
                 label="IBU",
             ),
         )
-        _ = ax.set_ylabel(ylabel="Events")
-        _ = ax.legend()
-        _ = ax.set_title(label=title)
         ratio_ibu: NDArray[np.double] = np.full_like(
             a=h_ibu[0], fill_value=np.nan, dtype=np.double
         )
@@ -219,6 +216,15 @@ def _hist_ratio_panel(
             linestyle="--",
             alpha=ALPHA_IBU,
         )
+    # Every panel gets a label, a title and a legend, not only one drawn
+    # against an IBU baseline -- `ibu_weights.npz` does not exist on the
+    # default `ran train` path, and until it does every panel was unlabelled,
+    # untitled and legend-less. `ax.legend()` runs once here, after the IBU
+    # branch, so it picks up the "IBU" handle when that branch ran and omits
+    # it otherwise.
+    _ = ax.set_ylabel(ylabel="Events")
+    _ = ax.set_title(label=title)
+    _ = ax.legend()
     _ = ax_r.axhline(y=1, color="gray", linewidth=0.5, alpha=0.75)
     width: float = 0.5
     _ = ax_r.set_ylim(bottom=1 - width, top=1 + width)

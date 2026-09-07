@@ -66,6 +66,62 @@ def test_filled_histograms_use_one_artist_per_distribution() -> None:
     assert len(ax.patches) == 3
 
 
+def test_a_panel_is_labelled_even_without_an_ibu_baseline() -> None:
+    """`ibu_weights.npz` does not exist on the default `ran train` path, so
+    a panel drawn with `w_ibu=None` must still get a y-label, a title and a
+    legend -- not only the one drawn against an IBU overlay."""
+    figure = Figure()
+    ax = figure.add_subplot(211)
+    ax_r = figure.add_subplot(212)
+    nature = np.array([0.1, 0.3, 0.6, 0.8], dtype=np.single)
+    mc = np.array([0.2, 0.4, 0.5, 0.9], dtype=np.single)
+
+    _hist_ratio_panel(
+        ax,
+        ax_r,
+        nature,
+        mc,
+        np.ones(4, dtype=np.single),
+        bins=[0.0, 0.25, 0.5, 0.75, 1.0],
+        nature_label="Data",
+        mc_label="Sim",
+        xlabel="x",
+        title="Detector level",
+    )
+
+    assert ax.get_ylabel() == "Events"
+    assert ax.get_title() == "Detector level"
+    _, labels = ax.get_legend_handles_labels()
+    assert labels == ["Data", "Sim", "RAN"]
+
+
+def test_the_legend_still_lists_ibu_when_a_baseline_is_drawn() -> None:
+    """The regression risk in moving the label/legend/title out of the IBU
+    branch: the legend must still pick up the "IBU" handle when one exists."""
+    figure = Figure()
+    ax = figure.add_subplot(211)
+    ax_r = figure.add_subplot(212)
+    nature = np.array([0.1, 0.3, 0.6, 0.8], dtype=np.single)
+    mc = np.array([0.2, 0.4, 0.5, 0.9], dtype=np.single)
+
+    _hist_ratio_panel(
+        ax,
+        ax_r,
+        nature,
+        mc,
+        np.ones(4, dtype=np.single),
+        bins=[0.0, 0.25, 0.5, 0.75, 1.0],
+        nature_label="Data",
+        mc_label="Sim",
+        xlabel="x",
+        title="Detector level",
+        w_ibu=np.ones(4, dtype=np.single),
+    )
+
+    _, labels = ax.get_legend_handles_labels()
+    assert labels == ["Data", "Sim", "RAN", "IBU"]
+
+
 def test_ran_is_drawn_more_prominently_than_the_baseline() -> None:
     """RAN's step line was fainter than IBU's. On the same panel."""
     assert plotting.ALPHA_RAN > plotting.ALPHA_IBU > plotting.ALPHA_FILL

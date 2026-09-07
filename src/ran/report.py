@@ -17,7 +17,7 @@ import re
 from importlib import resources
 from typing import TYPE_CHECKING, Any, Final
 
-from .rantypes import JET_OBS, JET_VARIABLE_GROUPS, artifacts_dir
+from .rantypes import ARTIFACTS_DIR, JET_OBS, JET_VARIABLE_GROUPS
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -257,6 +257,19 @@ def _row(
     return " & ".join(cells) + r" \\"
 
 
+# A daggered label is meaningless without this line. IBU returning its input
+# unchanged records an "after" bit-identical to its "before" and a 0.0%
+# improvement, which reads as "IBU tried and achieved nothing"; the truth is
+# that it declined to unfold the observable at all. The row spans all sixteen
+# columns and sits immediately before the template's `\bottomrule`.
+_DAGGER_LEGEND: Final[str] = (
+    r"\multicolumn{16}{@{}l}{\footnotesize $^\dag$ IBU's purity binning "
+    r"produced fewer than two bins for this observable, so IBU declined to "
+    r"unfold it and returned its input unchanged. The improvement shown for "
+    r"it is not a measurement.} \\"
+)
+
+
 def _group_lines(
     label: str,
     members: Sequence[str],
@@ -274,6 +287,19 @@ def _group_lines(
     ]
 
 
+def _populated_groups(present: frozenset[str], /) -> list[tuple[str, Sequence[str]]]:
+    """The display groups this run's variables actually populate, in order.
+
+    `--var m --var w` leaves the splitting group empty, and an empty group
+    would print a heading with no rows under it.
+    """
+    return [
+        (label, in_group)
+        for label, members in JET_VARIABLE_GROUPS
+        if (in_group := [v for v in members if v in present])
+    ]
+
+
 def metrics_table(
     level: str,
     variables: Sequence[str],
@@ -287,19 +313,26 @@ def metrics_table(
     The template owns the tabular, the column specification and the header;
     this owns the rules, the group headings and the data rows. `skipped` names
     the variables IBU gave up on, which are marked rather than shown as an
-    honest-looking 0.0% improvement.
+    honest-looking 0.0% improvement; when any of them lands in this table the
+    body ends with a legend row explaining the mark.
     """
-    present: frozenset[str] = frozenset(variables)
+    groups: list[tuple[str, Sequence[str]]] = _populated_groups(frozenset(variables))
     lines: list[str] = [
         line
-        for label, members in JET_VARIABLE_GROUPS
-        if (in_group := [v for v in members if v in present])
-        for line in _group_lines(label, in_group, level, ran, ibu, skipped)
+        for label, members in groups
+        for line in _group_lines(label, members, level, ran, ibu, skipped)
     ]
+    emitted: list[str] = [v for _, members in groups for v in members]
 
     if not lines:  # a non-jet run: rows, no grouping
+        emitted = list(variables)
         lines.append(r"\midrule")
-        lines.extend(_row(v, level, ran, ibu, v in skipped) for v in variables)
+        lines.extend(_row(v, level, ran, ibu, v in skipped) for v in emitted)
+
+    # Only when the mark is actually on the page: an unexplained legend is as
+    # confusing as an unexplained dagger.
+    if any(v in skipped for v in emitted):
+        lines.append(_DAGGER_LEGEND)
     return "\n".join(lines)
 
 
@@ -311,7 +344,11 @@ def skipped_variables(
     Falls back to the observable signature -- an `after` exactly equal to its
     `before` -- for a `metrics_ibu.json` written before outcomes were recorded.
     """
-    path: Path = artifacts_dir(run_dir) / "ibu_outcomes.json"
+    # `run_dir / ARTIFACTS_DIR` rather than `artifacts_dir(run_dir)`: the
+    # latter creates the directory, and this module only ever reads. Pointed
+    # at a directory that is not a run, `ran report` must fail without
+    # littering it.
+    path: Path = run_dir / ARTIFACTS_DIR / "ibu_outcomes.json"
     try:
         outcomes: list[dict[str, Any]] = json.loads(path.read_text())
     except OSError, ValueError:

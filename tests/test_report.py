@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from ran import report
 from ran.rantypes import SUBSTRUCTURE_VARIABLES
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_the_template_ships_with_the_package() -> None:
@@ -219,3 +224,35 @@ def test_a_gaussian_run_has_rows_but_no_groups() -> None:
 
     assert "Mass and hard scale" not in body
     assert body.count(r"\\") == 2
+
+
+def test_a_daggered_table_ends_with_a_legend_explaining_the_mark() -> None:
+    """An unexplained dagger prevents no misreading."""
+    ran = {"detector_zg": _entry(1.0, 0.1)}
+    ibu = {"detector_zg": _entry(1.0, 1.0)}
+
+    body: str = report.metrics_table("detector", ("zg",), ran, ibu, frozenset({"zg"}))
+
+    assert body.splitlines()[-1] == report._DAGGER_LEGEND
+    assert "declined to unfold" in body
+
+
+def test_a_table_with_nothing_skipped_carries_no_legend() -> None:
+    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in SUBSTRUCTURE_VARIABLES}
+    ibu = {f"detector_{v}": _entry(1.0, 0.5) for v in SUBSTRUCTURE_VARIABLES}
+
+    body: str = report.metrics_table(
+        "detector", SUBSTRUCTURE_VARIABLES, ran, ibu, frozenset()
+    )
+
+    assert report._DAGGER_LEGEND not in body
+    assert "declined to unfold" not in body
+
+
+def test_reading_the_skip_set_creates_nothing(tmp_path: Path) -> None:
+    """`report` is a read-only consumer: it must not make `artifacts/`."""
+    before: list[str] = sorted(p.name for p in tmp_path.iterdir())
+
+    assert report.skipped_variables(tmp_path, None) == frozenset()
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == before == []

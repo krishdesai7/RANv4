@@ -29,18 +29,5 @@
   ],
   "mmd_test": 0.0004849433898925781,
   "best_epoch": 38,
-  "variables": [
-    "m",
-    "M",
-    "w",
-    "tau21",
-    "zg",
-    "sdm",
-    "q",
-    "f_ch",
-    "lha",
-    "ang2",
-    "ptd",
-    "n_ch"
-  ]
+  "variables": ["m","M","w","tau21","zg","sdm","q","f_ch","lha","ang2","ptd","n_ch"]
 }

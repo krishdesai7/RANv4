@@ -26,6 +26,7 @@ from ran.data import RANDataset, parse_gaussian_config
 from ran.rantypes import ZXY, DatasetName, Events, Populations
 from ran.rantypes.events import DatasetSplits
 from ran.train import TrainResult, train
+from ran.workflow import _compact_variables
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -136,6 +137,27 @@ def _write_run(
     }
     _ = (run_dir / "config.json").write_text(data=json.dumps(obj=config))
     return run_dir
+
+
+def test_config_json_renders_the_variable_list_on_one_line() -> None:
+    """Twelve one-line strings should not cost twelve lines of a config file."""
+    dumped: str = json.dumps(
+        {"dim": 12, "variables": ["m", "M", "w"], "seed": 3}, indent=2
+    )
+
+    compacted: str = _compact_variables(dumped)
+
+    assert '"variables": ["m", "M", "w"]' in compacted
+    assert json.loads(compacted) == json.loads(dumped)
+
+
+def test_compacting_leaves_a_config_without_variables_alone() -> None:
+    """The Gaussian path records `gaussian_params` and no `variables` key."""
+    dumped: str = json.dumps(
+        {"dim": 2, "gaussian_params": {"mu_gen": [0, 0]}}, indent=2
+    )
+
+    assert _compact_variables(dumped) == dumped
 
 
 @pytest.mark.writes_default_cache

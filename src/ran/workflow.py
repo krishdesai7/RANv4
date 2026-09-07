@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -42,6 +43,22 @@ if TYPE_CHECKING:
     from .train import EpochParams, TrainResult
 
 logger: Logger = logging.getLogger(__name__)
+
+# `json.dump(indent=2)` has no way to keep one array inline, and a twelve-name
+# variable list costs fourteen lines of a config a person is meant to read.
+_VARIABLES_ARRAY: re.Pattern[str] = re.compile(
+    pattern=r'("variables": )\[[^\]]*\]', flags=re.DOTALL
+)
+
+
+def _compact_variables(text: str, /) -> str:
+    """Re-render the `variables` array of a dumped config on a single line."""
+
+    def _one_line(match: re.Match[str]) -> str:
+        names: list[str] = json.loads(s=match.group(0).split(sep=": ", maxsplit=1)[1])
+        return match.group(1) + json.dumps(obj=names)
+
+    return _VARIABLES_ARRAY.sub(repl=_one_line, string=text)
 
 
 def _prepare_gaussian(
@@ -230,7 +247,9 @@ def _write_run_dir(
         config_out["gaussian_params"] = gaussian_params.model_dump()
     else:
         config_out["variables"] = list(variables)
-    json.dump(obj=config_out, fp=(run_dir / "config.json").open(mode="w"), indent=2)
+    _ = (run_dir / "config.json").write_text(
+        data=_compact_variables(json.dumps(obj=config_out, indent=2))
+    )
     logger.info("Saved run to %s", run_dir)
     return run_dir
 

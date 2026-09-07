@@ -79,6 +79,14 @@ ALPHA_RAN: Final[float] = 0.90
 SELECTION_MMD_LINTHRESH: Final[float] = 5e-4
 
 
+LN2: Final[float] = math.log(2)
+# The equilibrium band. Every series a converged run produces sits within a
+# fraction of a percent of `ln 2`, and autoscaling that band to the height of
+# the axes makes a 0.4% drift look like a divergence. Fixed limits also make
+# two runs' loss plots directly comparable.
+LOSS_YLIM_FRACTION: Final[float] = 2.0**-4
+
+
 class _PanelSpec(NamedTuple):
     """Everything that varies between the panels of one figure."""
 
@@ -524,16 +532,33 @@ def plot_losses(
     # be this one drawn twice. Older runs carry a `val_g` key holding exactly
     # that copy --- it is deliberately not read.
     _ = ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
-    _ = ax.axhline(
-        y=np.log(2),
-        color="gray",
-        linestyle="-",
-        linewidth=2,
-        zorder=10,
-        label=r"$\log(2)$",
+    _ = ax.axhline(y=LN2, color="gray", lw=1)  # no `label`: it is a tick, not a series
+
+    _ = ax.set_ylim(
+        bottom=LN2 * (1 - LOSS_YLIM_FRACTION), top=LN2 * (1 + LOSS_YLIM_FRACTION)
     )
+    offsets: tuple[float, ...] = (-2.0, -1.0, 0.0, 1.0, 2.0)
+    ticks: list[float] = [LN2 * (1 + k * 2.0**-5) for k in offsets]
+    _ = ax.set_yticks(ticks=ticks)
+    _ = ax.set_yticklabels(
+        labels=[
+            r"$\ln 2$" if i == len(offsets) // 2 else f"{t:.4f}"
+            for i, t in enumerate(ticks)
+        ]
+    )
+
+    # The same positions as a percentage deviation, so a reader sees "within
+    # 1% of equilibrium" without doing the arithmetic.
+    deviation: Axes = ax.twinx()
+    _ = deviation.set_ylim(*ax.get_ylim())
+    _ = deviation.set_yticks(ticks=ticks)
+    _ = deviation.set_yticklabels(
+        labels=[f"{k * 2.0**-5 * 100:+.1f}%" for k in offsets]
+    )
+    _ = deviation.set_ylabel(ylabel=r"Deviation from $\ln 2$")
+
     _ = ax.set_xlabel(xlabel="Epoch")
-    _ = ax.set_ylabel(ylabel="WeightedBCE")
+    _ = ax.set_ylabel(ylabel="Weighted BCE")
     _ = ax.set_title(label="Training History")
     _ = ax.legend()
 

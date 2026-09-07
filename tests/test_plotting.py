@@ -9,6 +9,7 @@ plot rather than only the shape of the data.
 
 from __future__ import annotations
 
+import math
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
@@ -497,6 +498,58 @@ class TestLossCurves:
         plot_losses(legacy, save_path=tmp_path / "losses.pdf")
 
         assert [k.get("label", "") for _, k in drawn] == ["Train D", "Train G", "Val D"]
+
+
+def _drawn_losses(history: dict[str, list[float]], tmp_path: Path) -> Figure:
+    """Render `plot_losses` for real and return the Figure it built.
+
+    `plot_losses` returns nothing, so capturing the Figure means intercepting
+    `Figure.add_subplot` the way `captured_axes` does for `plot_selection` ---
+    this lets matplotlib actually compute ticks and limits rather than mocking
+    the draw away, which is where the fixed-axis regression lives.
+    """
+    captured: list[Axes] = []
+    original_add_subplot = Figure.add_subplot
+
+    def record_and_call(self: Figure, *args: Any, **kwargs: Any) -> Axes:
+        ax = original_add_subplot(self, *args, **kwargs)
+        captured.append(ax)
+        return ax
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Figure, "add_subplot", record_and_call)
+        plot_losses(history, save_path=tmp_path / "losses.pdf")
+
+    return cast("Figure", captured[0].figure)
+
+
+class TestLossAxis:
+    def test_the_loss_axis_is_fixed_around_log_two(self, tmp_path: Path) -> None:
+        """Autoscaling turned a 0.4% band into an apparent divergence."""
+        history = {
+            "train_d": [0.689, 0.688],
+            "train_g": [0.688, 0.687],
+            "val_d": [0.690, 0.693],
+        }
+        figure: Figure = _drawn_losses(history, tmp_path)
+        ax = figure.axes[0]
+
+        low, high = ax.get_ylim()
+        assert low == pytest.approx(math.log(2) * (1 - 2**-4))
+        assert high == pytest.approx(math.log(2) * (1 + 2**-4))
+
+    def test_log_two_is_a_tick_and_not_a_legend_entry(self, tmp_path: Path) -> None:
+        history = {"train_d": [0.689], "train_g": [0.688], "val_d": [0.690]}
+        ax = _drawn_losses(history, tmp_path).axes[0]
+
+        legend = ax.get_legend()
+        assert legend is not None
+        assert "log(2)" not in [t.get_text() for t in legend.get_texts()]
+        assert any(t == pytest.approx(math.log(2)) for t in ax.get_yticks())
+
+    def test_the_y_label_has_a_space_in_it(self, tmp_path: Path) -> None:
+        history = {"train_d": [0.689], "train_g": [0.688], "val_d": [0.690]}
+        assert _drawn_losses(history, tmp_path).axes[0].get_ylabel() == "Weighted BCE"
 
 
 @pytest.fixture

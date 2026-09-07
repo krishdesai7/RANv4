@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from ran import report
+from ran.rantypes import SUBSTRUCTURE_VARIABLES
 
 
 def test_the_template_ships_with_the_package() -> None:
@@ -141,3 +142,80 @@ def test_the_pass_is_folded_into_the_detail_cell() -> None:
         ],
     }
     assert "cache hit -- train" in report.timing_rows(payload)
+
+
+_METRIC_KEYS = ("wasserstein", "jensenshannon", "triangular")
+
+
+def _entry(before: float, after: float) -> dict[str, float]:
+    return {
+        f"{m}_{suffix}": value
+        for m in _METRIC_KEYS
+        for suffix, value in (
+            ("before", before),
+            ("after", after),
+            ("improvement_pct", (1 - after / before) * 100),
+        )
+    }
+
+
+def test_rows_are_grouped_and_in_display_order() -> None:
+    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in SUBSTRUCTURE_VARIABLES}
+
+    body: str = report.metrics_table(
+        "detector", SUBSTRUCTURE_VARIABLES, ran, None, frozenset()
+    )
+
+    assert "Mass and hard scale" in body
+    assert body.index("Mass and hard scale") < body.index("Continuous angularities")
+    assert body.index(r"$\ln\rho$") < body.index(r"$\lambda^{1}_{0.5}$")
+    assert body.count(r"\midrule") == 4  # one per group
+
+
+def test_a_group_with_no_variables_is_omitted() -> None:
+    """`--var m --var w` has nothing in the splitting group."""
+    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in ("m", "w")}
+
+    body: str = report.metrics_table("detector", ("m", "w"), ran, None, frozenset())
+
+    assert "Splitting" not in body
+    assert body.count(r"\midrule") == 2
+
+
+def test_a_missing_baseline_renders_dashes() -> None:
+    """The template fixes sixteen columns, so the group cannot be omitted."""
+    ran = {"detector_m": _entry(1.0, 0.1)}
+
+    body: str = report.metrics_table("detector", ("m",), ran, None, frozenset())
+
+    assert body.count(r"\multicolumn{1}{c}{---}") == 6  # 2 IBU cells x 3 metrics
+
+
+def test_a_skipped_variable_is_daggered_rather_than_shown_as_zero() -> None:
+    """IBU returning its input unchanged is a refusal, not a measurement."""
+    ran = {"detector_zg": _entry(1.0, 0.1)}
+    ibu = {"detector_zg": _entry(1.0, 1.0)}
+
+    body: str = report.metrics_table("detector", ("zg",), ran, ibu, frozenset({"zg"}))
+
+    assert r"\dag" in body
+
+
+def test_a_completed_variable_is_not_daggered() -> None:
+    ran = {"detector_m": _entry(1.0, 0.1)}
+    ibu = {"detector_m": _entry(1.0, 0.5)}
+
+    body: str = report.metrics_table("detector", ("m",), ran, ibu, frozenset())
+
+    assert r"\dag" not in body
+
+
+def test_a_gaussian_run_has_rows_but_no_groups() -> None:
+    ran = {f"detector_dim_{i}": _entry(1.0, 0.1) for i in range(2)}
+
+    body: str = report.metrics_table(
+        "detector", ("dim_0", "dim_1"), ran, None, frozenset()
+    )
+
+    assert "Mass and hard scale" not in body
+    assert body.count(r"\\") == 2

@@ -66,28 +66,6 @@ def test_filled_histograms_use_one_artist_per_distribution() -> None:
     assert len(ax.patches) == 3
 
 
-def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """`_plot_level` opts out with `tight=False`: its tall multi-panel
-    figures already stay inside the page via fixed `GridSpec` margins (see
-    `test_multilevel_figure_keeps_rendered_content_inside_page`), and
-    reintroducing ``bbox_inches='tight'`` there causes an extra traversal of
-    every artist on a page that can run to dozens of inches.
-    """
-    calls: list[tuple[Path, dict[str, Any]]] = []
-
-    def record(_figure: Figure, fname: Path, **kwargs: Any) -> None:
-        calls.append((fname, kwargs))
-
-    monkeypatch.setattr(Figure, "savefig", record)
-    out = tmp_path / "figure.pdf"
-
-    _save_fig(Figure(), out, tight=False)
-
-    assert calls == [(out, {})]
-
-
 def test_ran_is_drawn_more_prominently_than_the_baseline() -> None:
     """RAN's step line was fainter than IBU's. On the same panel."""
     assert plotting.ALPHA_RAN > plotting.ALPHA_IBU > plotting.ALPHA_FILL
@@ -148,8 +126,8 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
     """Fixed margins must contain labels and titles, not just axes rectangles."""
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
-        del save_path, tight
+    def capture(figure: Figure, save_path: Path) -> None:
+        del save_path
         captured.append(figure)
 
     monkeypatch.setattr("ran.plotting._save_fig", capture)
@@ -218,8 +196,8 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
     dataset = ArrayDataset(populations.interleave(), batch_size=2)
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
-        del save_path, tight
+    def capture(figure: Figure, save_path: Path) -> None:
+        del save_path
         captured.append(figure)
 
     def generator(z: NDArray[np.single]) -> NDArray[np.single]:

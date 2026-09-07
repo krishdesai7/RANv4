@@ -229,24 +229,20 @@ def _hist_ratio_panel(
     _ = ax_r.set_xlabel(xlabel)
 
 
-def _save_fig(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
-    """Save `figure`, trimmed to its rendered contents by default.
+def _save_fig(figure: Figure, save_path: Path) -> None:
+    """Save `figure`, trimmed to its rendered contents.
 
     Without `bbox_inches="tight"` the y-labels are clipped by the page edge.
-    `plot_losses` always passed it and never clipped; `plot_selection` did
-    not and did -- both now go through this one save path instead of calling
-    `figure.savefig` themselves. `_plot_level` opts out with `tight=False`:
-    its tall multi-panel figures already stay inside the page via the fixed
-    `GridSpec` margins in `_plot_level` (see
-    `test_multilevel_figure_keeps_rendered_content_inside_page`), and a tight
-    bbox there means an extra traversal of every artist on a page that can
-    run to dozens of inches.
+    `plot_losses` always passed it and never clipped; `plot_selection` and
+    `_plot_level` did not and did -- wide tick labels (e.g. five-digit event
+    counts) push the y-label further left than `_plot_level`'s fixed
+    `GridSpec` margins reserve for it, so a real run's `detector_level.pdf`
+    and `particle_level.pdf` clip even though a narrower synthetic figure
+    does not. All three now go through this one save path instead of calling
+    `figure.savefig` themselves.
     """
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    if tight:
-        figure.savefig(fname=save_path, bbox_inches="tight")
-    else:
-        figure.savefig(fname=save_path)
+    figure.savefig(fname=save_path, bbox_inches="tight")
     logger.info("Saved %s", save_path)
 
 
@@ -357,7 +353,7 @@ def _plot_level(
             title=panel.title,
             w_ibu=ibu_weights[i] if ibu_weights is not None else None,
         )
-    _save_fig(figure, save_path=Path(save_path), tight=False)
+    _save_fig(figure, save_path=Path(save_path))
 
 
 def plot_detector_level(

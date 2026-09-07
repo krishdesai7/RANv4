@@ -9,6 +9,7 @@ plot rather than only the shape of the data.
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -314,6 +315,39 @@ def test_twelve_observables_are_drawn_four_rows_by_three(
     rows: set[float] = {round(a.get_position().y0, 3) for a in hist_axes}
     assert len(columns) == 3
     assert len(rows) == 4
+
+
+def test_adjacent_panel_titles_do_not_overlap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 4-inch panel column is much narrower than the 8-inch-wide 1x12
+    strip the titles were sized for. Repeating "(detector level)" on every
+    one of twelve panels made adjacent titles overlap horizontally -- up to
+    109.5px in one measured case -- which no geometry-only assertion (panel
+    count, row/column count) would catch.
+    """
+    save_path: Path = tmp_path / "detector.pdf"
+    _plot_twelve_dim_level(save_path, monkeypatch)
+
+    figure: Figure = _last_drawn_figure()
+    canvas = FigureCanvasAgg(figure)
+    canvas.draw()
+    renderer = canvas.get_renderer()
+
+    hist_axes = [a for a in figure.axes if a.get_ylabel() == "Events"]
+    rows: dict[float, list[Axes]] = {}
+    for ax in hist_axes:
+        rows.setdefault(round(ax.get_position().y0, 3), []).append(ax)
+
+    for row_axes in rows.values():
+        row_axes.sort(key=lambda a: a.get_position().x0)
+        for left, right in pairwise(row_axes):
+            left_box = left.title.get_window_extent(renderer)
+            right_box = right.title.get_window_extent(renderer)
+            assert left_box.x1 <= right_box.x0, (
+                f"{left.title.get_text()!r} overlaps {right.title.get_text()!r} "
+                f"by {left_box.x1 - right_box.x0:.1f}px"
+            )
 
 
 def test_panels_are_drawn_in_display_order(

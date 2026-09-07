@@ -292,7 +292,12 @@ def _panel_spec(
             mc=mc[:, i] * sigma + mu,
             bins=np.linspace(start=cfg["xlim"][0], stop=cfg["xlim"][1], num=21),
             xlabel=cfg["symbol"],
-            title=f"{cfg['xlabel']} ({style.level} level)",
+            # No "(detector/particle level)" suffix here: at a 4-inch panel
+            # width in the grid `_plot_level` lays out, repeating it on all
+            # twelve panels made adjacent titles overlap (worst case 109.5px).
+            # `_plot_level`'s `figure.suptitle` states the level once for the
+            # whole figure instead.
+            title=cfg["xlabel"],
         )
 
     nature_i: EventArray = nature[:, i]
@@ -312,7 +317,12 @@ def _panel_spec(
             if dim > 1
             else f"{style.symbol} ({style.level} level)"
         ),
-        title=(f"{style.title_prefix} — Dim {i}" if dim > 1 else style.title_prefix),
+        # `_plot_level`'s `figure.suptitle` now states `style.title_prefix`
+        # once for the whole figure, so a panel title repeating it here --
+        # even the single-dimension case's old bare `style.title_prefix` --
+        # would duplicate it. `dim > 1` still names which dimension a panel
+        # is; `dim == 1` has nothing left to say.
+        title=(f"Dim {i}" if dim > 1 else ""),
     )
 
 
@@ -383,6 +393,11 @@ def _plot_level(
     # back to Matplotlib's default (too-small) margins instead of computed
     # ones -- visible as axis labels rendered off the left edge of the page.
     outer_grid: GridSpec = figure.add_gridspec(nrows=nrows, ncols=ncols)
+    # States the level once for the whole figure instead of on every panel
+    # title -- see `_panel_spec`. `rect` reserves a slice of the figure height
+    # above `tight_layout`'s own margins so the suptitle has somewhere to sit
+    # that computed layout does not already claim for the top row's titles.
+    _ = figure.suptitle(t=style.title_prefix, fontsize="x-large", y=0.995)
 
     names: Sequence[str] = (
         variables if variables is not None else [f"dim_{i}" for i in range(dim)]
@@ -401,7 +416,11 @@ def _plot_level(
             style,
             ibu_weights,
         )
-    figure.tight_layout(h_pad=2.0)
+    # `rect`'s top leaves a fixed-fraction band for the suptitle that
+    # `tight_layout`'s own margin computation does not know to reserve --
+    # verified (see the test below) not to collide with the top row's panel
+    # titles across 1-, 2- and 12-panel grids.
+    figure.tight_layout(h_pad=2.0, rect=(0.0, 0.0, 1.0, 0.96))
     _save_fig(figure, save_path=Path(save_path))
 
 

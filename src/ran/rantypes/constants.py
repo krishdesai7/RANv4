@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from typing import Final, LiteralString
 
 
@@ -172,6 +173,59 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
         xlim=(0, 50), xlabel="Charged Constituent Multiplicity", symbol=r"$n_{ch}$"
     ),
 }
+
+# How the observables are *presented*. This is not `SUBSTRUCTURE_VARIABLES`,
+# and must never become it: that tuple is the column order, the cache key and
+# what `config.json` records, and the Jet Column Order section of `CLAUDE.md`
+# documents what happened the last time it was allowed to float. The column
+# order carries no physics; this one does, and is applied at render time only.
+#
+# m -> ln rho -> lambda^1_0.5 -> w -> lambda^1_2 -> z_g -> tau_21
+#   -> M -> n_ch -> f_ch -> p_T^D -> q
+#
+# `M` next to `n_ch` exposes the baseline hadronization ratio (n_ch / M ~ 2/3,
+# from pion isospin); `f_ch` bridges particle counting and track-based energy
+# reconstruction; `p_T^D` completes the quark/gluon discriminant system with
+# `M` and `n_ch`; `q` closes as the valence flavour indicator.
+JET_DISPLAY_ORDER: Final[tuple[LiteralString, ...]] = (
+    "m",
+    "sdm",
+    "lha",
+    "w",
+    "ang2",
+    "zg",
+    "tau21",
+    "M",
+    "n_ch",
+    "f_ch",
+    "ptd",
+    "q",
+)
+
+JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = (
+    ("Mass and hard scale (IRC-safe kinematics)", ("m", "sdm")),
+    ("Continuous angularities (IRC-safe jet shapes)", ("lha", "w", "ang2")),
+    ("Splitting and 2-prong substructure", ("zg", "tau21")),
+    (
+        "Hadronization, multiplicity and fragmentation (IRC-unsafe)",
+        ("M", "n_ch", "f_ch", "ptd", "q"),
+    ),
+)
+
+
+def display_order(variables: Sequence[str], /) -> tuple[int, ...]:
+    """Indices into `variables`, reordered for presentation.
+
+    Filters `JET_DISPLAY_ORDER` to what this run actually holds, so a `--var`
+    subset stays in physics order. A non-jet run (`dim_0`, `dim_1`, ...) has no
+    entry in the table and falls through to the identity.
+    """
+    position: dict[str, int] = {name: i for i, name in enumerate(iterable=variables)}
+    ordered: tuple[int, ...] = tuple(
+        position[name] for name in JET_DISPLAY_ORDER if name in position
+    )
+    return ordered if len(ordered) == len(variables) else tuple(range(len(variables)))
+
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)
 TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(int_type=np.short).min)

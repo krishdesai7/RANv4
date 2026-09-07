@@ -9,7 +9,9 @@ from .constants import COMPILE_CACHE_DIR as COMPILE_CACHE_DIR
 from .constants import DEFAULT_PURITY_THRESHOLD as DEFAULT_PURITY_THRESHOLD
 from .constants import EVENT_DTYPE as EVENT_DTYPE
 from .constants import GENERATORS as GENERATORS
+from .constants import JET_DISPLAY_ORDER as JET_DISPLAY_ORDER
 from .constants import JET_OBS as JET_OBS
+from .constants import JET_VARIABLE_GROUPS as JET_VARIABLE_GROUPS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
 from .constants import POISON_SENTINEL as POISON_SENTINEL
@@ -19,6 +21,7 @@ from .constants import TRUTH_SENTINEL as TRUTH_SENTINEL
 from .constants import ZENODO_RECORD as ZENODO_RECORD
 from .constants import JetVarInfo as JetVarInfo
 from .constants import artifacts_dir as artifacts_dir
+from .constants import display_order as display_order
 from .enums import DatasetName as DatasetName
 from .enums import LogLevel as LogLevel
 from .events import ZXY as ZXY

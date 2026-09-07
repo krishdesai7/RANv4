@@ -50,7 +50,13 @@ _LATEX_SPECIALS: Final[dict[str, str]] = {
 
 # Enough places for four significant figures of the smallest metric a real run
 # produces (~8.3e-5 -> 0.00008294). The template's D column is `table-format=2.8`.
+# It is also a hard resolution floor: anything below ~5e-11 rounds away entirely
+# and renders as the string "0" rather than as a small number.
 _DECIMAL_PLACES: Final[int] = 10
+
+# What a numeric cell shows when it has no number to show. `\multicolumn`
+# because the target is a siunitx `S` column, which will not typeset prose.
+_DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 
 
 def load_template() -> str:
@@ -60,15 +66,41 @@ def load_template() -> str:
     )
 
 
+def _plain(value: float, /) -> str:
+    """Fixed-point text for a finite value; no finiteness check of its own."""
+    rendered: str = f"{value:.{_DECIMAL_PLACES}f}".rstrip("0").rstrip(".")
+    return rendered or "0"
+
+
 def decimal(value: float, /) -> str:
-    """Plain decimal notation, never exponential.
+    """Plain decimal notation, never exponential; `_DASH` when not finite.
 
     Every numeric cell lands in a siunitx `S` column, which fixes a
     `table-format` and cannot absorb an exponent -- a value emitted as
     `8.294e-05` misaligns the column silently rather than erroring.
+
+    The contract is therefore "a numeric *cell*", not "a bare number".
+    siunitx treats `nan` and `inf` as a hard error rather than typesetting
+    them, so one non-finite value -- reachable through `*_improvement_pct`
+    whenever a `before` is 0.0 -- would kill the whole document. The guard
+    lives here rather than in the row builders because every numeric cell in
+    the report is emitted through this one function: a per-caller check would
+    be a rule to remember at each new call site instead of one held in place.
     """
-    rendered: str = f"{value:.{_DECIMAL_PLACES}f}".rstrip("0").rstrip(".")
-    return rendered or "0"
+    if not math.isfinite(value):
+        return _DASH
+    return _plain(value)
+
+
+def _num(macro: str, value: float, /) -> str:
+    r"""`\<macro>{n}`, or a bare dash when there is no number to wrap.
+
+    `\Raw` and `\Count` expand to siunitx `\num`, which rejects a non-finite
+    argument exactly as an `S` column does, so the dash has to *replace* the
+    wrapper rather than sit inside it.
+    """
+    rendered: str = decimal(value)
+    return rendered if rendered == _DASH else rf"\{macro}{{{rendered}}}"
 
 
 def latex_text(value: str, /) -> str:
@@ -92,7 +124,7 @@ def _scalar_cell(value: object, /) -> str:
     if isinstance(value, int):
         return rf"\Count{{{value}}}"
     if isinstance(value, float):
-        return rf"\Raw{{{decimal(value)}}}"
+        return _num("Raw", value)
     return rf"\ConfigVal{{{value}}}"
 
 
@@ -102,7 +134,10 @@ def _format_value(value: object, /) -> str:
         items: list[object] = list(value)  # pyrefly: unknown element type from json.
         return "[" + ", ".join(_format_value(item) for item in items) + "]"
     if isinstance(value, float):
-        return decimal(value)
+        # `_plain`, not `decimal`: this lands inside `\ConfigVal`, which is
+        # `\texttt{\detokenize{...}}` -- running text, where a `\multicolumn`
+        # cell would be exactly the error the dash exists to avoid.
+        return _plain(value) if math.isfinite(value) else str(value)
     return str(value)
 
 
@@ -137,10 +172,10 @@ def _sigma_cell(sigmas: Sequence[float], /) -> str:
             for s, scale in zip(sigmas, _SCALES, strict=True)
         ):
             return (
-                rf"\Raw{{{decimal(median)}}} "
+                f"{_num('Raw', median)} "
                 r"$\times\ (1/2,\ 1/\sqrt2,\ 1,\ \sqrt2,\ 2)$"
             )
-    return ", ".join(rf"\Raw{{{decimal(s)}}}" for s in sigmas)
+    return ", ".join(_num("Raw", s) for s in sigmas)
 
 
 def _pair_lines(scalars: list[tuple[str, Any]], /) -> list[str]:
@@ -219,7 +254,6 @@ def timing_rows(timings: Mapping[str, Any], /) -> str:
     return "\n".join(lines)
 
 
-_DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 _METRICS: Final[tuple[str, ...]] = ("wasserstein", "jensenshannon", "triangular")
 
 
@@ -481,6 +515,12 @@ def _compile(source: Path, artifacts: Path, run_dir: Path, /) -> None:
             capture_output=True,
             text=True,
             check=False,
+            # `-interaction=nonstopmode` is set inside the document processor
+            # and does not cover pdflatex's *pre-mode* prompts -- "I can't
+            # write on file `report.log'" is asked before the mode takes
+            # effect. Without this, a failing compile reads the parent's stdin
+            # and an interactive `ran report` hangs instead of erroring.
+            stdin=subprocess.DEVNULL,
         )
         if completed.returncode != 0:
             tail: str = "\n".join(completed.stdout.splitlines()[-40:])
@@ -495,7 +535,14 @@ def build_report(
 
     Returns what it produced: the PDF, or the LaTeX source under
     `--no-compile`.
+
+    Resolved once, here, so every path downstream is absolute. `_compile` runs
+    `pdflatex` with `cwd=artifacts` and hands it `-output-directory`, so a
+    relative `run_dir` -- which is what `scripts/submit.sh` and the documented
+    `ran report runs/<timestamp>` both pass -- would resolve against
+    `artifacts/` instead of the caller's working directory.
     """
+    run_dir = run_dir.resolve()
     pdf: Path = run_dir / "report.pdf"
     if compile_pdf and pdf.exists() and not force:
         logger.info("%s: report.pdf exists, skipping (use --force)", run_dir.name)

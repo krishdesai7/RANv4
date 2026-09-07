@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from contextlib import contextmanager
@@ -269,12 +270,21 @@ def report(console: Console | None = None, /) -> None:
 def _is_valid_phase(phase: object, /) -> bool:
     """Whether a parsed phase record has what `_merged_phases` and the total
     read without raising: a name to merge on, a depth to sum by, a number to
-    sum."""
+    sum.
+
+    `NaN` and `Infinity` are `float`s and pass the isinstance check, but a
+    payload carrying either is corrupt in exactly the way the other invalid
+    shapes are: one of them poisons `total_seconds` for every phase in the
+    file, silently and irrecoverably. Rejected here rather than tolerated.
+    """
+    if not isinstance(phase, dict):
+        return False
+    seconds: object = phase.get("seconds")
     return (
-        isinstance(phase, dict)
-        and isinstance(phase.get("name"), str)
+        isinstance(phase.get("name"), str)
         and isinstance(phase.get("depth"), int)
-        and isinstance(phase.get("seconds"), int | float)
+        and isinstance(seconds, int | float)
+        and math.isfinite(seconds)
     )
 
 

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import re
 import shutil
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import pytest
 from ran import report
@@ -44,6 +46,37 @@ def test_numbers_are_emitted_as_plain_decimals(value: float, expected: str) -> N
     assert "e" not in rendered.lower()
     assert rendered == expected
     assert float(rendered) == pytest.approx(value, rel=1e-6)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_value_renders_as_a_dash_rather_than_killing_the_compile(
+    value: float,
+) -> None:
+    """`nan`/`inf` in a siunitx S column is a hard LaTeX error, not a bad cell.
+
+    Reachable through `*_improvement_pct` whenever a `before` is 0.0.
+    """
+    assert report.decimal(value) == r"\multicolumn{1}{c}{---}"
+
+
+def test_a_non_finite_config_value_replaces_its_siunitx_wrapper() -> None:
+    r"""`\Raw` expands to `\num`, which rejects `nan` exactly as `S` does."""
+    rows: str = report.config_rows({"lr_g": math.inf}, None)
+
+    assert r"\Raw" not in rows
+    assert r"\multicolumn{1}{c}{---}" in rows
+
+
+def test_a_non_finite_improvement_leaves_the_rest_of_the_row_intact() -> None:
+    """One dead cell must cost one cell, not the table."""
+    entry: dict[str, float] = _entry(1.0, 0.1)
+    entry["wasserstein_improvement_pct"] = math.inf
+    body: str = report.metrics_table(
+        "detector", ("m",), {"detector_m": entry}, None, frozenset()
+    )
+
+    assert body.count(r"\multicolumn{1}{c}{---}") == 7  # 6 absent-IBU + the inf
+    assert "0.1" in body
 
 
 def test_underscores_in_a_value_are_escaped() -> None:
@@ -397,6 +430,58 @@ def test_an_existing_report_is_not_rebuilt_without_force(
     assert pdf.read_bytes() == b"stale"
 
 
+def test_the_compile_invocation_is_absolute_and_non_interactive(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_reference_run: ReferenceRunBuilder,
+) -> None:
+    r"""The argv contract, asserted without needing a TeX installation.
+
+    Two separate bugs live in this one call, and both are invisible to every
+    test that hands `build_report` an absolute `tmp_path`:
+
+    `pdflatex` runs with `cwd=artifacts`, so a relative `-output-directory`
+    resolves against `artifacts/` rather than the caller's working directory
+    -- and a relative run directory is precisely what `scripts/submit.sh` and
+    the documented `ran report runs/<timestamp>` both pass.
+
+    `-interaction=nonstopmode` does not cover pdflatex's pre-mode "I can't
+    write on file `report.log'" prompt, so without `stdin=DEVNULL` the failure
+    reads the parent's stdin and hangs instead of erroring.
+    """
+    run_dir: Path = make_reference_run(tmp_path / "2026-09-06T203848Z")
+    captured: list[tuple[Any, dict[str, Any]]] = []
+
+    def fake_run(args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        captured.append((args, kwargs))
+        _ = (run_dir / "report.pdf").write_bytes(b"%PDF-1.5")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(report.shutil, "which", lambda _cmd: "/usr/bin/pdflatex")
+    monkeypatch.setattr(report.subprocess, "run", fake_run)
+    # A working directory that is *not* the run's parent, so a path that only
+    # happens to resolve relative to the run directory still fails.
+    monkeypatch.chdir(tmp_path.parent)
+    relative: Path = Path(tmp_path.name) / run_dir.name
+    assert not relative.is_absolute()
+
+    _ = report.build_report(relative, force=True)
+
+    assert captured
+    for args, kwargs in captured:
+        flag: str = next(a for a in args if a.startswith("-output-directory="))
+        emitted = Path(flag.removeprefix("-output-directory="))
+        assert emitted.is_absolute()
+        assert emitted == run_dir.resolve()
+        assert kwargs["stdin"] is subprocess.DEVNULL
+
+
+# The five tests below need a real `pdflatex` and so do not run in CI, which
+# installs no TeX -- `texlive-latex-recommended` plus `-extra` is hundreds of
+# megabytes on every run, for a hand-authored template that changes rarely.
+# `test_the_compile_invocation_is_absolute_and_non_interactive` above is what
+# guards the invocation contract in their absence; it needs no TeX and so runs
+# everywhere.
 _NO_TEX = shutil.which("pdflatex") is None
 
 

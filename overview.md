@@ -264,7 +264,6 @@ All three plots overlay IBU curves if their weights are present in the run direc
 ran train --config params/1d_default.yaml
   └─ parse YAML → generate/load dataset → train (adversarial) → save to runs/<timestamp>/
        ├── config.json          (self-contained: stores full covariance matrices)
-       ├── report.pdf
        └── artifacts/
             ├── generator.keras, discriminator.keras
             ├── history.npz
@@ -273,7 +272,6 @@ ran train --config params/1d_default.yaml
             ├── losses.pdf
             ├── selection.pdf
             ├── timings.json
-            ├── report.tex
             └── metrics.json
 
 ran baseline ibu --run-dir runs/...       → artifacts/metrics_ibu.json, artifacts/ibu_weights.npz

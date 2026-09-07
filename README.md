@@ -357,8 +357,11 @@ runs/<timestamp>/
 - **`detector_level.pdf`** -- Histogram comparing data, MC, and reweighted MC at detector level with ratio panel
 - **`particle_level.pdf`** -- Same comparison at particle level
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target
+- **`selection.pdf`** -- Per-epoch MMD curves and the epoch model selection restored
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
 - **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
+- **`timings.json`** -- Per-phase wall clock, when the run was made under `RAN_TIMING=1`
+- **`report.tex`** -- The LaTeX source `ran report` compiles into the run root's `report.pdf`
 
 ## Training Hyperparameters
 

@@ -542,6 +542,9 @@ def plot_losses(
     _ = ax.set_ylim(
         bottom=LN2 * (1 - LOSS_YLIM_FRACTION), top=LN2 * (1 + LOSS_YLIM_FRACTION)
     )
+    # Invariant: `offsets` is symmetric and odd-length, which is the only
+    # reason `len(offsets) // 2` is the index of the zero offset -- i.e. the
+    # only reason the $\ln 2$ label below lands on the $\ln 2$ tick.
     offsets: tuple[float, ...] = (-2.0, -1.0, 0.0, 1.0, 2.0)
     ticks: list[float] = [LN2 * (1 + k * 2.0**-5) for k in offsets]
     _ = ax.set_yticks(ticks=ticks)
@@ -572,7 +575,12 @@ def plot_losses(
 
 
 def _rolling_median(values: NDArray[np.double], window: int, /) -> NDArray[np.double]:
-    """Centred rolling median, edges held at the nearest full window."""
+    """Centred rolling median, edges held at the nearest full window.
+
+    Invariant: `window` must be ODD. An even one pads `window // 2` on both
+    sides and so shifts the output half a sample rather than centring it.
+    The only caller passes `SELECTION_SMOOTHING_WINDOW`, which is 5.
+    """
     pad: int = window // 2
     padded: NDArray[np.double] = np.pad(values, pad_width=pad, mode="edge")
     return np.array(

@@ -10,15 +10,17 @@ want a number for is the one that just fell over.
 from __future__ import annotations
 
 import json
+import math
+import time
 from io import StringIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from ran import timing
 from rich.console import Console
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
     from typing import Any
 
@@ -262,7 +264,20 @@ class TestMerge:
         assert by_name["train"]["pass"] == "train"
         assert by_name["plots"]["pass"] == "load"
 
-    def test_a_rerun_phase_replaces_its_earlier_record(self, tmp_path: Path) -> None:
+    def test_a_rerun_phase_replaces_its_earlier_record(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The two durations are pinned rather than raced.
+
+        Two empty `with timing.phase(...)` blocks can land inside one
+        `perf_counter` tick and record the identical duration, which made a
+        "the second record replaced the first" assertion on seconds fail
+        intermittently for a reason that has nothing to do with merging.
+        """
+        ticks: Iterator[float] = iter([0.0, 1.0, 10.0, 12.0])
+        real: Callable[[], float] = time.perf_counter
+        monkeypatch.setattr(timing.time, "perf_counter", lambda: next(ticks, real()))
+
         with timing.phase("plots"):
             pass
         timing.write(tmp_path, pass_name="train")
@@ -278,9 +293,10 @@ class TestMerge:
             (tmp_path / "artifacts/timings.json").read_text()
         )
 
+        assert first["phases"][0]["seconds"] == pytest.approx(1.0)
         assert len(second["phases"]) == 1
         assert second["phases"][0]["pass"] == "load"
-        assert second["phases"][0]["seconds"] != first["phases"][0]["seconds"]
+        assert second["phases"][0]["seconds"] == pytest.approx(2.0)
 
     def test_the_total_sums_the_merged_top_level_phases(self, tmp_path: Path) -> None:
         with timing.phase("train"):
@@ -356,6 +372,31 @@ class TestMerge:
 
         payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
         assert [p["name"] for p in payload["phases"]] == ["train"]
+
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_a_non_finite_seconds_is_treated_as_corrupt(
+        self, tmp_path: Path, literal: str
+    ) -> None:
+        """`NaN` is a `float` and passes isinstance, but poisons the total.
+
+        One of them makes `total_seconds` non-finite for every phase in the
+        file --- silently, and with no way to recover the numbers afterwards
+        --- so the payload is discarded exactly as the other invalid shapes
+        are. `json` emits and accepts these literals, so they really do reach
+        `_existing` off disk.
+        """
+        (tmp_path / "artifacts").mkdir()
+        _ = (tmp_path / "artifacts/timings.json").write_text(
+            f'{{"phases": [{{"name": "old", "seconds": {literal}, "depth": 0}}]}}'
+        )
+
+        with timing.phase("train"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+
+        payload = json.loads((tmp_path / "artifacts/timings.json").read_text())
+        assert [p["name"] for p in payload["phases"]] == ["train"]
+        assert math.isfinite(cast("float", payload["total_seconds"]))
 
 
 class TestEnvironment:

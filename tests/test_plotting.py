@@ -449,16 +449,23 @@ def _history(n: int = 12) -> dict[str, list[float]]:
 
 @pytest.fixture
 def drawn(monkeypatch: pytest.MonkeyPatch) -> DrawnCalls:
-    """Record every `ax.plot` call instead of rendering it.
+    """Record every `ax.plot` call, then let it draw for real.
 
-    `plot_losses` builds its own Figure and returns nothing, so intercepting the
-    Axes is the only way to assert on what ends up in the legend.
+    `plot_losses` builds its own Figure and returns nothing, so intercepting
+    the Axes is the only way to assert on what ends up in the legend.
+
+    The recorder delegates rather than swallowing the call. `plot_losses` ends
+    with `ax.legend()`, and an Axes holding no labelled artist makes matplotlib
+    warn "No artists with labels found to put in legend" on every suite run.
+    That warning is about the fixture, not about the code under test, so it is
+    silenced here at its source rather than by a global filter.
     """
     calls: DrawnCalls = []
+    real = Axes.plot
 
-    def record(_ax: Axes, *args: Any, **kwargs: Any) -> list[Any]:
+    def record(ax: Axes, *args: Any, **kwargs: Any) -> list[Any]:
         calls.append((args, kwargs))
-        return []
+        return cast("list[Any]", real(ax, *args, **kwargs))
 
     monkeypatch.setattr(Axes, "plot", record)
     return calls

@@ -62,6 +62,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from ran.logging_config import configure_logging
+from ran.rantypes import artifacts_dir
 from rich.console import Console
 from rich.table import Table
 from scipy import stats
@@ -206,7 +207,7 @@ def load_records(root: Path) -> list[RunRecord]:
     records: list[RunRecord] = []
     for run_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         config_path = run_dir / "config.json"
-        metrics_path = run_dir / "metrics.json"
+        metrics_path = artifacts_dir(run_dir) / "metrics.json"
         if not (config_path.exists() and metrics_path.exists()):
             logger.warning("%s: incomplete, skipping", run_dir.name)
             continue
@@ -263,7 +264,7 @@ def _selected_ess(run_dir: Path, config: Mapping[str, Any]) -> float:
     A missing history is not an error: the field postdates several runs in
     `runs/`, and a run that cannot report ESS can still be scored.
     """
-    history_path = run_dir / "history.npz"
+    history_path = artifacts_dir(run_dir) / "history.npz"
     best_epoch = config.get("best_epoch")
     if not history_path.exists() or best_epoch is None:
         return float("nan")

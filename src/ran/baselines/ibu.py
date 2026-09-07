@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 
 from ..evaluate import apply_to_runs, render_metrics
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, VariableOutcome
+from ..rantypes import (
+    DEFAULT_PURITY_THRESHOLD,
+    IBUResult,
+    VariableOutcome,
+    artifacts_dir,
+)
 from ..train import EPS
 from ._shared import (
     evaluate_dimension,
@@ -393,7 +398,7 @@ def evaluate_single(
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, MetricRecord]:
     """Run IBU on a single run's dataset and save comparison metrics."""
-    out_path: Path = run_dir / "metrics_ibu.json"
+    out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
 
     if out_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
@@ -414,7 +419,7 @@ def evaluate_single(
     )
 
     json.dump(obj=result.metrics, fp=out_path.open(mode="w"), indent=2)
-    weights_path: Path = run_dir / "ibu_weights.npz"
+    weights_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     np.savez(
         weights_path,
         # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. The keys are

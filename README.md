@@ -317,11 +317,20 @@ All variables are z-score standardized using MC gen-level statistics only (no in
 
 ## Output
 
-Each run produces a timestamped directory under `runs/` containing:
+Each run produces a timestamped directory under `runs/`. The root holds only
+what a person opens by hand -- `config.json` (run configuration, for
+reproducibility) and, later, `report.pdf`. Everything else is supporting
+material and lives one level down, flat, in `artifacts/`:
+
+```text
+runs/<timestamp>/
+├── report.pdf
+├── config.json
+└── artifacts/   figures, metrics/timings JSON, checkpoints, arrays
+```
 
 - **`generator.keras`**/**`discriminator.keras`** -- Saved model checkpoints
 - **`history.npz`** -- Training loss history
-- **`config.json`** -- Run configuration (reproducibility)
 - **`detector_level.pdf`** -- Histogram comparing data, MC, and reweighted MC at detector level with ratio panel
 - **`particle_level.pdf`** -- Same comparison at particle level
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target

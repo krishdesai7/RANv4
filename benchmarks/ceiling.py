@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path  # ruff: ignore[typing-only-standard-library-import] -- needed by typer
+from pathlib import (
+    Path,  # ruff: ignore[typing-only-standard-library-import] -- needed by typer
+)
 from typing import TYPE_CHECKING, Annotated, NamedTuple, cast
 
 import jax.numpy as jnp
@@ -15,7 +17,7 @@ from ran.evaluate import _improvement, _wd_per_dim
 from ran.logging_config import configure_logging
 from ran.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
 from ran.models import build_discriminator, build_generator
-from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
+from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split, artifacts_dir
 from ran.train import (
     MMD_SUBSAMPLE,
     PARAMS_FILE,
@@ -277,8 +279,8 @@ def _generator_at(
     equivalent at detector level or merely unresolved.
     """
     if epoch is None:
-        return keras.saving.load_model(run_dir / "generator.keras")  # pyrefly: ignore[no-any-return-implicit]
-    if not (run_dir / PARAMS_FILE).exists():
+        return keras.saving.load_model(artifacts_dir(run_dir) / "generator.keras")  # pyrefly: ignore[no-any-return-implicit]
+    if not (artifacts_dir(run_dir) / PARAMS_FILE).exists():
         typer.echo(
             message=f"{run_dir} predates per-epoch parameter saving, so only its"
             f"{run_dir} predates per-epoch parameter saving, so only its "
@@ -412,7 +414,7 @@ def diagnostic_c(
     # difference between two generators as if it were a difference between two
     # discriminators, and can come out negative.
     curve: NDArray[np.double] = np.asarray(
-        a=np.load(file=run_dir / "history.npz")["val_d"],  # pyrefly: ignore[unknown-argument-type]
+        a=np.load(file=artifacts_dir(run_dir) / "history.npz")["val_d"],  # pyrefly: ignore[unknown-argument-type]
         dtype=np.double,
     )
     best_epoch: int = int(config["best_epoch"]) if epoch is None else epoch

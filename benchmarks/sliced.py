@@ -59,7 +59,7 @@ import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
 from ran.data import RANDataset, load_jet_dataset
 from ran.data.config import gaussian_config_from_run_config
 from ran.logging_config import configure_logging
-from ran.rantypes import Split
+from ran.rantypes import Split, artifacts_dir
 from rich.console import Console
 from rich.table import Table
 
@@ -314,7 +314,9 @@ def main() -> None:
     config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     splits, variables = _load_splits(config)
     pop: Populations = splits.select(Split.TEST).partition()
-    generator: keras.Model = keras.saving.load_model(run_dir / "generator.keras")
+    generator: keras.Model = keras.saving.load_model(
+        artifacts_dir(run_dir) / "generator.keras"
+    )
 
     rng = np.random.default_rng(args.seed)
     n = min(args.subsample, pop.mc.z.shape[0], pop.data.shape[0])

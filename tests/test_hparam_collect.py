@@ -39,7 +39,8 @@ def _write_run(
     root: Path, name: str, config: dict[str, Any], particle: dict[str, float]
 ) -> None:
     run_dir: Path = root / name
-    run_dir.mkdir(parents=True)
+    artifacts_dir: Path = run_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True)
     _ = (run_dir / "config.json").write_text(json.dumps(config))
     metrics = {
         f"particle_{var}": {
@@ -49,7 +50,7 @@ def _write_run(
         for var, value in particle.items()
     }
     metrics["detector_m"] = {"wasserstein_improvement_pct": 95.0}
-    _ = (run_dir / "metrics.json").write_text(json.dumps(metrics))
+    _ = (artifacts_dir / "metrics.json").write_text(json.dumps(metrics))
 
 
 class TestParticleImprovements:
@@ -310,23 +311,27 @@ class TestEffectiveSampleSize:
 
     def test_reads_the_ess_at_the_selected_epoch(self, tmp_path: Path) -> None:
         run: Path = tmp_path / "lam0_seed00"
-        run.mkdir()
+        artifacts: Path = run / "artifacts"
+        artifacts.mkdir(parents=True)
         _ = (run / "config.json").write_text(
             json.dumps({"lr_g": 3e-5, "seed": 0, "best_epoch": 2})
         )
-        _ = (run / "metrics.json").write_text(
+        _ = (artifacts / "metrics.json").write_text(
             json.dumps({"particle_m": {"wasserstein_improvement_pct": 22.5}})
         )
-        np.savez(run / "history.npz", val_ess=np.array([100.0, 200.0, 300.0, 400.0]))
+        np.savez(
+            artifacts / "history.npz", val_ess=np.array([100.0, 200.0, 300.0, 400.0])
+        )
 
         assert load_records(tmp_path)[0].ess == pytest.approx(300.0)
 
     def test_a_run_without_history_is_still_read(self, tmp_path: Path) -> None:
         """Older runs predate the field; they score, they just report no ESS."""
         run: Path = tmp_path / "lam0_seed00"
-        run.mkdir()
+        artifacts: Path = run / "artifacts"
+        artifacts.mkdir(parents=True)
         _ = (run / "config.json").write_text(json.dumps({"lr_g": 3e-5, "seed": 0}))
-        _ = (run / "metrics.json").write_text(
+        _ = (artifacts / "metrics.json").write_text(
             json.dumps({"particle_m": {"wasserstein_improvement_pct": 22.5}})
         )
 

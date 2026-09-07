@@ -66,7 +66,8 @@ def test_evaluation_records_metrics_artifact_completion(
     run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
     _ = (run_dir / "config.json").write_text('{"dataset": "gaussian", "dim": 1}')
-    (run_dir / "generator.keras").touch()
+    (run_dir / "artifacts").mkdir()
+    (run_dir / "artifacts" / "generator.keras").touch()
     z = np.array([[0.0], [1.0], [2.0], [3.0]])
     test_data = ZXY(Events(z, z.copy()), np.array([1, 1, 0, 0], dtype=np.ubyte))
 
@@ -100,7 +101,7 @@ def test_evaluation_records_metrics_artifact_completion(
     with caplog.at_level(logging.INFO, logger="ran.evaluate"):
         _ = evaluate.evaluate_run(run_dir)
 
-    out_path: Path = run_dir / "metrics.json"
+    out_path: Path = run_dir / "artifacts" / "metrics.json"
     messages = [
         record.getMessage() for record in _completion_records(caplog, "ran.evaluate")
     ]
@@ -168,8 +169,8 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     with caplog.at_level(logging.INFO, logger="ran.baselines.ibu"):
         _ = ibu.evaluate_single(run_dir)
 
-    metrics_path: Path = run_dir / "metrics_ibu.json"
-    weights_path: Path = run_dir / "ibu_weights.npz"
+    metrics_path: Path = run_dir / "artifacts" / "metrics_ibu.json"
+    weights_path: Path = run_dir / "artifacts" / "ibu_weights.npz"
     messages = [
         record.getMessage()
         for record in _completion_records(caplog, "ran.baselines.ibu")

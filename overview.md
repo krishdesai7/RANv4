@@ -263,17 +263,23 @@ All three plots overlay IBU curves if their weights are present in the run direc
 ```shell
 ran train --config params/1d_default.yaml
   └─ parse YAML → generate/load dataset → train (adversarial) → save to runs/<timestamp>/
-       ├── generator.keras, discriminator.keras
-       ├── history.npz
        ├── config.json          (self-contained: stores full covariance matrices)
-       ├── detector_level.pdf
-       ├── particle_level.pdf
-       ├── losses.pdf
-       └── metrics.json
+       ├── report.pdf
+       └── artifacts/
+            ├── generator.keras, discriminator.keras
+            ├── history.npz
+            ├── detector_level.pdf
+            ├── particle_level.pdf
+            ├── losses.pdf
+            └── metrics.json
 
-ran baseline ibu --run-dir runs/...       → metrics_ibu.json, ibu_weights.npz
+ran baseline ibu --run-dir runs/...       → artifacts/metrics_ibu.json, artifacts/ibu_weights.npz
 ran train --load-run runs/...             → reload + re-plot with baseline overlays
 ```
+
+The run root holds only what a person opens by hand -- `config.json` and,
+later, `report.pdf`. Everything else -- checkpoints, arrays, figures, metrics
+and timings JSON -- lives one level down, flat, in `artifacts/`.
 
 `config.json` stores full covariance matrices (not just the original YAML scalars) so runs are self-contained and exactly reproducible without the original config file.
 

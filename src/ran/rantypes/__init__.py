@@ -1,6 +1,7 @@
 from .configs import REQUIRED_KEYS as REQUIRED_KEYS
 from .configs import GaussianConfig as GaussianConfig
 from .configs import RunConfig as RunConfig
+from .constants import ARTIFACTS_DIR as ARTIFACTS_DIR
 from .constants import CACHE_DIR as CACHE_DIR
 from .constants import CACHE_ENV_VAR as CACHE_ENV_VAR
 from .constants import CACHE_FILENAMES as CACHE_FILENAMES
@@ -17,6 +18,7 @@ from .constants import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
 from .constants import TRUTH_SENTINEL as TRUTH_SENTINEL
 from .constants import ZENODO_RECORD as ZENODO_RECORD
 from .constants import JetVarInfo as JetVarInfo
+from .constants import artifacts_dir as artifacts_dir
 from .enums import DatasetName as DatasetName
 from .enums import LogLevel as LogLevel
 from .events import ZXY as ZXY

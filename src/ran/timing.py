@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Final, cast, override
 from rich.console import Console
 from rich.table import Table
 
-from .rantypes import COMPILE_CACHE_DIR
+from .rantypes import COMPILE_CACHE_DIR, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
@@ -272,4 +272,6 @@ def write(run_dir: Path, /) -> None:
             for p in _ordered(_recorder.records)
         ],
     }
-    _ = (run_dir / "timings.json").write_text(data=json.dumps(obj=payload, indent=2))
+    _ = (artifacts_dir(run_dir) / "timings.json").write_text(
+        data=json.dumps(obj=payload, indent=2)
+    )

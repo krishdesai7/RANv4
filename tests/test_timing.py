@@ -69,7 +69,7 @@ class TestDisabled:
         with timing.phase("data"):
             pass
         timing.write(tmp_path)
-        assert not (tmp_path / "timings.json").exists()
+        assert not (tmp_path / "artifacts" / "timings.json").exists()
 
 
 class TestEnabled:
@@ -192,7 +192,7 @@ class TestWrite:
         with timing.phase("train"), timing.phase("loop"):
             pass
         timing.write(tmp_path)
-        payload = json.loads((tmp_path / "timings.json").read_text())
+        payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert [p["name"] for p in payload["phases"]] == ["train", "loop"]
         assert [p["depth"] for p in payload["phases"]] == [0, 1]
         assert payload["total_seconds"] >= 0.0
@@ -203,7 +203,9 @@ class TestWrite:
         with timing.phase("train"), timing.phase("loop"):
             pass
         timing.write(tmp_path)
-        payload: dict[str, Any] = json.loads((tmp_path / "timings.json").read_text())
+        payload: dict[str, Any] = json.loads(
+            (tmp_path / "artifacts" / "timings.json").read_text()
+        )
         top: dict[str, Any] = next(p for p in payload["phases"] if p["name"] == "train")
         assert payload["total_seconds"] == pytest.approx(top["seconds"])
 
@@ -214,7 +216,7 @@ class TestWrite:
         with timing.phase("train"):
             pass
         timing.write(tmp_path)
-        payload = json.loads((tmp_path / "timings.json").read_text())
+        payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert "compile_cache_warm" in payload
 
     def test_is_json_serializable_under_float32(self, tmp_path: Path) -> None:
@@ -223,7 +225,7 @@ class TestWrite:
         with timing.phase("data"):
             pass
         timing.write(tmp_path)
-        payload = json.loads((tmp_path / "timings.json").read_text())
+        payload = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
         assert isinstance(payload["phases"][0]["seconds"], float)
 
 

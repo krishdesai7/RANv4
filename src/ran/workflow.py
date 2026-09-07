@@ -29,6 +29,7 @@ from .rantypes import (
     DatasetName,
     GaussianConfig,
     VarInfo,
+    artifacts_dir,
 )
 from .timing import phase, report, write
 from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
@@ -198,14 +199,15 @@ def _write_run_dir(
     call rather than an indented body."""
     run_dir = _new_run_dir(run_dir)
 
-    g.save(run_dir / "generator.keras")
-    d.save(run_dir / "discriminator.keras")
+    artifacts: Path = artifacts_dir(run_dir)
+    g.save(artifacts / "generator.keras")
+    d.save(artifacts / "discriminator.keras")
     # Every epoch's parameters, not just the selected one's. `scan` already
     # emitted the stack; dropping it on the floor is what made re-scoring a run
     # under a different criterion cost a full retrain.
     _ = save_params(run_dir, params)
     np.savez(
-        file=run_dir / "history.npz",
+        file=artifacts / "history.npz",
         # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
         # key could in principle be "allow_pickle", which is declared bool.
         **{k: np.array(object=v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
@@ -235,9 +237,10 @@ def _write_run_dir(
 
 def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
-    g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
+    artifacts: Path = artifacts_dir(run_dir)
+    g: RANModel = keras.saving.load_model(artifacts / "generator.keras")
     history: dict[str, list[float]] = {
-        k: v.tolist() for k, v in np.load(file=run_dir / "history.npz").items()
+        k: v.tolist() for k, v in np.load(file=artifacts / "history.npz").items()
     }
     logger.info("Loaded run from %s", run_dir)
     return g, history
@@ -275,17 +278,18 @@ def _draw_figures(
     if not plots:
         return
     ibu_weights: list[EventArray] | None = _load_baseline_weights(run_dir, dim)
+    artifacts: Path = artifacts_dir(run_dir)
     plot_levels(
         splits.test,
         g,
-        detector_path=run_dir / "detector_level.pdf",
-        particle_path=run_dir / "particle_level.pdf",
+        detector_path=artifacts / "detector_level.pdf",
+        particle_path=artifacts / "particle_level.pdf",
         var_info=var_info,
         ibu_weights=ibu_weights,
     )
-    plot_losses(history, save_path=run_dir / "losses.pdf")
+    plot_losses(history, save_path=artifacts / "losses.pdf")
     if "val_mmd" in history:
-        plot_selection(history, best_epoch, save_path=run_dir / "selection.pdf")
+        plot_selection(history, best_epoch, save_path=artifacts / "selection.pdf")
     else:
         logger.debug("No val_mmd in history, skipping selection.pdf")
 
@@ -296,7 +300,7 @@ def _load_baseline_weights(
 ) -> list[EventArray] | None:
     """Pick up IBU weights from the run dir, if that baseline has run."""
     ibu_weights: list[EventArray] | None = None
-    ibu_path: Path = run_dir / "ibu_weights.npz"
+    ibu_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
         ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]

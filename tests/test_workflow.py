@@ -253,7 +253,9 @@ def test_particle_curve_is_recorded_when_truth_exists(
     )
 
     run_dir: Path = next((tmp_path / "runs").iterdir())
-    history: dict[str, list[float]] = dict(np.load(file=run_dir / "history.npz"))
+    history: dict[str, list[float]] = dict(
+        np.load(file=run_dir / "artifacts" / "history.npz")
+    )
     assert "val_mmd_particle" in history
     assert len(history["val_mmd_particle"]) == 4
     assert np.all(a=np.isfinite(history["val_mmd_particle"]))
@@ -267,6 +269,44 @@ def test_particle_curve_is_recorded_when_truth_exists(
     assert "criterion" not in config
     assert "patience" not in config
     assert "min_delta" not in config
+
+
+@pytest.mark.writes_default_cache
+def test_a_completed_run_keeps_only_two_files_at_its_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The run root is for humans; everything else lives in `artifacts/`."""
+    monkeypatch.chdir(tmp_path)
+    config_path: Path = tmp_path / "gaussian.yaml"
+    _ = config_path.write_text(data=_GAUSSIAN_CONFIG)
+
+    workflow.run(
+        32,
+        200,
+        config_path,
+        dataset=DatasetName.gaussian,
+        variables=(),
+        load_run=None,
+        hidden_units=4,
+        n_layers=1,
+        seed=1,
+        data_seed=0,
+        n_epochs=1,
+        plots=False,
+    )
+
+    run_dir: Path = next((tmp_path / "runs").iterdir())
+
+    at_root: set[str] = {p.name for p in run_dir.iterdir() if p.is_file()}
+    assert at_root == {"config.json"}
+
+    produced: set[str] = {p.name for p in (run_dir / "artifacts").iterdir()}
+    assert {
+        "generator.keras",
+        "discriminator.keras",
+        "history.npz",
+        "params.npz",
+    } <= produced
 
 
 class TestParticleCurve:
@@ -384,7 +424,9 @@ def test_run_omits_val_mmd_particle_without_truth(
     )
 
     run_dir: Path = next((tmp_path / "runs").iterdir())
-    history: dict[str, list[float]] = dict(np.load(file=run_dir / "history.npz"))
+    history: dict[str, list[float]] = dict(
+        np.load(file=run_dir / "artifacts" / "history.npz")
+    )
     assert "val_mmd_particle" not in history
 
 
@@ -449,8 +491,8 @@ class TestDrawFiguresSelection:
         assert len(calls["plot_levels"]) == 1
         _, level_kwargs = calls["plot_levels"][0]
         assert level_kwargs == {
-            "detector_path": tmp_path / "detector_level.pdf",
-            "particle_path": tmp_path / "particle_level.pdf",
+            "detector_path": tmp_path / "artifacts" / "detector_level.pdf",
+            "particle_path": tmp_path / "artifacts" / "particle_level.pdf",
             "var_info": None,
             "ibu_weights": None,
         }
@@ -485,7 +527,7 @@ class TestDrawFiguresSelection:
         args, kwargs = calls["plot_selection"][0]
         assert args[0] is history
         assert args[1] == 5
-        assert kwargs["save_path"] == tmp_path / "selection.pdf"
+        assert kwargs["save_path"] == tmp_path / "artifacts" / "selection.pdf"
 
 
 def _fake_load_artifacts(
@@ -663,7 +705,9 @@ def test_timing_writes_a_phase_breakdown_into_the_run_dir(
     finally:
         timing.enable(False)
 
-    payload: dict[str, Any] = json.loads(s=(run_dir / "timings.json").read_text())
+    payload: dict[str, Any] = json.loads(
+        s=(run_dir / "artifacts" / "timings.json").read_text()
+    )
     assert {p["name"] for p in payload["phases"]} == {
         "data",
         "load",
@@ -687,4 +731,4 @@ def test_no_timings_file_when_timing_is_off(
 
     _reload(run_dir)
 
-    assert not (run_dir / "timings.json").exists()
+    assert not (run_dir / "artifacts" / "timings.json").exists()

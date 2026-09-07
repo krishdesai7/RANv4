@@ -48,6 +48,21 @@ CACHE_DIR: Final[Path] = Path(os.environ.get(CACHE_ENV_VAR) or ".cache").expandu
 COMPILE_CACHE_DIR: Final[Path] = CACHE_DIR / "jax"
 
 RUN_DIR: Final[Path] = Path("runs")
+
+# A run directory is read by people. `config.json` and `report.pdf` stay at the
+# root because they are what a person opens; everything else -- checkpoints,
+# arrays, figures, the metrics and timing JSON -- is supporting material and
+# lives one level down, flat.
+ARTIFACTS_DIR: Final[LiteralString] = "artifacts"
+
+
+def artifacts_dir(run_dir: Path, /) -> Path:
+    """The run's supporting-material subdirectory, created on demand."""
+    path: Path = run_dir / ARTIFACTS_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17

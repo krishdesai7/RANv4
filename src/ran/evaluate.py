@@ -16,7 +16,7 @@ from .data import (
     gaussian_config_from_run_config,
     load_jet_dataset,
 )
-from .rantypes import EVENT_DTYPE, RUN_DIR, DatasetName
+from .rantypes import EVENT_DTYPE, RUN_DIR, DatasetName, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -483,7 +483,7 @@ def _improvement(before: float, after: float) -> float:
 
 def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
     """Evaluate a single run directory."""
-    out_path: Path = run_dir / "metrics.json"
+    out_path: Path = artifacts_dir(run_dir) / "metrics.json"
 
     if out_path.exists() and not force:
         logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
@@ -495,7 +495,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
 
     config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     logger.info("%s: loading model and data...", run_dir.name)
-    g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
+    g: RANModel = keras.saving.load_model(artifacts_dir(run_dir) / "generator.keras")
 
     splits: DatasetSplits = _load_splits(config)
     test: Populations = _collect_test_data(splits.test).partition()

@@ -21,7 +21,7 @@ from .models import build_discriminator, build_generator
 
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time
-from .rantypes import COMPILE_CACHE_DIR, Variables
+from .rantypes import COMPILE_CACHE_DIR, Variables, artifacts_dir
 from .timing import is_enabled, phase
 
 if TYPE_CHECKING:
@@ -147,7 +147,7 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
         for field, arrays in params._asdict().items()
         for i, a in enumerate(iterable=arrays)
     }
-    path: Path = run_dir / PARAMS_FILE
+    path: Path = artifacts_dir(run_dir) / PARAMS_FILE
     # Same unpack-into-savez suppression `workflow._save_run` carries: a
     # str-keyed dict could in principle hold "allow_pickle", which is declared
     # bool. These keys are all `field:index`, so it cannot.
@@ -163,7 +163,7 @@ def load_params(run_dir: Path, /) -> EpochParams:
     `stateless_call` in the order it gave them out, and a permuted list is a
     silently wrong model rather than an error.
     """
-    with np.load(file=run_dir / PARAMS_FILE) as f:
+    with np.load(file=artifacts_dir(run_dir) / PARAMS_FILE) as f:
         keys: list[str] = list(f.keys())  # pyrefly: ignore[unknown-argument-type]
         return EpochParams(
             **{

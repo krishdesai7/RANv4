@@ -60,7 +60,7 @@ from ran.evaluate import _improvement, _wd_per_dim
 from ran.logging_config import configure_logging
 from ran.mmd import MMDCache, bandwidths, build_cache, subsample_indices, weighted_mmd
 from ran.models import build_generator
-from ran.rantypes import Split
+from ran.rantypes import Split, artifacts_dir
 from ran.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 
 if TYPE_CHECKING:
@@ -241,7 +241,7 @@ def main(
     configure_logging(level="info")
 
     config: dict[str, Any] = json.loads((path / "config.json").read_text())
-    history: np.lib.npyio.NpzFile = np.load(file=path / "history.npz")
+    history: np.lib.npyio.NpzFile = np.load(file=artifacts_dir(path) / "history.npz")
     splits, variables = _load_splits(config)
     test_pop: Populations = splits.select(Split.TEST).partition()
 

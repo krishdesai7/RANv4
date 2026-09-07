@@ -271,10 +271,14 @@ ran train --config params/1d_default.yaml
             ├── detector_level.pdf
             ├── particle_level.pdf
             ├── losses.pdf
+            ├── selection.pdf
+            ├── timings.json
+            ├── report.tex
             └── metrics.json
 
 ran baseline ibu --run-dir runs/...       → artifacts/metrics_ibu.json, artifacts/ibu_weights.npz
 ran train --load-run runs/...             → reload + re-plot with baseline overlays
+ran report runs/...                       → artifacts/report.tex, report.pdf
 ```
 
 The run root holds only what a person opens by hand -- `config.json` and,

@@ -23,3 +23,9 @@ def test_the_variance_design_has_package_entry_points() -> None:
 
     assert callable(run_cell)
     assert callable(collect)
+
+
+def test_the_report_has_a_package_entry_point() -> None:
+    from ran.report import build_report
+
+    assert callable(build_report)

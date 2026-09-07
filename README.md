@@ -165,6 +165,29 @@ ran evaluate --force
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
 
+### Reports
+
+One PDF dossier per run — configuration, timing, both metrics tables and every
+figure — built from the JSON a run already writes:
+
+```bash
+# Compile runs/<timestamp>/report.pdf
+ran report runs/2026-03-14T061023Z
+
+# Rebuild one that already exists
+ran report runs/2026-03-14T061023Z --force
+
+# Emit artifacts/report.tex alone, without a TeX installation
+ran report runs/2026-03-14T061023Z --no-compile
+```
+
+`report.tex` is written into `artifacts/`; `report.pdf` lands at the run root
+beside `config.json`. Compilation needs `pdflatex` on `PATH`. A run missing its
+baseline, its timings or even its metrics still reports: the affected cells
+degrade to dashes or a labelled row rather than failing. `scripts/submit.sh`
+ends with `ran report`, so the report sees the IBU overlay, the redrawn figures
+and the recomputed metrics.
+
 ### Baseline Comparisons
 
 Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:

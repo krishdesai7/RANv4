@@ -18,6 +18,7 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
+from .report import build_report
 from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
@@ -137,6 +138,24 @@ def train_command(
 @app.command(name="evaluate")
 def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
     evaluate_runs(run_dir, force)
+
+
+@app.command(name="report")
+def report_command(
+    run_dir: Annotated[Path, typer.Argument(help="Run directory to report on.")],
+    force: Annotated[
+        bool, typer.Option("--force", help="Rebuild an existing report.pdf.")
+    ] = False,
+    compile_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--compile/--no-compile",
+            help="Compile the LaTeX, or stop at artifacts/report.tex.",
+        ),
+    ] = True,
+) -> None:
+    """Compile a run directory into one PDF dossier."""
+    _ = build_report(run_dir, force=force, compile_pdf=compile_pdf)
 
 
 @baseline_app.command(name="ibu")

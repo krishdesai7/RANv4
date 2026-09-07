@@ -25,6 +25,7 @@ def test_registered_command_trees_are_exact() -> None:
     assert _command_names(app) == {
         "train",
         "evaluate",
+        "report",
         "baseline",
         "uncertainty",
         "leakage-check",
@@ -38,6 +39,7 @@ def test_registered_command_trees_are_exact() -> None:
     [
         ("train",),
         ("evaluate",),
+        ("report",),
         ("baseline", "ibu"),
         ("uncertainty", "run"),
         ("uncertainty", "collect"),
@@ -176,3 +178,21 @@ def test_train_defaults_to_no_explicit_run_dir(monkeypatch: pytest.MonkeyPatch) 
 
     assert runner.invoke(app, ["train"]).exit_code == 0
     assert calls[0]["run_dir"] is None
+
+
+def test_report_takes_the_run_directory_positionally(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`ran report runs/...`, not `ran report --run-dir runs/...`."""
+    seen: dict[str, object] = {}
+
+    def _capture(run_dir: Path, /, *, force: bool, compile_pdf: bool) -> Path:
+        seen.update(run_dir=run_dir, force=force, compile_pdf=compile_pdf)
+        return run_dir
+
+    monkeypatch.setattr(cli, "build_report", _capture)
+
+    result = runner.invoke(app, ["report", str(tmp_path), "--no-compile", "--force"])
+
+    assert result.exit_code == 0
+    assert seen == {"run_dir": tmp_path, "force": True, "compile_pdf": False}

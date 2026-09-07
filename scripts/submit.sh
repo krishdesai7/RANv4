@@ -106,6 +106,7 @@ echo "Run dir: ${RUN_DIR}"
 uv run ran baseline ibu --run-dir "${RUN_DIR}"
 uv run ran train --load-run "${RUN_DIR}"
 uv run ran evaluate --run-dir "${RUN_DIR}" --force
+uv run ran report "${RUN_DIR}"
 
 echo "Artifacts in ${RUN_DIR}:"
 ls -1 "${RUN_DIR}"

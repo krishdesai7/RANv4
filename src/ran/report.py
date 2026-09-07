@@ -14,10 +14,15 @@ import json
 import logging
 import math
 import re
-from importlib import resources
-from typing import TYPE_CHECKING, Any, Final
+import shutil
 
-from .rantypes import ARTIFACTS_DIR, JET_OBS, JET_VARIABLE_GROUPS
+# One fixed argv, no shell, and the only interpolated element is a path this
+# process just wrote; see `_compile`.
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
+from importlib import resources
+from typing import TYPE_CHECKING, Any, Final, cast
+
+from .rantypes import ARTIFACTS_DIR, JET_OBS, JET_VARIABLE_GROUPS, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -360,3 +365,151 @@ def skipped_variables(
             if entry["wasserstein_after"] == entry["wasserstein_before"]
         )
     return frozenset(o["variable_name"] for o in outcomes if o["status"] == "skipped")
+
+
+# A run that died before `ran evaluate` still deserves a report: the tables
+# degrade to a single explanatory row rather than raising. The template fixes
+# sixteen columns, so the row has to span all of them.
+_NO_METRICS: Final[str] = (
+    r"\midrule"
+    "\n"
+    r"\multicolumn{16}{@{}l}{\itshape metrics.json not found: "
+    r"run \texttt{ran evaluate} for this run.} \\"
+)
+
+
+def _read(path: Path, /) -> dict[str, Any] | None:
+    """One JSON artifact, or `None` when it is absent or unreadable."""
+    try:
+        return cast("dict[str, Any]", json.loads(path.read_text(encoding="utf-8")))
+    except OSError, ValueError:
+        return None
+
+
+def _variables(config: Mapping[str, Any], /) -> tuple[str, ...]:
+    """The run's column names: recorded for a jet run, positional otherwise."""
+    recorded: object = config.get("variables")
+    if recorded:
+        return tuple(cast("Sequence[str]", recorded))
+    return tuple(f"dim_{i}" for i in range(int(config["dim"])))
+
+
+def _table(
+    level: str,
+    variables: Sequence[str],
+    ran: Mapping[str, Any] | None,
+    ibu: Mapping[str, Any] | None,
+    skipped: frozenset[str],
+    /,
+) -> str:
+    """A metrics body, or the not-found row when there are no metrics."""
+    if not ran:
+        return _NO_METRICS
+    return metrics_table(level, variables, ran, ibu, skipped)
+
+
+def render(run_dir: Path, /) -> str:
+    """The fully substituted LaTeX source for one run directory."""
+    # There is no run without a config, so this is the one hard error: every
+    # other artifact degrades to dashes or a labelled row.
+    config_path: Path = run_dir / "config.json"
+    config: dict[str, Any] | None = _read(config_path)
+    if config is None:
+        state: str = "is unreadable" if config_path.exists() else "does not exist"
+        msg: str = f"{config_path} {state}: not a run directory"
+        raise FileNotFoundError(msg)
+
+    # `run_dir / ARTIFACTS_DIR` rather than `artifacts_dir(...)`: rendering
+    # reads, and must not create a directory in something that is not a run.
+    artifacts: Path = run_dir / ARTIFACTS_DIR
+    ran: dict[str, Any] | None = _read(artifacts / "metrics.json")
+    ibu: dict[str, Any] | None = _read(artifacts / "metrics_ibu.json")
+    timings: dict[str, Any] | None = _read(artifacts / "timings.json")
+    skipped: frozenset[str] = skipped_variables(run_dir, ibu)
+    variables: tuple[str, ...] = _variables(config)
+
+    source: str = load_template()
+    for token, value in (
+        ("<<RUN_NAME>>", run_dir.name),
+        ("<<CONFIG_ROWS>>", config_rows(config, timings)),
+        ("<<TIMINGS_ROWS>>", timing_rows(timings) if timings else ""),
+        ("<<DETECTOR_TABLE>>", _table("detector", variables, ran, ibu, skipped)),
+        ("<<PARTICLE_TABLE>>", _table("particle", variables, ran, ibu, skipped)),
+        # Absolute: `pdflatex` runs in `artifacts/`, so a relative path would
+        # not resolve, and a sweep arm's directory name (`lrg1e-4_seed03`)
+        # cannot be reconstructed from a bare basename either.
+        ("<<FIGURE_DIR>>", str(artifacts.resolve())),
+    ):
+        source = source.replace(token, value)
+
+    left: list[str] = TEMPLATE_TOKEN.findall(source)
+    if left:
+        msg = f"template tokens with no value: {', '.join(sorted(set(left)))}"
+        raise ValueError(msg)
+    return source
+
+
+_LATEX_ARGS: Final[tuple[str, ...]] = (
+    "pdflatex",
+    "-interaction=nonstopmode",
+    "-halt-on-error",
+)
+# Kept on failure so the compile can be debugged; removed on success so the run
+# root holds only `report.pdf` and `config.json`.
+_AUX_SUFFIXES: Final[tuple[str, ...]] = (".aux", ".log", ".out")
+
+
+def _compile(source: Path, artifacts: Path, run_dir: Path, /) -> None:
+    r"""Run `pdflatex` twice, from `artifacts/`, emitting into the run root.
+
+    Twice because the first pass cannot know the `\includegraphics` box sizes
+    or the final page count, and the header's page number depends on both.
+    """
+    if shutil.which("pdflatex") is None:
+        msg: str = (
+            "pdflatex is not on PATH. Install a TeX distribution, or pass "
+            "--no-compile to emit report.tex alone."
+        )
+        raise RuntimeError(msg)
+
+    for _pass in range(2):
+        # Fixed argv, no shell, and the only interpolated element is a path
+        # this process just wrote.
+        completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [*_LATEX_ARGS, f"-output-directory={run_dir}", source.name],
+            cwd=artifacts,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            tail: str = "\n".join(completed.stdout.splitlines()[-40:])
+            msg = f"pdflatex failed for {run_dir.name}:\n{tail}"
+            raise RuntimeError(msg)
+
+
+def build_report(
+    run_dir: Path, /, *, force: bool = False, compile_pdf: bool = True
+) -> Path:
+    """Write `artifacts/report.tex`, compile `report.pdf` at the run root.
+
+    Returns what it produced: the PDF, or the LaTeX source under
+    `--no-compile`.
+    """
+    pdf: Path = run_dir / "report.pdf"
+    if compile_pdf and pdf.exists() and not force:
+        logger.info("%s: report.pdf exists, skipping (use --force)", run_dir.name)
+        return pdf
+
+    source: str = render(run_dir)
+    tex: Path = artifacts_dir(run_dir) / "report.tex"
+    _ = tex.write_text(source, encoding="utf-8")
+    if not compile_pdf:
+        logger.info("%s: saved %s", run_dir.name, tex)
+        return tex
+
+    _compile(tex, tex.parent, run_dir)
+    for suffix in _AUX_SUFFIXES:
+        (run_dir / f"report{suffix}").unlink(missing_ok=True)
+    logger.info("%s: saved %s", run_dir.name, pdf)
+    return pdf

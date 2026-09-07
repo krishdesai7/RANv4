@@ -404,15 +404,29 @@ def evaluate_single(
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, MetricRecord]:
-    """Run IBU on a single run's dataset and save comparison metrics."""
-    out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
+    """Run IBU on a single run's dataset and save comparison metrics.
 
-    if out_path.exists() and not force:
+    The cache hit requires both `metrics_ibu.json` and `ibu_outcomes.json` to
+    exist -- a directory holding only the former is an incomplete result (an
+    older run, or one interrupted between the two writes), and Task 12 needs
+    the outcomes file to mark variables IBU refused to unfold. Missing either
+    file is treated as a cache miss and recomputes both.
+    """
+    out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
+    outcomes_path: Path = artifacts_dir(run_dir) / "ibu_outcomes.json"
+
+    if out_path.exists() and outcomes_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
         return cast("dict[str, MetricRecord]", json.loads(s=out_path.read_text()))
 
     raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
     config: RunConfig = parse_run_config(raw_config)
+    if out_path.exists() and not outcomes_path.exists():
+        logger.info(
+            "%s: metrics_ibu.json exists but ibu_outcomes.json is missing, "
+            "recomputing both",
+            run_dir.name,
+        )
     logger.info(
         "%s: running IBU (niter=%d, purity=%.4f)...",
         run_dir.name,

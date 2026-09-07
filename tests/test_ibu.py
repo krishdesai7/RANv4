@@ -476,14 +476,42 @@ def _jets_like_splits(dim: int, n: int = 64, seed: int = 51) -> DatasetSplits:
     return RANDataset(batch_size=8, seed=seed).splits_from_data(pops.interleave())
 
 
+def _skip_forcing_splits(dim: int = 2, n: int = 64, seed: int = 51) -> DatasetSplits:
+    """Like `_jets_like_splits`, but the second gen column is a constant.
+
+    A constant `mc_gen` column makes `_purity_bins` return a single edge (its
+    `while` loop never runs, since `edges[0] == gen.max()` from the start), so
+    `unfold_variable` genuinely takes its `n_bins < 2` skip branch -- no
+    monkeypatch of `_purity_bins`/`unfold_variable` involved.
+    """
+    rng: np.random.Generator = np.random.default_rng(seed=seed)
+    z_gen: NDArray[np.single] = rng.normal(size=(n, dim)).astype(dtype=np.single)
+    z_gen[:, 1] = np.single(5.0)
+    x_sim: NDArray[np.single] = (z_gen + rng.normal(0, 0.4, size=(n, dim))).astype(
+        dtype=np.single
+    )
+    x_data: NDArray[np.single] = rng.normal(size=(n, dim)).astype(dtype=np.single)
+    truth: NDArray[np.single] = (z_gen + rng.normal(0, 0.1, size=(n, dim))).astype(
+        dtype=np.single
+    )
+    pops: Populations = Populations.create(
+        mc=Events(z_gen, x_sim), data=x_data, truth=truth
+    )
+    return RANDataset(batch_size=8, seed=seed).splits_from_data(pops.interleave())
+
+
 def _run_with_ibu(
-    tmp_path: Path, variables: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    variables: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    splits: DatasetSplits | None = None,
 ) -> Path:
     """A run directory with real `metrics.json`/`metrics_ibu.json` output, with
     the dataset load stubbed so the test needs no jets download.
     """
     dim: int = len(variables)
-    splits: DatasetSplits = _jets_like_splits(dim)
+    if splits is None:
+        splits = _jets_like_splits(dim)
     monkeypatch.setattr(evaluate, "_load_splits", lambda *_a, **_k: splits)
     monkeypatch.setattr(shared, "_load_splits", lambda *_a, **_k: splits)
 
@@ -533,3 +561,59 @@ def test_ibu_records_which_variables_it_gave_up_on(
     assert all(
         set(o) == {"variable_name", "status", "n_bins", "skip_reason"} for o in outcomes
     )
+
+
+def test_ibu_persists_a_skipped_variables_reason_and_bin_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The branch the outcomes file exists for, genuinely triggered.
+
+    `skip_reason` and `n_bins` are what Task 12 renders for a variable IBU
+    refused to unfold, and this is also the branch that fires on the
+    project's real reference run, for `z_g`.
+    """
+    variables = ("m", "w")
+    run_dir: Path = _run_with_ibu(
+        tmp_path,
+        variables,
+        monkeypatch,
+        splits=_skip_forcing_splits(dim=len(variables)),
+    )
+
+    outcomes: list[dict[str, Any]] = json.loads(
+        (run_dir / "artifacts/ibu_outcomes.json").read_text()
+    )
+    by_name: dict[str, dict[str, Any]] = {o["variable_name"]: o for o in outcomes}
+
+    assert by_name["m"]["status"] == "completed"
+
+    skipped: dict[str, Any] = by_name["w"]
+    assert skipped["status"] == "skipped"
+    assert isinstance(skipped["skip_reason"], str)
+    assert skipped["skip_reason"]
+    assert isinstance(skipped["n_bins"], int)
+    assert type(skipped["n_bins"]) is int  # not a numpy integer subclass
+
+
+def test_ibu_cache_recomputes_when_outcomes_file_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`metrics_ibu.json` alone is an incomplete result, not a cache hit.
+
+    A directory holding it without `ibu_outcomes.json` beside it -- an older
+    run, or one interrupted between the two writes -- must be recomputed
+    rather than treated as done, or Task 12 never gets an outcomes file short
+    of `--force`.
+    """
+    run_dir: Path = _run_with_ibu(tmp_path, ("m", "w"), monkeypatch)
+    metrics_path: Path = run_dir / "artifacts/metrics_ibu.json"
+    outcomes_path: Path = run_dir / "artifacts/ibu_outcomes.json"
+    assert outcomes_path.exists()
+
+    outcomes_path.unlink()
+    _ = metrics_path.write_text(data="{}")  # simulates the incomplete state
+
+    _ = ibu.evaluate_single(run_dir)
+
+    assert outcomes_path.exists()
+    assert json.loads(metrics_path.read_text()) != {}

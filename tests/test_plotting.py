@@ -29,7 +29,7 @@ from ran.plotting import (
     plot_losses,
     plot_selection,
 )
-from ran.rantypes import Events, Populations
+from ran.rantypes import JET_OBS, SUBSTRUCTURE_VARIABLES, Events, Populations
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -123,7 +123,7 @@ def test_the_main_panel_prunes_its_lowest_tick() -> None:
 def test_multilevel_figure_keeps_rendered_content_inside_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fixed margins must contain labels and titles, not just axes rectangles."""
+    """`tight_layout` must contain labels and titles, not just axes rectangles."""
     captured: list[Figure] = []
 
     def capture(figure: Figure, save_path: Path) -> None:
@@ -156,6 +156,137 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         assert content.y0 >= page.y0
         assert content.x1 <= page.x1
         assert content.y1 <= page.y1
+
+
+_LAST_FIGURE: list[Figure] = []
+
+
+def _capture_save(figure: Figure, save_path: Path) -> None:
+    """A `_save_fig` stand-in that records the figure instead of writing it."""
+    del save_path
+    _LAST_FIGURE.append(figure)
+
+
+def _last_drawn_figure() -> Figure:
+    return _LAST_FIGURE[-1]
+
+
+def _var_info_for(variables: tuple[str, ...]) -> list[dict[str, object]]:
+    """One `VarInfo`-shaped dict per column, in column (not display) order."""
+    return [
+        {
+            "xlim": JET_OBS[name].xlim,
+            "xlabel": JET_OBS[name].xlabel,
+            "symbol": JET_OBS[name].symbol,
+            "mu": 0.0,
+            "sigma": 1.0,
+        }
+        for name in variables
+    ]
+
+
+def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Draw a synthetic 12-column detector-level figure (nature/mc/weights)."""
+    rng = np.random.default_rng(seed=0)
+    dim = len(SUBSTRUCTURE_VARIABLES)
+    nature = rng.normal(size=(64, dim)).astype(np.single)
+    mc = rng.normal(size=(64, dim)).astype(np.single)
+    w = np.ones(64, dtype=np.single)
+    ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
+    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    _plot_level(
+        nature,
+        mc,
+        w,
+        _DETECTOR,
+        save_path,
+        cast("list[Any]", _var_info_for(SUBSTRUCTURE_VARIABLES)),
+        ibu_weights,
+        variables=SUBSTRUCTURE_VARIABLES,
+    )
+
+
+def _panel_titles_for(
+    variables: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> list[str]:
+    """Titles of a jet-level figure's panels, in drawn (display) order."""
+    rng = np.random.default_rng(seed=1)
+    dim = len(variables)
+    nature = rng.normal(size=(64, dim)).astype(np.single)
+    mc = rng.normal(size=(64, dim)).astype(np.single)
+    w = np.ones(64, dtype=np.single)
+    ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
+    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    _plot_level(
+        nature,
+        mc,
+        w,
+        _DETECTOR,
+        tmp_path / "levels.pdf",
+        cast("list[Any]", _var_info_for(variables)),
+        ibu_weights,
+        variables=variables,
+    )
+    figure = _last_drawn_figure()
+    return [title for ax in figure.axes if (title := ax.get_title())]
+
+
+def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
+    """A 1D Gaussian-shaped level figure: no `var_info`, no `variables`."""
+    rng = np.random.default_rng(seed=2)
+    nature = rng.normal(size=(64, 1)).astype(np.single)
+    mc = rng.normal(size=(64, 1)).astype(np.single)
+    w = np.ones(64, dtype=np.single)
+    ibu_weights = [np.ones(64, dtype=np.single)]
+    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, ibu_weights)
+    return _last_drawn_figure()
+
+
+def test_twelve_observables_are_drawn_four_rows_by_three(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 1x12 column is not a figure anyone reads."""
+    save_path: Path = tmp_path / "detector.pdf"
+    _plot_twelve_dim_level(save_path, monkeypatch)
+
+    figure: Figure = _last_drawn_figure()
+    hist_axes = [a for a in figure.axes if a.get_ylabel() == "Events"]
+    assert len(hist_axes) == 12
+
+    columns: set[float] = {round(a.get_position().x0, 3) for a in hist_axes}
+    rows: set[float] = {round(a.get_position().y0, 3) for a in hist_axes}
+    assert len(columns) == 3
+    assert len(rows) == 4
+
+
+def test_panels_are_drawn_in_display_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Panel 0 is `m`, panel 1 is the soft-drop mass, not the multiplicity."""
+    titles: list[str] = _panel_titles_for(SUBSTRUCTURE_VARIABLES, tmp_path, monkeypatch)
+    assert titles[0].startswith("Jet Mass")
+    assert titles[1].startswith("Soft Drop Jet Mass")
+
+
+def test_a_single_dimension_still_draws_one_panel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 1D Gaussian config must be unaffected."""
+    figure: Figure = _one_dim_level(tmp_path, monkeypatch)
+    assert len([a for a in figure.axes if a.get_ylabel() == "Events"]) == 1
+
+
+def test_a_variable_subset_stays_in_physics_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--var` selecting three of twelve must still lay out sensibly and keep
+    physics order, not the order the flags happened to be given in."""
+    subset = ("tau21", "m", "zg")
+    titles: list[str] = _panel_titles_for(subset, tmp_path, monkeypatch)
+    assert titles[0].startswith("Jet Mass")
+    assert titles[1].startswith("Groomed Jet Momentum Fraction")
+    assert titles[2].startswith(r"$N$-subjettiness")
 
 
 def test_plot_levels_evaluates_generator_once_per_chunk(tmp_path: Path) -> None:

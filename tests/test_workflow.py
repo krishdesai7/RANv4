@@ -506,6 +506,7 @@ class TestDrawFiguresSelection:
             1,
             None,
             -1,
+            None,
             plots=True,
         )
 
@@ -517,6 +518,7 @@ class TestDrawFiguresSelection:
             "particle_path": tmp_path / "artifacts" / "particle_level.pdf",
             "var_info": None,
             "ibu_weights": None,
+            "variables": None,
         }
         assert calls["plot_losses"]
 
@@ -542,6 +544,7 @@ class TestDrawFiguresSelection:
             1,
             None,
             5,
+            None,
             plots=True,
         )
 
@@ -584,11 +587,12 @@ def _stub_best_epoch_reload(
         dim: int,
         var_info: None,
         best_epoch: int,
+        variables: tuple[str, ...] | None,
         /,
         *,
         plots: bool,
     ) -> None:
-        del run_dir, splits, g, history, dim, var_info, plots
+        del run_dir, splits, g, history, dim, var_info, variables, plots
         seen["best_epoch"] = best_epoch
 
     monkeypatch.setattr(target=workflow, name="_draw_figures", value=fake_draw_figures)

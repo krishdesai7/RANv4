@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -13,6 +14,7 @@ from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
 from .evaluate import _get_weights
+from .rantypes import display_order
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
 
     from matplotlib.axes import Axes
     from matplotlib.container import BarContainer
-    from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+    from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec, SubplotSpec
     from matplotlib.patches import Polygon
     from numpy.typing import NDArray
 
@@ -308,6 +310,42 @@ def _panel_spec(
     )
 
 
+def _draw_panel(
+    figure: Figure,
+    cell: SubplotSpec,
+    i: int,
+    dim: int,
+    nature: EventArray,
+    mc: EventArray,
+    w: EventArray,
+    var_info: list[VarInfo] | None,
+    style: _LevelStyle,
+    ibu_weights: list[EventArray] | None,
+) -> None:
+    """Draw dimension `i`'s stacked hist+ratio panel into `cell`."""
+    inner_grid: GridSpecFromSubplotSpec = cell.subgridspec(
+        nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.0
+    )
+    ax: Axes = figure.add_subplot(inner_grid[0])
+    ax_r: Axes = figure.add_subplot(inner_grid[1], sharex=ax)
+    ax.tick_params(labelbottom=False)
+
+    panel: _PanelSpec = _panel_spec(i, dim, nature, mc, var_info, style)
+    _hist_ratio_panel(
+        ax,
+        ax_r,
+        x_nature=panel.nature,
+        x_mc=panel.mc,
+        w_ran=w,
+        bins=panel.bins.tolist(),
+        nature_label=style.nature_label,
+        mc_label=style.mc_label,
+        xlabel=panel.xlabel,
+        title=panel.title,
+        w_ibu=ibu_weights[i] if ibu_weights is not None else None,
+    )
+
+
 def _plot_level(
     nature: EventArray,
     mc: EventArray,
@@ -316,43 +354,48 @@ def _plot_level(
     save_path: str | Path,
     var_info: list[VarInfo] | None,
     ibu_weights: list[EventArray] | None,
+    variables: tuple[str, ...] | None = None,
 ) -> None:
-    """Draw one stacked hist+ratio panel per dimension and save the figure."""
-    dim: int = nature.shape[1]
-    height: float = style.height_per_dim * dim
-    figure = Figure(figsize=(8, height))
-    figure.canvas = FigureCanvasPdf(figure)
-    outer_grid: GridSpec = figure.add_gridspec(
-        nrows=dim,
-        ncols=1,
-        hspace=0.35,
-        left=0.14,
-        right=0.96,
-        bottom=0.75 / height,
-        top=1 - 0.5 / height,
-    )
-    for i in range(dim):
-        inner_grid: GridSpecFromSubplotSpec = outer_grid[i].subgridspec(
-            nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.0
-        )
-        ax: Axes = figure.add_subplot(inner_grid[0])
-        ax_r: Axes = figure.add_subplot(inner_grid[1], sharex=ax)
-        ax.tick_params(labelbottom=False)
+    """Draw one stacked hist+ratio panel per dimension, laid out as a grid.
 
-        panel: _PanelSpec = _panel_spec(i, dim, nature, mc, var_info, style)
-        _hist_ratio_panel(
-            ax,
-            ax_r,
-            x_nature=panel.nature,
-            x_mc=panel.mc,
-            w_ran=w,
-            bins=panel.bins.tolist(),
-            nature_label=style.nature_label,
-            mc_label=style.mc_label,
-            xlabel=panel.xlabel,
-            title=panel.title,
-            w_ibu=ibu_weights[i] if ibu_weights is not None else None,
+    Panels are at most 3 to a row, and ordered by `display_order` on
+    `variables` (or the `dim_i` identity for a non-jet run) rather than by
+    raw column index, so a 12-observable jet run reads as a 4x3 grid in
+    physics order instead of a 1x12 column.
+    """
+    dim: int = nature.shape[1]
+    ncols: int = min(3, dim)
+    nrows: int = math.ceil(dim / ncols)
+    figure = Figure(figsize=(4.0 * ncols, style.height_per_dim * nrows))
+    figure.canvas = FigureCanvasPdf(figure)
+    # Absolute margins in inches do not survive a figure whose height now
+    # varies with `nrows`; `tight_layout` at the end replaces them. Row/column
+    # spacing goes through `tight_layout`'s own `h_pad` below rather than an
+    # `hspace=` here: passing `hspace` marks this `GridSpec` as "locally
+    # modified" (`GridSpec.locally_modified_subplot_params`), which makes
+    # `tight_layout` treat every nested Axes as unrecognized and silently fall
+    # back to Matplotlib's default (too-small) margins instead of computed
+    # ones -- visible as axis labels rendered off the left edge of the page.
+    outer_grid: GridSpec = figure.add_gridspec(nrows=nrows, ncols=ncols)
+
+    names: Sequence[str] = (
+        variables if variables is not None else [f"dim_{i}" for i in range(dim)]
+    )
+    order: tuple[int, ...] = display_order(names)
+    for position, i in enumerate(order):
+        _draw_panel(
+            figure,
+            outer_grid[position // ncols, position % ncols],
+            i,
+            dim,
+            nature,
+            mc,
+            w,
+            var_info,
+            style,
+            ibu_weights,
         )
+    figure.tight_layout(h_pad=2.0)
     _save_fig(figure, save_path=Path(save_path))
 
 
@@ -362,6 +405,7 @@ def plot_detector_level(
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
     ibu_weights: list[EventArray] | None = None,
+    variables: tuple[str, ...] | None = None,
 ) -> None:
     test: Populations = _collect_data(test_dataset)
 
@@ -373,6 +417,7 @@ def plot_detector_level(
         save_path=save_path,
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
 
 
@@ -382,6 +427,7 @@ def plot_particle_level(
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
     ibu_weights: list[EventArray] | None = None,
+    variables: tuple[str, ...] | None = None,
 ) -> None:
     test: Populations = _collect_data(test_dataset)
 
@@ -393,6 +439,7 @@ def plot_particle_level(
         save_path=save_path,
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
 
 
@@ -403,6 +450,7 @@ def plot_levels(
     particle_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
     ibu_weights: list[EventArray] | None = None,
+    variables: tuple[str, ...] | None = None,
 ) -> None:
     """Draw both physics levels from one partition and generator evaluation."""
     test: Populations = _collect_data(test_dataset)
@@ -415,6 +463,7 @@ def plot_levels(
         save_path=detector_path,
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
     _plot_level(
         nature=test.require_truth(),
@@ -424,6 +473,7 @@ def plot_levels(
         save_path=particle_path,
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
 
 

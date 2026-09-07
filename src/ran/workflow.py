@@ -265,6 +265,19 @@ def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     return g, history
 
 
+def _display_variables(
+    dataset: DatasetName, variables: tuple[str, ...]
+) -> tuple[str, ...] | None:
+    """Column names for `_plot_level`'s presentation order, or `None`.
+
+    Only a jet run has named columns; a Gaussian run's `variables` argument is
+    unused filler, and passing it through would give `display_order` real
+    names to (fail to) match against instead of the `dim_i` identity it falls
+    back to.
+    """
+    return variables if dataset == DatasetName.jets else None
+
+
 def _draw_figures(
     run_dir: Path,
     splits: DatasetSplits,
@@ -273,6 +286,7 @@ def _draw_figures(
     dim: int,
     var_info: list[VarInfo] | None,
     best_epoch: int,
+    variables: tuple[str, ...] | None,
     /,
     *,
     plots: bool,
@@ -305,6 +319,7 @@ def _draw_figures(
         particle_path=artifacts / "particle_level.pdf",
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
     plot_losses(history, save_path=artifacts / "losses.pdf")
     if "val_mmd" in history:
@@ -569,7 +584,15 @@ def _pipeline(
 
     with phase("plots"):
         _draw_figures(
-            run_dir, splits, g, history, dim, var_info, best_epoch, plots=plots
+            run_dir,
+            splits,
+            g,
+            history,
+            dim,
+            var_info,
+            best_epoch,
+            _display_variables(dataset, variables),
+            plots=plots,
         )
 
     # Metrics (run last so failures don't block plots/checkpoints)

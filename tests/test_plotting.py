@@ -15,7 +15,10 @@ import numpy as np
 import pytest
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
+from ran import plotting
 from ran.data import ArrayDataset
 from ran.plotting import (
     _DETECTOR,
@@ -66,8 +69,11 @@ def test_filled_histograms_use_one_artist_per_distribution() -> None:
 def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Reintroducing ``bbox_inches='tight'`` causes an extra traversal of
-    every artist in the tall multi-panel figures.
+    """`_plot_level` opts out with `tight=False`: its tall multi-panel
+    figures already stay inside the page via fixed `GridSpec` margins (see
+    `test_multilevel_figure_keeps_rendered_content_inside_page`), and
+    reintroducing ``bbox_inches='tight'`` there causes an extra traversal of
+    every artist on a page that can run to dozens of inches.
     """
     calls: list[tuple[Path, dict[str, Any]]] = []
 
@@ -77,9 +83,63 @@ def test_save_fig_uses_the_figure_page_without_a_second_tight_render(
     monkeypatch.setattr(Figure, "savefig", record)
     out = tmp_path / "figure.pdf"
 
-    _save_fig(Figure(), out)
+    _save_fig(Figure(), out, tight=False)
 
     assert calls == [(out, {})]
+
+
+def test_ran_is_drawn_more_prominently_than_the_baseline() -> None:
+    """RAN's step line was fainter than IBU's. On the same panel."""
+    assert plotting.ALPHA_RAN > plotting.ALPHA_IBU > plotting.ALPHA_FILL
+
+
+def test_ran_has_a_colour_of_its_own() -> None:
+    assert plotting.COLOR_RAN not in {
+        plotting.COLOR_NATURE,
+        plotting.COLOR_MC,
+        plotting.COLOR_IBU,
+        "black",
+    }
+
+
+def test_saving_a_figure_trims_to_its_contents(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without `bbox_inches`, the y-labels are clipped by the page edge."""
+    seen: dict[str, object] = {}
+    figure = Figure()
+    monkeypatch.setattr(
+        target=figure, name="savefig", value=lambda **kw: seen.update(kw)
+    )
+
+    _save_fig(figure, save_path=tmp_path / "f.pdf")
+
+    assert seen["bbox_inches"] == "tight"
+
+
+def test_the_main_panel_prunes_its_lowest_tick() -> None:
+    """The main axis `0` and the ratio axis `1.5` overprinted each other."""
+    figure = Figure()
+    figure.canvas = FigureCanvasPdf(figure)
+    ax, ax_r = figure.subplots(nrows=2)
+    rng = np.random.default_rng(seed=0)
+
+    _hist_ratio_panel(
+        ax,
+        ax_r,
+        x_nature=rng.normal(size=512).astype(np.single),
+        x_mc=rng.normal(size=512).astype(np.single),
+        w_ran=np.ones(512, dtype=np.single),
+        bins=20,
+        nature_label="Data",
+        mc_label="Sim",
+        xlabel="x",
+        title="t",
+    )
+    figure.canvas.draw()
+
+    assert isinstance(ax.yaxis.get_major_locator(), MaxNLocator)
+    assert ax.get_yticks()[0] > ax.get_ylim()[0]
 
 
 def test_multilevel_figure_keeps_rendered_content_inside_page(
@@ -88,8 +148,8 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
     """Fixed margins must contain labels and titles, not just axes rectangles."""
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path) -> None:
-        del save_path
+    def capture(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
+        del save_path, tight
         captured.append(figure)
 
     monkeypatch.setattr("ran.plotting._save_fig", capture)
@@ -158,8 +218,8 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
     dataset = ArrayDataset(populations.interleave(), batch_size=2)
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path) -> None:
-        del save_path
+    def capture(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
+        del save_path, tight
         captured.append(figure)
 
     def generator(z: NDArray[np.single]) -> NDArray[np.single]:

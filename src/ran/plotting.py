@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
 from matplotlib.font_manager import fontManager
+from matplotlib.ticker import MaxNLocator
 
 from .evaluate import _get_weights
 
@@ -46,6 +47,20 @@ mpl.rcParams["grid.linewidth"] = 0.5
 mpl.rcParams["grid.alpha"] = 0.6
 mpl.rcParams["grid.linestyle"] = "--"
 mpl.rcParams["lines.markerfacecolor"] = "none"
+
+
+# One place for the figure's visual hierarchy, rather than seven literals
+# scattered through `_hist_ratio_panel`. RAN's step line used to be black at
+# alpha 0.35 while IBU's ratio line was at 0.75 -- the baseline drawn twice as
+# prominently as the method being showcased, on the same panel.
+COLOR_NATURE: Final[str] = "C0"  # Data / Truth
+COLOR_MC: Final[str] = "C1"  # Sim / Gen
+COLOR_IBU: Final[str] = "green"
+COLOR_RAN: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
+
+ALPHA_FILL: Final[float] = 0.35  # the two filled background histograms
+ALPHA_IBU: Final[float] = 0.75
+ALPHA_RAN: Final[float] = 0.90
 
 
 # `weighted_mmd` is the unbiased U-statistic estimator, which is negative
@@ -108,8 +123,8 @@ def _hist_ratio_panel(
             x_nature,
             bins=bins,
             histtype="stepfilled",
-            alpha=0.35,
-            color="C0",
+            alpha=ALPHA_FILL,
+            color=COLOR_NATURE,
             label=nature_label,
         ),
     )
@@ -119,8 +134,8 @@ def _hist_ratio_panel(
             x_mc,
             bins=cast(typ=Sequence[float], val=h_nature[1]),
             histtype="stepfilled",
-            alpha=0.35,
-            color="C1",
+            alpha=ALPHA_FILL,
+            color=COLOR_MC,
             label=mc_label,
         ),
     )
@@ -131,10 +146,10 @@ def _hist_ratio_panel(
             bins=cast(typ=Sequence[float], val=h_nature[1]),
             weights=w_ran,
             histtype="step",
-            color="black",
+            color=COLOR_RAN,
             linestyle="-",
             linewidth=4,
-            alpha=0.35,
+            alpha=ALPHA_RAN,
             label="RAN",
         ),
     )
@@ -158,18 +173,18 @@ def _hist_ratio_panel(
     _ = ax_r.plot(
         centres,
         ratio_mc,
-        color="C1",
+        color=COLOR_MC,
         marker="d",
         linestyle="--",
-        alpha=0.35,
+        alpha=ALPHA_FILL,
     )
     _ = ax_r.plot(
         centres,
         ratio_ran,
-        color="black",
+        color=COLOR_RAN,
         marker="o",
         linestyle="--",
-        alpha=0.35,
+        alpha=ALPHA_RAN,
     )
 
     if w_ibu is not None:
@@ -180,10 +195,10 @@ def _hist_ratio_panel(
                 bins=cast(typ=Sequence[float], val=h_nature[1]),
                 weights=w_ibu,
                 histtype="step",
-                color="green",
+                color=COLOR_IBU,
                 linestyle=":",
                 linewidth=4,
-                alpha=0.35,
+                alpha=ALPHA_IBU,
                 label="IBU",
             ),
         )
@@ -197,21 +212,41 @@ def _hist_ratio_panel(
         _ = ax_r.plot(
             centres,
             ratio_ibu,
-            color="green",
+            color=COLOR_IBU,
             marker="s",
             linestyle="--",
-            alpha=0.75,
+            alpha=ALPHA_IBU,
         )
     _ = ax_r.axhline(y=1, color="gray", linewidth=0.5, alpha=0.75)
     width: float = 0.5
     _ = ax_r.set_ylim(bottom=1 - width, top=1 + width)
     _ = ax_r.set_ylabel(ylabel=f"Ratio to\n{nature_label}")
+    # The main panel's bottom tick and the ratio panel's top tick land at the
+    # same height where the two axes meet and overprint each other. `prune`
+    # drops the lowest label only when it sits at the axis edge, which is
+    # exactly the collision and nothing else.
+    ax.yaxis.set_major_locator(locator=MaxNLocator(prune="lower"))
     _ = ax_r.set_xlabel(xlabel)
 
 
-def _save_fig(figure: Figure, save_path: Path) -> None:
+def _save_fig(figure: Figure, save_path: Path, *, tight: bool = True) -> None:
+    """Save `figure`, trimmed to its rendered contents by default.
+
+    Without `bbox_inches="tight"` the y-labels are clipped by the page edge.
+    `plot_losses` always passed it and never clipped; `plot_selection` did
+    not and did -- both now go through this one save path instead of calling
+    `figure.savefig` themselves. `_plot_level` opts out with `tight=False`:
+    its tall multi-panel figures already stay inside the page via the fixed
+    `GridSpec` margins in `_plot_level` (see
+    `test_multilevel_figure_keeps_rendered_content_inside_page`), and a tight
+    bbox there means an extra traversal of every artist on a page that can
+    run to dozens of inches.
+    """
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(fname=save_path)
+    if tight:
+        figure.savefig(fname=save_path, bbox_inches="tight")
+    else:
+        figure.savefig(fname=save_path)
     logger.info("Saved %s", save_path)
 
 
@@ -322,7 +357,7 @@ def _plot_level(
             title=panel.title,
             w_ibu=ibu_weights[i] if ibu_weights is not None else None,
         )
-    _save_fig(figure, save_path=Path(save_path))
+    _save_fig(figure, save_path=Path(save_path), tight=False)
 
 
 def plot_detector_level(
@@ -432,8 +467,7 @@ def plot_losses(
     _ = ax.legend()
 
     figure.tight_layout()
-    figure.savefig(fname=save_path, bbox_inches="tight")
-    logger.info("Saved %s", save_path)
+    _save_fig(figure, save_path=Path(save_path))
 
 
 def plot_selection(
@@ -500,5 +534,4 @@ def plot_selection(
 
     _ = ax.legend(loc="best")
     figure.tight_layout()
-    figure.savefig(fname=save_path)
-    logger.info("Saved %s", save_path)
+    _save_fig(figure, save_path=Path(save_path))

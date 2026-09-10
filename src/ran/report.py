@@ -22,7 +22,14 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from importlib import resources
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from .rantypes import ARTIFACTS_DIR, JET_OBS, JET_VARIABLE_GROUPS, artifacts_dir
+from .rantypes import (
+    ARTIFACTS_DIR,
+    JET_OBS,
+    JET_VARIABLE_GROUPS,
+    artifacts_dir,
+    display_order,
+    figure_pages,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -61,7 +68,7 @@ _DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 
 def load_template() -> str:
     """The shipped LaTeX template, as text."""
-    return (resources.files("ran") / "templates" / "report.tex").read_text(
+    return (resources.files(anchor="ran") / "templates" / "report.tex").read_text(
         encoding="utf-8"
     )
 
@@ -138,7 +145,23 @@ def _format_value(value: object, /) -> str:
         # `\texttt{\detokenize{...}}` -- running text, where a `\multicolumn`
         # cell would be exactly the error the dash exists to avoid.
         return _plain(value) if math.isfinite(value) else str(value)
-    return str(value)
+    return str(object=value)
+
+
+def _variables_cell(names: Sequence[str], /) -> str:
+    r"""The observable list as physics symbols, in display order.
+
+    `config.json` records the column order as code identifiers (`tau21`,
+    `f_ch`, `sdm`), which is right for a machine interface and wrong for a
+    table a physicist reads -- the same row in the metrics tables already says
+    `$\tau_{21}$`. Anything without a `JET_OBS` entry (a Gaussian run's
+    `dim_0`) falls back to its escaped name.
+    """
+    ordered: tuple[int, ...] = display_order(names)
+    return ", ".join(
+        JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
+        for name in (names[i] for i in ordered)
+    )
 
 
 def _gaussian_params_cell(params: Mapping[str, Any], /) -> str:
@@ -168,7 +191,7 @@ def _sigma_cell(sigmas: Sequence[float], /) -> str:
     if len(sigmas) == len(_SCALES):
         median: float = sigmas[_SCALES.index(1.0)]
         if all(
-            math.isclose(s, median * scale, rel_tol=1e-6)
+            math.isclose(a=s, b=median * scale, rel_tol=1e-6)
             for s, scale in zip(sigmas, _SCALES, strict=True)
         ):
             return (
@@ -196,8 +219,11 @@ def _wide_lines(entries: Mapping[str, Any], /) -> list[str]:
     r"""`\ConfigWide` rows: the variable list, Gaussian params, MMD sigmas."""
     lines: list[str] = []
     if "variables" in entries:
-        names: str = ", ".join(entries["variables"])
-        lines.append(rf"\ConfigWide{{variables}}{{\ConfigVal{{{names}}}}}")
+        # Symbols, not `\ConfigVal`: the cell is math, not a detokenized
+        # identifier list.
+        lines.append(
+            rf"\ConfigWide{{variables}}{{{_variables_cell(entries['variables'])}}}"
+        )
     if "gaussian_params" in entries:
         cell: str = _gaussian_params_cell(entries["gaussian_params"])
         lines.append(rf"\ConfigWide{{gaussian_params}}{{{cell}}}")
@@ -254,45 +280,72 @@ def timing_rows(timings: Mapping[str, Any], /) -> str:
     return "\n".join(lines)
 
 
-_METRICS: Final[tuple[str, ...]] = ("wasserstein", "jensenshannon", "triangular")
+# What each metric's column is multiplied by before printing, so all three
+# tables read in units of 10^-3 and one exponent covers the report.
+#
+# Raw, a real twelve-observable run spans 6.2e-3..3.0e-1 (Wasserstein) and
+# 8.5e-5..1.3e-2 (JS) -- columns of leading zeros. Scaled they read 6.2..303
+# and 0.085..12.8. `triangular` is NOT scaled here because
+# `evaluate._triangular_from_histograms` already multiplies by 1e3 on the way
+# into `metrics.json`; scaling it again would misstate it by three orders of
+# magnitude, which is exactly the error the header exists to prevent.
+_SCALE: Final[dict[str, float]] = {
+    "wasserstein": 1e3,
+    "jensenshannon": 1e3,
+    "triangular": 1.0,
+}
+
+# Column groups, in the order the report presents them. The token name is what
+# `render` substitutes; the label is the table's own heading.
+_METRICS: Final[tuple[tuple[str, str], ...]] = (
+    ("WASSERSTEIN", "wasserstein"),
+    ("JS", "jensenshannon"),
+    ("VLC", "triangular"),
+)
 
 
 def _row(
     variable: str,
     level: str,
+    metric: str,
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     daggered: bool,
     /,
 ) -> str:
-    """One variable's sixteen cells: label, then Sim/IBU/IBU%/RAN/RAN% x 3."""
+    """One variable's six cells for one metric: label, Sim, IBU, IBU%, RAN, RAN%.
+
+    Six columns rather than the sixteen of a combined table: three metrics
+    side by side needed `adjustbox` to shrink the whole thing to 7pt, which is
+    below what anyone reads. Split, each table sets at full size.
+    """
     symbol: str = (
         JET_OBS[variable].symbol if variable in JET_OBS else latex_text(variable)
     )
     label: str = rf"{symbol}$^\dag$" if daggered else symbol
+    scale: float = _SCALE[metric]
     ours: Mapping[str, float] = ran[f"{level}_{variable}"]
     theirs: Mapping[str, float] | None = (
         ibu.get(f"{level}_{variable}") if ibu is not None else None
     )
 
-    cells: list[str] = [label]
-    for metric in _METRICS:
-        cells.append(decimal(ours[f"{metric}_before"]))
-        if theirs is None:
-            cells.extend((_DASH, _DASH))
-        else:
-            cells.extend(
-                (
-                    decimal(theirs[f"{metric}_after"]),
-                    decimal(theirs[f"{metric}_improvement_pct"]),
-                )
-            )
+    cells: list[str] = [label, decimal(ours[f"{metric}_before"] * scale)]
+    if theirs is None:
+        cells.extend((_DASH, _DASH))
+    else:
         cells.extend(
             (
-                decimal(ours[f"{metric}_after"]),
-                decimal(ours[f"{metric}_improvement_pct"]),
+                decimal(theirs[f"{metric}_after"] * scale),
+                # Improvements are ratios: scaling them would be wrong.
+                decimal(theirs[f"{metric}_improvement_pct"]),
             )
         )
+    cells.extend(
+        (
+            decimal(ours[f"{metric}_after"] * scale),
+            decimal(ours[f"{metric}_improvement_pct"]),
+        )
+    )
     return " & ".join(cells) + r" \\"
 
 
@@ -302,10 +355,8 @@ def _row(
 # that it declined to unfold the observable at all. The row spans all sixteen
 # columns and sits immediately before the template's `\bottomrule`.
 _DAGGER_LEGEND: Final[str] = (
-    r"\multicolumn{16}{@{}l}{\footnotesize $^\dag$ IBU's purity binning "
-    r"produced fewer than two bins for this observable, so IBU declined to "
-    r"unfold it and returned its input unchanged. The improvement shown for "
-    r"it is not a measurement.} \\"
+    r"\multicolumn{6}{@{}l}{\footnotesize $^\dag$ IBU's purity binning "
+    r"produced a single bin, so IBU failed to unfold.} \\"
 )
 
 
@@ -313,16 +364,22 @@ def _group_lines(
     label: str,
     members: Sequence[str],
     level: str,
+    metric: str,
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
 ) -> list[str]:
-    """A rule, an italic heading spanning all 16 columns, then its rows."""
+    """A rule, an upright bold heading spanning the table, then its rows.
+
+    Upright rather than italic: a whole line of italicised text reads as an
+    aside, and these headings are structure. Bold carries the same weight
+    without the slant.
+    """
     return [
         r"\midrule",
-        rf"\multicolumn{{16}}{{@{{}}l}}{{\itshape {label}}} \\",
-        *(_row(v, level, ran, ibu, v in skipped) for v in members),
+        rf"\multicolumn{{6}}{{@{{}}l}}{{\bfseries {label}}} \\",
+        *(_row(v, level, metric, ran, ibu, v in skipped) for v in members),
     ]
 
 
@@ -341,13 +398,14 @@ def _populated_groups(present: frozenset[str], /) -> list[tuple[str, Sequence[st
 
 def metrics_table(
     level: str,
+    metric: str,
     variables: Sequence[str],
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
 ) -> str:
-    """`<<DETECTOR_TABLE>>` / `<<PARTICLE_TABLE>>`: the row bodies only.
+    """One level's row bodies for one metric.
 
     The template owns the tabular, the column specification and the header;
     this owns the rules, the group headings and the data rows. `skipped` names
@@ -359,14 +417,14 @@ def metrics_table(
     lines: list[str] = [
         line
         for label, members in groups
-        for line in _group_lines(label, members, level, ran, ibu, skipped)
+        for line in _group_lines(label, members, level, metric, ran, ibu, skipped)
     ]
     emitted: list[str] = [v for _, members in groups for v in members]
 
     if not lines:  # a non-jet run: rows, no grouping
         emitted = list(variables)
         lines.append(r"\midrule")
-        lines.extend(_row(v, level, ran, ibu, v in skipped) for v in emitted)
+        lines.extend(_row(v, level, metric, ran, ibu, v in skipped) for v in emitted)
 
     # Only when the mark is actually on the page: an unexplained legend is as
     # confusing as an unexplained dagger.
@@ -407,7 +465,7 @@ def skipped_variables(
 _NO_METRICS: Final[str] = (
     r"\midrule"
     "\n"
-    r"\multicolumn{16}{@{}l}{\itshape metrics.json not found: "
+    r"\multicolumn{6}{@{}l}{\itshape metrics.json not found: "
     r"run \texttt{ran evaluate} for this run.} \\"
 )
 
@@ -430,6 +488,7 @@ def _variables(config: Mapping[str, Any], /) -> tuple[str, ...]:
 
 def _table(
     level: str,
+    metric: str,
     variables: Sequence[str],
     ran: Mapping[str, Any] | None,
     ibu: Mapping[str, Any] | None,
@@ -439,7 +498,21 @@ def _table(
     """A metrics body, or the not-found row when there are no metrics."""
     if not ran:
         return _NO_METRICS
-    return metrics_table(level, variables, ran, ibu, skipped)
+    return metrics_table(level, metric, variables, ran, ibu, skipped)
+
+
+def _figure_pages(artifacts: Path, stem: str, dim: int, /) -> str:
+    r"""One `\ReportGraphic` block per page of a paginated level figure.
+
+    `plotting._plot_level` writes the pages of one multi-page PDF, six panels
+    each. The count is `figure_pages(dim)` rather than something read off the
+    file, which keeps `report.py` free of a PDF dependency and free of
+    matplotlib -- the two agree because they share the constant.
+    """
+    path: str = str(artifacts.resolve() / f"{stem}.pdf")
+    return "\n\\clearpage\n".join(
+        rf"\ReportPage{{{path}}}{{{page}}}" for page in range(1, figure_pages(dim) + 1)
+    )
 
 
 def render(run_dir: Path, /) -> str:
@@ -467,8 +540,22 @@ def render(run_dir: Path, /) -> str:
         ("<<RUN_NAME>>", run_dir.name),
         ("<<CONFIG_ROWS>>", config_rows(config, timings)),
         ("<<TIMINGS_ROWS>>", timing_rows(timings) if timings else ""),
-        ("<<DETECTOR_TABLE>>", _table("detector", variables, ran, ibu, skipped)),
-        ("<<PARTICLE_TABLE>>", _table("particle", variables, ran, ibu, skipped)),
+        *(
+            (
+                f"<<{level.upper()}_{token}>>",
+                _table(level, metric, variables, ran, ibu, skipped),
+            )
+            for level in ("detector", "particle")
+            for token, metric in _METRICS
+        ),
+        (
+            "<<DETECTOR_FIGURES>>",
+            _figure_pages(artifacts, "detector_level", len(variables)),
+        ),
+        (
+            "<<PARTICLE_FIGURES>>",
+            _figure_pages(artifacts, "particle_level", len(variables)),
+        ),
         # Absolute: `pdflatex` runs in `artifacts/`, so a relative path would
         # not resolve, and a sweep arm's directory name (`lrg1e-4_seed03`)
         # cannot be reconstructed from a bare basename either.

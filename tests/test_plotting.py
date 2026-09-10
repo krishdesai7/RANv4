@@ -31,9 +31,18 @@ from ran.plotting import (
     plot_losses,
     plot_selection,
 )
-from ran.rantypes import JET_OBS, SUBSTRUCTURE_VARIABLES, Events, Populations
+from ran.rantypes import (
+    JET_OBS,
+    PANEL_COLUMNS,
+    PANELS_PER_PAGE,
+    SUBSTRUCTURE_VARIABLES,
+    Events,
+    Populations,
+    figure_pages,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from numpy.typing import NDArray
@@ -184,11 +193,11 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
     """`tight_layout` must contain labels and titles, not just axes rectangles."""
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path) -> None:
+    def capture(figures: Sequence[Figure], /, *, save_path: Path) -> None:
         del save_path
-        captured.append(figure)
+        captured.extend(figures)
 
-    monkeypatch.setattr("ran.plotting._save_fig", capture)
+    monkeypatch.setattr("ran.plotting._save_pages", capture)
     values = np.array(
         [[-1.0, -0.5], [0.0, 0.2], [0.5, 0.8], [1.0, 1.2]], dtype=np.single
     )
@@ -216,17 +225,30 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         assert content.y1 <= page.y1
 
 
-_LAST_FIGURE: list[Figure] = []
+_LAST_PAGES: list[list[Figure]] = []
 
 
-def _capture_save(figure: Figure, save_path: Path) -> None:
-    """A `_save_fig` stand-in that records the figure instead of writing it."""
+def _capture_save(figures: Sequence[Figure], /, *, save_path: Path) -> None:
+    """A `_save_pages` stand-in that records the pages instead of writing them."""
     del save_path
-    _LAST_FIGURE.append(figure)
+    _LAST_PAGES.append(list(figures))
+
+
+def _drawn_pages() -> list[Figure]:
+    """Every page of the level figure most recently drawn."""
+    return _LAST_PAGES[-1]
 
 
 def _last_drawn_figure() -> Figure:
-    return _LAST_FIGURE[-1]
+    """The first page, for assertions that do not care about pagination."""
+    return _LAST_PAGES[-1][0]
+
+
+def _drawn_panels() -> list[Axes]:
+    """Every histogram panel across every page, in drawn order."""
+    return [
+        a for page in _drawn_pages() for a in page.axes if a.get_ylabel() == "Events"
+    ]
 
 
 def _var_info_for(variables: tuple[str, ...]) -> list[dict[str, object]]:
@@ -251,7 +273,7 @@ def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
-    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -274,7 +296,7 @@ def _panel_titles_for(
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
-    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -285,8 +307,12 @@ def _panel_titles_for(
         ibu_weights,
         variables=variables,
     )
-    figure = _last_drawn_figure()
-    return [title for ax in figure.axes if (title := ax.get_title())]
+    return [
+        title
+        for page in _drawn_pages()
+        for ax in page.axes
+        if (title := ax.get_title())
+    ]
 
 
 def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
@@ -296,26 +322,49 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     mc = rng.normal(size=(64, 1)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     ibu_weights = [np.ones(64, dtype=np.single)]
-    monkeypatch.setattr("ran.plotting._save_fig", _capture_save)
+    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
     _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, ibu_weights)
     return _last_drawn_figure()
 
 
-def test_twelve_observables_are_drawn_four_rows_by_three(
+def test_twelve_observables_are_paginated_three_by_two(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A 1x12 column is not a figure anyone reads."""
+    """A 1x12 column is not a figure anyone reads, and neither is a 3x4 one
+    scaled to fit a portrait page -- at 12x24 inches it is height-limited and
+    each panel renders at ~123pt. Six panels to a page make the figure square,
+    so it fits the page width instead and the panels grow by a third.
+    """
     save_path: Path = tmp_path / "detector.pdf"
     _plot_twelve_dim_level(save_path, monkeypatch)
 
-    figure: Figure = _last_drawn_figure()
-    hist_axes = [a for a in figure.axes if a.get_ylabel() == "Events"]
-    assert len(hist_axes) == 12
+    pages: list[Figure] = _drawn_pages()
+    assert len(pages) == figure_pages(12) == 2
+    assert len(_drawn_panels()) == 12
 
-    columns: set[float] = {round(a.get_position().x0, 3) for a in hist_axes}
-    rows: set[float] = {round(a.get_position().y0, 3) for a in hist_axes}
-    assert len(columns) == 3
-    assert len(rows) == 4
+    for page in pages:
+        hist_axes = [a for a in page.axes if a.get_ylabel() == "Events"]
+        assert len(hist_axes) == PANELS_PER_PAGE
+        columns = {round(a.get_position().x0, 3) for a in hist_axes}
+        rows = {round(a.get_position().y0, 3) for a in hist_axes}
+        assert len(columns) == PANEL_COLUMNS
+        assert len(rows) == 2
+        # Square, so `\includegraphics` fits it to the page width.
+        assert page.get_figwidth() == page.get_figheight()
+
+
+def test_a_page_counter_appears_only_when_there_is_more_than_one_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single-page figure must read exactly as it did before pagination."""
+    _plot_twelve_dim_level(tmp_path / "detector.pdf", monkeypatch)
+    multi = [p.get_suptitle() for p in _drawn_pages()]
+    assert multi == ["Detector Level (1 of 2)", "Detector Level (2 of 2)"]
+
+    _ = _one_dim_level(tmp_path, monkeypatch)
+    assert len(_drawn_pages()) == 1
+    single = _drawn_pages()[0].get_suptitle()
+    assert single == "Detector Level"
 
 
 def test_adjacent_panel_titles_do_not_overlap(
@@ -330,7 +379,7 @@ def test_adjacent_panel_titles_do_not_overlap(
     save_path: Path = tmp_path / "detector.pdf"
     _plot_twelve_dim_level(save_path, monkeypatch)
 
-    figure: Figure = _last_drawn_figure()
+    figure: Figure = _drawn_pages()[0]
     canvas = FigureCanvasAgg(figure)
     canvas.draw()
     renderer = canvas.get_renderer()
@@ -418,14 +467,14 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
     dataset = ArrayDataset(populations.interleave(), batch_size=2)
     captured: list[Figure] = []
 
-    def capture(figure: Figure, save_path: Path) -> None:
+    def capture(figures: Sequence[Figure], /, *, save_path: Path) -> None:
         del save_path
-        captured.append(figure)
+        captured.extend(figures)
 
     def generator(z: NDArray[np.single]) -> NDArray[np.single]:
         return np.ones((len(z), 1), dtype=np.single)
 
-    monkeypatch.setattr("ran.plotting._save_fig", capture)
+    monkeypatch.setattr("ran.plotting._save_pages", capture)
     plot_levels(
         dataset,
         cast("RANModel", generator),

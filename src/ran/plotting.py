@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 
 import matplotlib as mpl
 import numpy as np
-from matplotlib.backends.backend_pdf import FigureCanvasPdf
+from matplotlib.backends.backend_pdf import FigureCanvasPdf, PdfPages
 from matplotlib.figure import Figure
 from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
 from .evaluate import _get_weights
-from .rantypes import display_order
+from .rantypes import PANEL_COLUMNS, PANELS_PER_PAGE, display_order
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -267,6 +267,23 @@ def _save_fig(figure: Figure, save_path: Path) -> None:
     logger.info("Saved %s", save_path)
 
 
+def _save_pages(figures: Sequence[Figure], /, *, save_path: Path) -> None:
+    r"""Save `figures` as the successive pages of one PDF.
+
+    One file rather than `detector_level_1.pdf`, `_2.pdf`, ...: the run
+    directory keeps a single artifact per level, `\\includegraphics[page=k]`
+    selects a page, and `rantypes.figure_pages` tells the report how many
+    there are without opening the file. Each page is trimmed exactly as
+    `_save_fig` trims a single figure -- see that docstring for why the tight
+    bbox is not optional.
+    """
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with PdfPages(save_path) as pdf:
+        for figure in figures:
+            pdf.savefig(figure=figure, bbox_inches="tight")
+    logger.info("Saved %s (%d page(s))", save_path, len(figures))
+
+
 _DETECTOR = _LevelStyle(
     level="detector",
     symbol="x",
@@ -375,48 +392,43 @@ def _draw_panel(
     )
 
 
-def _plot_level(
+def _page_figure(
+    indices: Sequence[int],
+    page: int,
+    pages: int,
+    dim: int,
     nature: EventArray,
     mc: EventArray,
     w: EventArray,
-    style: _LevelStyle,
-    save_path: str | Path,
     var_info: list[VarInfo] | None,
+    style: _LevelStyle,
     ibu_weights: list[EventArray] | None,
-    variables: tuple[str, ...] | None = None,
-) -> None:
-    """Draw one stacked hist+ratio panel per dimension, laid out as a grid.
-
-    Panels are at most 3 to a row, and ordered by `display_order` on
-    `variables` (or the `dim_i` identity for a non-jet run) rather than by
-    raw column index, so a 12-observable jet run reads as a 4x3 grid in
-    physics order instead of a 1x12 column.
-    """
-    dim: int = nature.shape[1]
-    ncols: int = min(3, dim)
-    nrows: int = math.ceil(dim / ncols)
+) -> Figure:
+    """One page of the level figure: up to `PANELS_PER_PAGE` panels."""
+    ncols: int = min(PANEL_COLUMNS, len(indices))
+    nrows: int = math.ceil(len(indices) / ncols)
     figure = Figure(figsize=(4.0 * ncols, style.height_per_dim * nrows))
     figure.canvas = FigureCanvasPdf(figure)
-    # Absolute margins in inches do not survive a figure whose height now
-    # varies with `nrows`; `tight_layout` at the end replaces them. Row/column
-    # spacing goes through `tight_layout`'s own `h_pad` below rather than an
-    # `hspace=` here: passing `hspace` marks this `GridSpec` as "locally
-    # modified" (`GridSpec.locally_modified_subplot_params`), which makes
-    # `tight_layout` treat every nested Axes as unrecognized and silently fall
-    # back to Matplotlib's default (too-small) margins instead of computed
-    # ones -- visible as axis labels rendered off the left edge of the page.
+    # Absolute margins in inches do not survive a figure whose height varies
+    # with `nrows`; `tight_layout` at the end replaces them. Row/column spacing
+    # goes through `tight_layout`'s own `h_pad` below rather than an `hspace=`
+    # here: passing `hspace` marks this `GridSpec` as "locally modified"
+    # (`GridSpec.locally_modified_subplot_params`), which makes `tight_layout`
+    # treat every nested Axes as unrecognized and silently fall back to
+    # Matplotlib's default (too-small) margins instead of computed ones --
+    # visible as axis labels rendered off the left edge of the page.
     outer_grid: GridSpec = figure.add_gridspec(nrows=nrows, ncols=ncols)
-    # States the level once for the whole figure instead of on every panel
-    # title -- see `_panel_spec`. `rect` reserves a slice of the figure height
-    # above `tight_layout`'s own margins so the suptitle has somewhere to sit
-    # that computed layout does not already claim for the top row's titles.
-    _ = figure.suptitle(t=style.title_prefix, fontsize="x-large", y=0.995)
-
-    names: Sequence[str] = (
-        variables if variables is not None else [f"dim_{i}" for i in range(dim)]
+    # States the level once per page instead of on every panel title -- see
+    # `_panel_spec`. The page counter only appears when there is more than one
+    # page, so a single-page figure reads exactly as it did before.
+    title: str = (
+        style.title_prefix
+        if pages == 1
+        else f"{style.title_prefix} ({page} of {pages})"
     )
-    order: tuple[int, ...] = display_order(names)
-    for position, i in enumerate(order):
+    _ = figure.suptitle(t=title, fontsize="x-large", y=0.995)
+
+    for position, i in enumerate(iterable=indices):
         _draw_panel(
             figure,
             outer_grid[position // ncols, position % ncols],
@@ -434,7 +446,57 @@ def _plot_level(
     # verified (see the test below) not to collide with the top row's panel
     # titles across 1-, 2- and 12-panel grids.
     figure.tight_layout(h_pad=2.0, rect=(0.0, 0.0, 1.0, 0.96))
-    _save_fig(figure, save_path=Path(save_path))
+    return figure
+
+
+def _plot_level(
+    nature: EventArray,
+    mc: EventArray,
+    w: EventArray,
+    style: _LevelStyle,
+    save_path: str | Path,
+    var_info: list[VarInfo] | None,
+    ibu_weights: list[EventArray] | None,
+    variables: tuple[str, ...] | None = None,
+) -> None:
+    r"""Draw one stacked hist+ratio panel per dimension, paginated.
+
+    Panels are ordered by `display_order` on `variables` (or the `dim_i`
+    identity for a non-jet run) rather than by raw column index, and split
+    `PANELS_PER_PAGE` to a page across the pages of ONE multi-page PDF.
+
+    Pagination is what makes the panels legible. A single twelve-panel figure
+    is 12x24 inches, taller than a portrait page is wide, so `\includegraphics`
+    scales it to fit the height and each panel renders at ~123pt. Six panels
+    make a square figure that fits the width instead. `figure_pages` is the
+    same arithmetic, and is what `report.py` uses to know how many
+    `\includegraphics[page=...]` blocks to emit without opening the file.
+    """
+    dim: int = nature.shape[1]
+    order: Sequence[int] = display_order(
+        variables if variables is not None else [f"dim_{i}" for i in range(dim)]
+    )
+    chunks: list[Sequence[int]] = [
+        order[i : i + PANELS_PER_PAGE] for i in range(0, len(order), PANELS_PER_PAGE)
+    ]
+    _save_pages(
+        [
+            _page_figure(
+                chunk,
+                page,
+                len(chunks),
+                dim,
+                nature,
+                mc,
+                w,
+                var_info,
+                style,
+                ibu_weights,
+            )
+            for page, chunk in enumerate(iterable=chunks, start=1)
+        ],
+        save_path=Path(save_path),
+    )
 
 
 def plot_detector_level(

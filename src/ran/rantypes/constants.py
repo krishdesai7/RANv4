@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -211,6 +212,27 @@ JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = 
         ("M", "n_ch", "f_ch", "ptd", "q"),
     ),
 )
+
+
+# How the level figures paginate. A panel's rendered width on a page is
+# `min(textwidth, textheight * aspect) / PANEL_COLUMNS`, and a twelve-panel
+# 3x4 figure is 12x24 inches -- twice as tall as wide, against a portrait page
+# that is taller than wide by only 1.29. So it is height-limited: it uses 74%
+# of the available width and each panel lands at ~123pt, which is unreadable.
+# Fewer panels per page is the only lever that moves that materially. At 3x2
+# the figure is square, becomes width-limited instead, and panels grow to
+# ~166pt.
+#
+# `report.py` needs the same numbers to know how many `\includegraphics` pages
+# to emit, and must stay free of matplotlib, so they live here rather than in
+# `plotting`.
+PANEL_COLUMNS: Final[int] = 3
+PANELS_PER_PAGE: Final[int] = 6
+
+
+def figure_pages(dim: int, /) -> int:
+    """How many pages a level figure spans for `dim` observables."""
+    return max(1, math.ceil(dim / PANELS_PER_PAGE))
 
 
 def display_order(variables: Sequence[str], /) -> tuple[int, ...]:

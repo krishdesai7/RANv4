@@ -14,6 +14,8 @@ from .constants import JET_OBS as JET_OBS
 from .constants import JET_VARIABLE_GROUPS as JET_VARIABLE_GROUPS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
+from .constants import PANEL_COLUMNS as PANEL_COLUMNS
+from .constants import PANELS_PER_PAGE as PANELS_PER_PAGE
 from .constants import POISON_SENTINEL as POISON_SENTINEL
 from .constants import RUN_DIR as RUN_DIR
 from .constants import SUBSTRUCTURE_VARIABLES as SUBSTRUCTURE_VARIABLES
@@ -22,6 +24,7 @@ from .constants import ZENODO_RECORD as ZENODO_RECORD
 from .constants import JetVarInfo as JetVarInfo
 from .constants import artifacts_dir as artifacts_dir
 from .constants import display_order as display_order
+from .constants import figure_pages as figure_pages
 from .enums import DatasetName as DatasetName
 from .enums import LogLevel as LogLevel
 from .events import ZXY as ZXY

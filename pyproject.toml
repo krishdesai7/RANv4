@@ -59,9 +59,7 @@ required-environments = [
 ]
 required-version = ">=0.12.5"
 preview-features = true
-cache-keys = [
-    { file = "pyproject.toml" },
-]
+cache-keys = [{ file = "pyproject.toml" }]
 
 [tool.uv.build-backend]
 module-name = "ran"
@@ -94,7 +92,6 @@ site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
 preset = "all"
-treat-all-caps-as-final = true
 permissive-ignores = true
 project-excludes = ["legacy"]
 

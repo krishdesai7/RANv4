@@ -3,7 +3,10 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-\usepackage[margin=18mm,includeheadfoot]{geometry}
+% No `includeheadfoot`: with no running head and no folio there is nothing
+% to reserve room for, and the 64.5pt it held back is 10% of the landscape
+% figure width.
+\usepackage[margin=18mm]{geometry}
 \usepackage{microtype}
 \usepackage{booktabs}
 \usepackage{siunitx}
@@ -13,7 +16,6 @@
 \usepackage{pdflscape}
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
-\usepackage{fancyhdr}
 
 % -----------------------------------------------------------------------------
 % Replacement contract
@@ -39,13 +41,10 @@
 \setlength{\tabcolsep}{5pt}
 \renewcommand{\arraystretch}{1.12}
 
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small Run report}
-\fancyhead[R]{\small \RunName}
-\fancyfoot[C]{\small\thepage}
-\renewcommand{\headrulewidth}{0.35pt}
-\renewcommand{\footrulewidth}{0pt}
+% No running head and no folio. The title block on page one already names
+% the run, so repeating it down the report bought nothing and cost every page
+% a head, a rule and a footskip -- height the landscape figures want.
+\pagestyle{empty}
 
 \newcommand{\ReportTitle}{
   {\bfseries\LARGE Run report\par}
@@ -132,9 +131,9 @@
     % fresh page yields a page of nothing but fill. A figure sized to 99% of
     % the block does not need centring.
     %
-    % Measured inside a `pdflscape` landscape block with this geometry:
-    % \linewidth is 625.5pt and \textheight is 511.9pt -- the package swaps
-    % them, so \linewidth really is the wide dimension here.
+    % Measured inside a `pdflscape` landscape block under the \newgeometry
+    % below: \linewidth is 749.4pt and \textheight is 568.8pt -- the package
+    % swaps them, so \linewidth really is the wide dimension here.
     \null\vfill
     {\centering\includegraphics[width=\linewidth,page=#2]{#1}\par}
     \vfill
@@ -157,7 +156,7 @@
 }
 
 \begin{document}
-\thispagestyle{plain}
+\thispagestyle{empty}
 
 \ReportTitle
 
@@ -478,33 +477,43 @@ $q$ & 7.9823972057 & 3.9212192006 & 50.8766715111 & 0.3855977391 & 95.1693992517
 \clearpage
 
 
-% Landscape, because these figures are wide. A page of six panels is 12x8
-% inches, an aspect of 1.5 against a landscape text block's 1.48 -- so it is
-% width-limited and fills the page. On a portrait page the same figure is
-% limited by the narrower dimension instead and renders at 58% scale, which
-% is what made the panel text unreadable.
+% Landscape, because these figures are wide. A page of six panels is 21x12
+% inches, an aspect of 1.75 against this block's 1.32 -- so it is
+% width-limited and spans the full width. On a portrait page the same figure
+% is limited by the narrower dimension instead and renders at 58% scale,
+% which is what made the panel text unreadable.
 % No \ReportSection here: the figure fills 98% of the page, and a
 % heading on top of it forces a break onto a near-empty next page.
 % Each page carries its own `<Level> Level (n of m)' suptitle.
+% Tighter margins here than the rest of the report: these pages carry a
+% single figure and no running text, so an 18mm block is a margin around a
+% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
+% \textwidth and \textheight when the environment opens.
+\newgeometry{margin=8mm}
 \begin{landscape}
 \thispagestyle{empty}
 \ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/detector_level.pdf}{1}
 \clearpage
 \ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/detector_level.pdf}{2}
 \end{landscape}
-\clearpage
+\restoregeometry
 
 
 % No \ReportSection here: the figure fills 98% of the page, and a
 % heading on top of it forces a break onto a near-empty next page.
 % Each page carries its own `<Level> Level (n of m)' suptitle.
+% Tighter margins here than the rest of the report: these pages carry a
+% single figure and no running text, so an 18mm block is a margin around a
+% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
+% \textwidth and \textheight when the environment opens.
+\newgeometry{margin=8mm}
 \begin{landscape}
 \thispagestyle{empty}
 \ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/particle_level.pdf}{1}
 \clearpage
 \ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/particle_level.pdf}{2}
 \end{landscape}
-\clearpage
+\restoregeometry
 
 
 \ReportSection{Training diagnostics}

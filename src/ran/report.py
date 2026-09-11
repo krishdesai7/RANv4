@@ -196,7 +196,7 @@ def _sigma_cell(sigmas: Sequence[float], /) -> str:
         ):
             return (
                 f"{_num('Raw', median)} "
-                r"$\times\ (1/2,\ 1/\sqrt2,\ 1,\ \sqrt2,\ 2)$"
+                r"\(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)"
             )
     return ", ".join(_num("Raw", s) for s in sigmas)
 
@@ -322,7 +322,7 @@ def _row(
     symbol: str = (
         JET_OBS[variable].symbol if variable in JET_OBS else latex_text(variable)
     )
-    label: str = rf"{symbol}$^\dag$" if daggered else symbol
+    label: str = rf"{symbol}\(^\dag\)" if daggered else symbol
     scale: float = _SCALE[metric]
     ours: Mapping[str, float] = ran[f"{level}_{variable}"]
     theirs: Mapping[str, float] | None = (
@@ -355,7 +355,7 @@ def _row(
 # that it declined to unfold the observable at all. The row spans all sixteen
 # columns and sits immediately before the template's `\bottomrule`.
 _DAGGER_LEGEND: Final[str] = (
-    r"\multicolumn{6}{@{}l}{\footnotesize $^\dag$ IBU's purity binning "
+    r"\multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning "
     r"produced a single bin, so IBU failed to unfold.} \\"
 )
 

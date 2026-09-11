@@ -247,6 +247,12 @@ def _hist_ratio_panel(
     # drops the lowest label only when it sits at the axis edge, which is
     # exactly the collision and nothing else.
     ax.yaxis.set_major_locator(locator=MaxNLocator(prune="lower"))
+    # Event counts run to five and six digits, and a column of "64000" labels
+    # costs more panel width than the numbers are worth. Scientific notation
+    # factors the magnitude out into a single `x10^4` above the axis and
+    # leaves one- or two-digit ticks. Counts axis only: the ratio panel sits
+    # around 1, where an offset would be absurd.
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 3), useMathText=True)
     _ = ax_r.set_xlabel(xlabel)
 
 
@@ -278,7 +284,7 @@ def _save_pages(figures: Sequence[Figure], /, *, save_path: Path) -> None:
     bbox is not optional.
     """
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    with PdfPages(save_path) as pdf:
+    with PdfPages(filename=save_path) as pdf:
         for figure in figures:
             pdf.savefig(figure=figure, bbox_inches="tight")
     logger.info("Saved %s (%d page(s))", save_path, len(figures))
@@ -465,11 +471,11 @@ def _plot_level(
     identity for a non-jet run) rather than by raw column index, and split
     `PANELS_PER_PAGE` to a page across the pages of ONE multi-page PDF.
 
-    Pagination is what makes the panels legible. A single twelve-panel figure
-    is 12x24 inches, taller than a portrait page is wide, so `\includegraphics`
-    scales it to fit the height and each panel renders at ~123pt. Six panels
-    make a square figure that fits the width instead. `figure_pages` is the
-    same arithmetic, and is what `report.py` uses to know how many
+    Pagination is what makes the panels legible: `\includegraphics` scales a
+    figure to fit its text block and every font scales with it, so a
+    twelve-panel 12x24in figure renders its 18pt labels at 5pt. `constants`
+    carries the arithmetic and the measured table; `figure_pages` is the same
+    count, and is what `report.py` uses to know how many
     `\includegraphics[page=...]` blocks to emit without opening the file.
     """
     dim: int = nature.shape[1]

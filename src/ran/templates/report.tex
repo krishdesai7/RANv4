@@ -128,6 +128,9 @@
     % it ride the top margin.
     \vspace*{\fill}
     \begin{center}
+    % Measured inside a `pdflscape` landscape block with this geometry:
+    % \linewidth is 625.5pt and \textheight is 511.9pt -- the package swaps
+    % them, so \linewidth really is the wide dimension here.
     \includegraphics[width=\linewidth,page=#2]{#1}
     \end{center}
     \vspace*{\fill}
@@ -191,8 +194,11 @@
 \begin{tabularx}{\linewidth}{
   @{}
   >{\raggedright\arraybackslash}p{0.24\linewidth}
-  S[round-mode=figures,round-precision=4,table-format=4.4]
-  S[round-mode=figures,round-precision=3,table-format=3.3]
+  % Fixed decimal places, not significant figures: a phase that took
+  % 0.005268s and one that took 58.07s should line up on the decimal point,
+  % and four significant figures on the former is noise.
+  S[round-mode=places,round-precision=3,table-format=4.3]
+  S[round-mode=places,round-precision=1,table-format=3.1]
   >{\raggedright\arraybackslash}X
   @{}
 }
@@ -214,7 +220,7 @@
 {Distance to Data. Improvements are relative to Simulation.\par}
 \vspace{0.45em}
 
-\FigureLabel{Wasserstein $[\times 10^{3}]$}
+\FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -231,7 +237,7 @@
 \endgroup
 \vspace{1.1em}
 
-\FigureLabel{JS divergence $[\times 10^{3}]$}
+\FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -248,7 +254,7 @@
 \endgroup
 \vspace{1.1em}
 
-\FigureLabel{VLC divergence $[\times 10^{3}]$}
+\FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -271,7 +277,7 @@
 {Distance to Truth. Improvements are relative to Generation.\par}
 \vspace{0.45em}
 
-\FigureLabel{Wasserstein $[\times 10^{3}]$}
+\FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -288,7 +294,7 @@
 \endgroup
 \vspace{1.1em}
 
-\FigureLabel{JS divergence $[\times 10^{3}]$}
+\FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -305,7 +311,7 @@
 \endgroup
 \vspace{1.1em}
 
-\FigureLabel{VLC divergence $[\times 10^{3}]$}
+\FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
 \begin{tabular}{@{}l D D P D P@{}}
@@ -325,13 +331,24 @@
 \clearpage
 
 
+% Landscape, because these figures are wide. A page of six panels is 12x8
+% inches, an aspect of 1.5 against a landscape text block's 1.48 -- so it is
+% width-limited and fills the page. On a portrait page the same figure is
+% limited by the narrower dimension instead and renders at 58% scale, which
+% is what made the panel text unreadable.
+\begin{landscape}
+\thispagestyle{empty}
 \ReportSection{Detector-level distributions}
 <<DETECTOR_FIGURES>>
+\end{landscape}
 \clearpage
 
 
+\begin{landscape}
+\thispagestyle{empty}
 \ReportSection{Particle-level distributions}
 <<PARTICLE_FIGURES>>
+\end{landscape}
 \clearpage
 
 

@@ -214,20 +214,35 @@ JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = 
 )
 
 
-# How the level figures paginate. A panel's rendered width on a page is
-# `min(textwidth, textheight * aspect) / PANEL_COLUMNS`, and a twelve-panel
-# 3x4 figure is 12x24 inches -- twice as tall as wide, against a portrait page
-# that is taller than wide by only 1.29. So it is height-limited: it uses 74%
-# of the available width and each panel lands at ~123pt, which is unreadable.
-# Fewer panels per page is the only lever that moves that materially. At 3x2
-# the figure is square, becomes width-limited instead, and panels grow to
-# ~166pt.
+# How the level figures paginate, and why so few to a page.
 #
-# `report.py` needs the same numbers to know how many `\includegraphics` pages
-# to emit, and must stay free of matplotlib, so they live here rather than in
-# `plotting`.
-PANEL_COLUMNS: Final[int] = 3
-PANELS_PER_PAGE: Final[int] = 6
+# What governs legibility is not the panel count but the scale
+# `\includegraphics` applies: a figure `W` inches wide rendered into a text
+# block `TW` points wide is scaled by `min(TW / 72W, TH / 72H)`, and every
+# font in it scales with it. The report's base font is 18pt, so a scale of
+# 0.29 -- which is what a twelve-panel 12x24in figure gets on a portrait page
+# -- renders axis labels at 5pt.
+#
+# Shrinking the panels does not help, because the scale falls in step. Fewer
+# panels per page does. Measured against a landscape text block (260x176mm =
+# 737x499pt), with 4x6in panels:
+#
+#     3 cols x 4 rows  panel  83pt  text  5.2pt  height used  15%
+#     3 cols x 2 rows  panel 166pt  text 10.4pt  height used  30%
+#     3 cols x 1 row   panel 208pt  text 13.0pt  height used  61%
+#     2 cols x 1 row   panel 313pt  text 19.5pt  height used  92%
+#
+# A panel's width on the page is `linewidth / columns` whatever the figure's
+# inch dimensions, so the column count is the only lever on it -- widening
+# the panels in inches shrinks the scale by exactly as much. Two across, one
+# row, which is also the only arrangement that fills the page height rather
+# than stranding 40% of it.
+#
+# `report.py` needs the same numbers to know how many `\includegraphics`
+# pages to emit, and must stay free of matplotlib, so they live here rather
+# than in `plotting`.
+PANEL_COLUMNS: Final[int] = 2
+PANELS_PER_PAGE: Final[int] = 2
 
 
 def figure_pages(dim: int, /) -> int:

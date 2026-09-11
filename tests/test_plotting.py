@@ -225,6 +225,11 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         assert content.y1 <= page.y1
 
 
+# Measured inside a `pdflscape` landscape block with this document's
+# geometry: \linewidth 625.5pt, \textheight 511.9pt. A figure wider than
+# this is fitted to the page width rather than its height.
+_LANDSCAPE_BLOCK_ASPECT: float = 625.5 / 511.9
+
 _LAST_PAGES: list[list[Figure]] = []
 
 
@@ -327,19 +332,21 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     return _last_drawn_figure()
 
 
-def test_twelve_observables_are_paginated_three_by_two(
+def test_twelve_observables_are_paginated_two_to_a_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A 1x12 column is not a figure anyone reads, and neither is a 3x4 one
-    scaled to fit a portrait page -- at 12x24 inches it is height-limited and
-    each panel renders at ~123pt. Six panels to a page make the figure square,
-    so it fits the page width instead and the panels grow by a third.
+    r"""`\includegraphics` scales a figure to its text block and every font
+    scales with it, so a twelve-panel 12x24in figure renders its 18pt labels
+    at 5pt. A panel's width on the page is `linewidth / columns` whatever the
+    figure's inch dimensions, so the column count is the only lever on it:
+    two across gives 313pt panels and 19.5pt text, and fills 92% of the page
+    height rather than stranding 40% of it.
     """
     save_path: Path = tmp_path / "detector.pdf"
     _plot_twelve_dim_level(save_path, monkeypatch)
 
     pages: list[Figure] = _drawn_pages()
-    assert len(pages) == figure_pages(12) == 2
+    assert len(pages) == figure_pages(12) == 6
     assert len(_drawn_panels()) == 12
 
     for page in pages:
@@ -348,9 +355,12 @@ def test_twelve_observables_are_paginated_three_by_two(
         columns = {round(a.get_position().x0, 3) for a in hist_axes}
         rows = {round(a.get_position().y0, 3) for a in hist_axes}
         assert len(columns) == PANEL_COLUMNS
-        assert len(rows) == 2
-        # Square, so `\includegraphics` fits it to the page width.
-        assert page.get_figwidth() == page.get_figheight()
+        assert len(rows) == 1
+        # Wider than the landscape text block, so `\includegraphics`
+        # fits it to the page WIDTH. Fitting to the height instead is
+        # what rendered the panel text at 5pt.
+        aspect = page.get_figwidth() / page.get_figheight()
+        assert aspect >= _LANDSCAPE_BLOCK_ASPECT
 
 
 def test_a_page_counter_appears_only_when_there_is_more_than_one_page(
@@ -359,7 +369,8 @@ def test_a_page_counter_appears_only_when_there_is_more_than_one_page(
     """A single-page figure must read exactly as it did before pagination."""
     _plot_twelve_dim_level(tmp_path / "detector.pdf", monkeypatch)
     multi = [p.get_suptitle() for p in _drawn_pages()]
-    assert multi == ["Detector Level (1 of 2)", "Detector Level (2 of 2)"]
+    assert multi[0] == "Detector Level (1 of 6)"
+    assert multi[-1] == "Detector Level (6 of 6)"
 
     _ = _one_dim_level(tmp_path, monkeypatch)
     assert len(_drawn_pages()) == 1

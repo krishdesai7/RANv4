@@ -171,7 +171,7 @@ def load_params(run_dir: Path, /) -> EpochParams:
                     jnp.asarray(a=f[k])  # pyrefly: ignore[unknown-argument-type]
                     for k in sorted(
                         (k for k in keys if k.split(sep=":")[0] == field),
-                        key=lambda k: int(k.split(sep=":")[1]),  # pyrefly: ignore[unknown-argument-type]
+                        key=lambda k: int(k.split(sep=":")[1]),
                     )
                 ]
                 for field in EpochParams._fields
@@ -527,14 +527,15 @@ def _make_epoch(
         train_g: Float[Array, ""],
         val_d: Float[Array, ""],
     ) -> None:
-        logger.info(
-            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f",
-            int(epoch) + 1,
-            n_epochs,
-            float(train_d),
-            float(train_g),
-            float(val_d),
-        )
+        if not epoch % 10:
+            logger.info(
+                "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f",
+                int(epoch) + 1,
+                n_epochs,
+                float(train_d),
+                float(train_g),
+                float(val_d),
+            )
 
     def epoch(
         carry: RunCarry, epoch_idx: Int[Array, ""]

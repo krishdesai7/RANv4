@@ -16,7 +16,7 @@
 # than the request: `-t` is what Slurm's backfill scheduler matches against, so
 # a short request slots into gaps a long one cannot reach. The counter-pressure
 # is that overrunning kills the job outright, which is what the margin is for.
-#SBATCH -t00:15:00
+#SBATCH -t00:5:00
 #SBATCH -Am3246_g
 #SBATCH -Jran_e2e
 #SBATCH -oslurm-%j.log
@@ -106,6 +106,8 @@ echo "Run dir: ${RUN_DIR}"
 uv run ran baseline ibu --run-dir "${RUN_DIR}"
 uv run ran train --load-run "${RUN_DIR}"
 uv run ran evaluate --run-dir "${RUN_DIR}" --force
+
+module load texlive
 uv run ran report "${RUN_DIR}"
 
 echo "Artifacts in ${RUN_DIR}:"

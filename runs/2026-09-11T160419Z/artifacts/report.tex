@@ -29,7 +29,7 @@
 % may contain underscores; text VALUES are not, and must be wrapped in
 % \ConfigVal or otherwise escaped by the generator.
 
-\newcommand{\RunName}{\detokenize{2026-09-11T023002Z}}
+\newcommand{\RunName}{\detokenize{2026-09-11T160419Z}}
 
 \definecolor{ReportGray}{gray}{0.36}
 \definecolor{ReportLightGray}{gray}{0.94}
@@ -126,14 +126,18 @@
     % A six-panel page is square, so it is width-limited and leaves roughly a
     % third of the page height spare; the fills centre it rather than letting
     % it ride the top margin.
-    \vspace*{\fill}
-    \begin{center}
+    % No \vspace{\fill} and no `center` ENVIRONMENT, both of which cost a
+    % page here. The graphic clears the block by ~6pt, so the environment's
+    % \topsep alone is enough to force a break; and a leading \fill on a
+    % fresh page yields a page of nothing but fill. A figure sized to 99% of
+    % the block does not need centring.
+    %
     % Measured inside a `pdflscape` landscape block with this geometry:
     % \linewidth is 625.5pt and \textheight is 511.9pt -- the package swaps
     % them, so \linewidth really is the wide dimension here.
-    \includegraphics[width=\linewidth,page=#2]{#1}
-    \end{center}
-    \vspace*{\fill}
+    \null\vfill
+    {\centering\includegraphics[width=\linewidth,page=#2]{#1}\par}
+    \vfill
 }{
     \fbox{\parbox[c][0.4\textheight][c]{0.94\linewidth}{
         \centering\color{ReportGray}
@@ -183,16 +187,16 @@
 % \ConfigWide{mmd_sigmas_detector}{\Raw{1.553733}, \Raw{2.197311}, ...}
 \ConfigPair{batch_size}{\Count{1024}}{n_samples}{\Count{1600000}}
 \ConfigPair{dim}{\Count{12}}{dataset}{\ConfigVal{jets}}
-\ConfigPair{seed}{\Count{799905857}}{data_seed}{\Count{42}}
+\ConfigPair{seed}{\Count{1851207501}}{data_seed}{\Count{42}}
 \ConfigPair{hidden_units}{\Count{128}}{n_layers}{\Count{3}}
 \ConfigPair{n_epochs}{\Count{100}}{n_disc_steps}{\Count{5}}
 \ConfigPair{lr_g}{\Raw{0.00003}}{lr_d}{\Raw{0.0001}}
 \ConfigPair{lambda_dispersion}{\Raw{0.015}}{mmd_subsample}{\Count{16384}}
-\ConfigPair{mmd_test}{\Raw{0.0002000332}}{best_epoch}{\Count{23}}
+\ConfigPair{mmd_test}{\Raw{0.0002572536}}{best_epoch}{\Count{91}}
 \ConfigPair{compile_cache_warm}{True}{}{}
 \ConfigWide{variables}{$m$ [GeV], $\ln\rho$, $\lambda^{1}_{0.5}$, $w$, $\lambda^{1}_{2}$, $z_g$, $\tau_{21}^{(\beta=1)}$, $M$, $n_{ch}$, $f_{ch}$, $p_T^D$, $q$}
-\ConfigWide{mmd_sigmas_detector}{\Raw{3.1074700356} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
-\ConfigWide{mmd_sigmas_particle}{\Raw{3.0271127224} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
+\ConfigWide{mmd_sigmas_detector}{\Raw{3.1074669361} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
+\ConfigWide{mmd_sigmas_particle}{\Raw{3.0271158218} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
 \bottomrule
 \end{tabularx}
 \endgroup
@@ -221,19 +225,19 @@
 \midrule
 % A nested phase can be written as \TimingSubphase{transfer}.
 % Insert \midrule before the total row when generating TIMINGS_ROWS.
-train & 41.873163969 & 73.87778575 & train \\
-\TimingSubphase{transfer} & 6.987971494 &  & train \\
-\TimingSubphase{compile} & 3.748421802 &  & train \\
-\TimingSubphase{epochs} & 29.800801047 &  & train \\
-\TimingSubphase{select} & 1.132082558 &  & train \\
-particle\_mmd & 0.399726358 & 0.7052464021 & train \\
-save & 0.276013158 & 0.4869763595 & train \\
-data & 1.523046487 & 2.6871459281 & cache hit -- load \\
-load & 2.957062269 & 5.2172129367 & load \\
-plots & 9.645293707 & 17.0174134085 & load \\
-evaluate & 0.004658566 & 0.0082192151 & load \\
+train & 40.6429002851 & 75.8756668124 & train \\
+\TimingSubphase{transfer} & 5.713707817 &  & train \\
+\TimingSubphase{compile} & 3.9096189981 &  & train \\
+\TimingSubphase{epochs} & 29.729099485 &  & train \\
+\TimingSubphase{select} & 1.080106003 &  & train \\
+particle\_mmd & 0.402961127 & 0.7522825388 & train \\
+save & 0.3516182241 & 0.6564311854 & train \\
+data & 1.486030588 & 2.7742498931 & cache hit -- load \\
+load & 1.404283124 & 2.6216366864 & load \\
+plots & 9.2731441039 & 17.3119041062 & load \\
+evaluate & 0.004193495 & 0.0078287777 & load \\
 \midrule
-\textbf{total} & 56.678964514 & 100 & \\
+\textbf{total} & 53.5651309472 & 100 & \\
 \bottomrule
 \end{tabularx}
 \endgroup
@@ -256,24 +260,24 @@ evaluate & 0.004658566 & 0.0082192151 & load \\
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 208.9450359344 & 138.7766897678 & 33.5822030195 & 5.6819254532 & 97.280660233 \\
-$\ln\rho$ & 227.9170453548 & 20.7117833197 & 90.9125781762 & 9.9060563371 & 95.6536570919 \\
+$m$ [GeV] & 208.9450359344 & 138.7766897678 & 33.5822030195 & 9.3401409686 & 95.5298574447 \\
+$\ln\rho$ & 227.9170453548 & 20.7117833197 & 90.9125781762 & 11.5950219333 & 94.912613089 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 262.5747323036 & 12.8423022106 & 95.1090873671 & 6.1610504054 & 97.6536011857 \\
-$w$ & 265.5844688416 & 9.9778231233 & 96.2430697974 & 5.613932386 & 97.8861970316 \\
-$\lambda^{1}_{2}$ & 255.4461359978 & 9.2154117301 & 96.392424691 & 7.5884945691 & 97.0293171437 \\
+$\lambda^{1}_{0.5}$ & 262.5747323036 & 12.8423022106 & 95.1090873671 & 7.4397334829 & 97.166622463 \\
+$w$ & 265.5844688416 & 9.9778231233 & 96.2430697974 & 6.0819098726 & 97.7099903849 \\
+$\lambda^{1}_{2}$ & 255.4461359978 & 9.2154117301 & 96.392424691 & 6.440218538 & 97.4788350143 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 60.4495927691 & 60.4495964944 & 0 & 18.5880847275 & 69.2502730357 \\
-$\tau_{21}^{(\beta=1)}$ & 121.8080222607 & 70.1040029526 & 42.4471380033 & 21.1906284094 & 82.6032571451 \\
+$z_g$\(^\dag\) & 60.4495927691 & 60.4495964944 & 0 & 17.1058997512 & 71.7022084557 \\
+$\tau_{21}^{(\beta=1)}$ & 121.8080222607 & 70.1040029526 & 42.4471380033 & 18.7811739743 & 84.5813324724 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 224.205955863 & 177.3438751698 & 20.9013540755 & 9.8603228107 & 95.6021137919 \\
-$n_{ch}$ & 220.813959837 & 172.3359972239 & 21.954205712 & 8.3474814892 & 96.2196767381 \\
-$f_{ch}$ & 52.863843739 & 40.9426540136 & 22.5507433479 & 5.7878908701 & 89.051324193 \\
-$p_T^D$ & 256.7871212959 & 30.7952873409 & 88.007464243 & 10.1262228563 & 96.0565690346 \\
-$q$ & 79.6653181314 & 17.5051391125 & 78.0266500868 & 3.6931496579 & 95.3641688196 \\
+$M$ & 224.205955863 & 177.3438751698 & 20.9013540755 & 20.7813866436 & 90.7311174836 \\
+$n_{ch}$ & 220.813959837 & 172.3359972239 & 21.954205712 & 22.6862635463 & 89.7260736762 \\
+$f_{ch}$ & 52.863843739 & 40.9426540136 & 22.5507433479 & 7.4959290214 & 85.8203102703 \\
+$p_T^D$ & 256.7871212959 & 30.7952873409 & 88.007464243 & 16.8235022575 & 93.4484633916 \\
+$q$ & 79.6653181314 & 17.5051391125 & 78.0266500868 & 5.5947359651 & 92.9771999957 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -293,24 +297,24 @@ $q$ & 79.6653181314 & 17.5051391125 & 78.0266500868 & 3.6931496579 & 95.36416881
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 6.761803014 & 3.6660972726 & 45.7822526767 & 0.0751396293 & 98.8887634092 \\
-$\ln\rho$ & 8.3825885079 & 0.401725688 & 95.2076176989 & 0.147636393 & 98.238773228 \\
+$m$ [GeV] & 6.761803014 & 3.6660906665 & 45.782350375 & 0.0687311717 & 98.9835377992 \\
+$\ln\rho$ & 8.3825885079 & 0.4017252835 & 95.2076225245 & 0.1500041533 & 98.2105270564 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 9.3592519873 & 0.471357018 & 94.9637319451 & 0.1255050359 & 98.6590270667 \\
-$w$ & 9.1394844375 & 0.4526596954 & 95.0472075478 & 0.133460047 & 98.5397420622 \\
-$\lambda^{1}_{2}$ & 7.7760265218 & 0.1728243396 & 97.7774723489 & 0.134373863 & 98.2719469564 \\
+$\lambda^{1}_{0.5}$ & 9.3592519873 & 0.4713527606 & 94.9637774343 & 0.1141417591 & 98.7804392992 \\
+$w$ & 9.1394844375 & 0.4526596263 & 95.047208304 & 0.1155156626 & 98.7360811937 \\
+$\lambda^{1}_{2}$ & 7.7760265218 & 0.1728244402 & 97.7774710557 & 0.1203793017 & 98.4519175521 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 0.6722558597 & 0.6722558597 & 0 & 0.1249412376 & 81.4146301962 \\
-$\tau_{21}^{(\beta=1)}$ & 3.372471878 & 1.933502042 & 42.668104821 & 0.1931963226 & 94.2713733537 \\
+$z_g$\(^\dag\) & 0.6722558597 & 0.6722558597 & 0 & 0.1136416858 & 83.0954711469 \\
+$\tau_{21}^{(\beta=1)}$ & 3.372471878 & 1.9335012008 & 42.6681297633 & 0.1701825268 & 94.953774769 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 9.6403818342 & 7.6325004834 & 20.8278197414 & 0.1237019992 & 98.7168350656 \\
-$n_{ch}$ & 7.5121532815 & 6.3135119391 & 15.9560288176 & 0.0965821656 & 98.7143211543 \\
-$f_{ch}$ & 1.0327709892 & 0.7960341488 & 22.9224913235 & 0.0960549772 & 90.699295568 \\
-$p_T^D$ & 8.2226736295 & 1.3110413863 & 84.0557774104 & 0.1103237208 & 98.6582986777 \\
-$q$ & 1.5763239582 & 0.2512137056 & 84.0633199601 & 0.0759621902 & 95.1810546399 \\
+$M$ & 9.6403818342 & 7.6325013472 & 20.8278107813 & 0.1703938559 & 98.2324988908 \\
+$n_{ch}$ & 7.5121532815 & 6.3135422078 & 15.9556258871 & 0.1430693592 & 98.0954946758 \\
+$f_{ch}$ & 1.0327709892 & 0.7960340845 & 22.9224975454 & 0.0911483143 & 91.1743924562 \\
+$p_T^D$ & 8.2226736295 & 1.3110417453 & 84.0557730448 & 0.1381444497 & 98.3199570371 \\
+$q$ & 1.5763239582 & 0.2512138127 & 84.0633131697 & 0.0814210444 & 94.8347518305 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -330,24 +334,24 @@ $q$ & 1.5763239582 & 0.2512137056 & 84.0633199601 & 0.0759621902 & 95.1810546399
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 26.9314510519 & 14.6161162974 & 45.7284486112 & 0.2801332687 & 98.959828536 \\
-$\ln\rho$ & 33.3110062513 & 1.5759142668 & 95.2690883761 & 0.5711812158 & 98.2853078303 \\
+$m$ [GeV] & 26.9314510519 & 14.6160588738 & 45.7286618323 & 0.2578336874 & 99.0426297978 \\
+$\ln\rho$ & 33.3110062513 & 1.5759124132 & 95.2690939406 & 0.5796549276 & 98.2598696561 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 37.1871030507 & 1.8772194653 & 94.951960999 & 0.4956871512 & 98.6670455332 \\
-$w$ & 36.3196910709 & 1.800391484 & 95.0429328253 & 0.5257229387 & 98.5525126365 \\
-$\lambda^{1}_{2}$ & 30.9027188537 & 0.6583083029 & 97.869739857 & 0.4991973839 & 98.3846166212 \\
+$\lambda^{1}_{0.5}$ & 37.1871030507 & 1.8772115235 & 94.9519823554 & 0.4506022802 & 98.7882834551 \\
+$w$ & 36.3196910709 & 1.8003911489 & 95.042933748 & 0.4541478955 & 98.7495821629 \\
+$\lambda^{1}_{2}$ & 30.9027188537 & 0.6583086857 & 97.869738618 & 0.4426221615 & 98.5676918473 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 2.6826718417 & 2.6826718417 & 0 & 0.4997089582 & 81.3727139329 \\
-$\tau_{21}^{(\beta=1)}$ & 13.4434227393 & 7.7124465651 & 42.6303351856 & 0.76841565 & 94.284077315 \\
+$z_g$\(^\dag\) & 2.6826718417 & 2.6826718417 & 0 & 0.4545162999 & 83.0573276675 \\
+$\tau_{21}^{(\beta=1)}$ & 13.4434227393 & 7.7124480923 & 42.6303238256 & 0.6760737835 & 94.9709698444 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 38.2530744988 & 30.3072266499 & 20.7717888118 & 0.4638021018 & 98.7875429416 \\
-$n_{ch}$ & 29.8064597933 & 25.0662488907 & 15.9033006118 & 0.3599431608 & 98.7923988178 \\
-$f_{ch}$ & 4.1247778948 & 3.1769819083 & 22.9781096264 & 0.3841629642 & 90.6864569689 \\
-$p_T^D$ & 32.6459784083 & 5.2107317727 & 84.0386717544 & 0.4366631418 & 98.662428994 \\
-$q$ & 6.2611611131 & 0.9939505657 & 84.1251399269 & 0.294763079 & 95.2921978253 \\
+$M$ & 38.2530744988 & 30.3072192347 & 20.7718081963 & 0.6497371445 & 98.3014773244 \\
+$n_{ch}$ & 29.8064597933 & 25.0662973136 & 15.9031381539 & 0.5460493088 & 98.1680168911 \\
+$f_{ch}$ & 4.1247778948 & 3.1769814149 & 22.9781215871 & 0.3645333797 & 91.1623513065 \\
+$p_T^D$ & 32.6459784083 & 5.2107324499 & 84.0386696803 & 0.5478674935 & 98.321791779 \\
+$q$ & 6.2611611131 & 0.9939509112 & 84.1251344077 & 0.3146779541 & 94.9741278276 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -373,24 +377,24 @@ $q$ & 6.2611611131 & 0.9939505657 & 84.1251399269 & 0.294763079 & 95.2921978253 
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 111.7496192455 & 94.0740332007 & 15.8171331268 & 100.4595905542 & 10.1029683748 \\
-$\ln\rho$ & 253.0850172043 & 32.5681790709 & 87.1315262236 & 20.9716521204 & 91.7135939725 \\
+$m$ [GeV] & 111.7496192455 & 94.0740332007 & 15.8171331268 & 86.3187089562 & 22.7570442396 \\
+$\ln\rho$ & 253.0850172043 & 32.5681790709 & 87.1315262236 & 17.2931812704 & 93.167046607 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 302.964091301 & 18.7075268477 & 93.8251669472 & 6.1663500965 & 97.964659749 \\
-$w$ & 284.0740680695 & 12.2874649242 & 95.6745559327 & 5.7873153128 & 97.9627442406 \\
-$\lambda^{1}_{2}$ & 253.8002133369 & 11.1268740147 & 95.6158925682 & 4.5808125287 & 98.1951108439 \\
+$\lambda^{1}_{0.5}$ & 302.964091301 & 18.7075268477 & 93.8251669472 & 6.1764288694 & 97.961333027 \\
+$w$ & 284.0740680695 & 12.2874649242 & 95.6745559327 & 3.4498693421 & 98.7855739999 \\
+$\lambda^{1}_{2}$ & 253.8002133369 & 11.1268740147 & 95.6158925682 & 3.1720404513 & 98.7501821178 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 113.4187728167 & 113.4187728167 & 0 & 25.9200893342 & 77.1465616401 \\
-$\tau_{21}^{(\beta=1)}$ & 259.1708004475 & 150.4657864571 & 41.9433878364 & 13.6861661449 & 94.7192484179 \\
+$z_g$\(^\dag\) & 113.4187728167 & 113.4187728167 & 0 & 24.6906876564 & 78.2305106613 \\
+$\tau_{21}^{(\beta=1)}$ & 259.1708004475 & 150.4657864571 & 41.9433878364 & 11.6206202656 & 95.5162309004 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 256.7945122719 & 204.8458755016 & 20.2296429691 & 38.2465161383 & 85.106178555 \\
-$n_{ch}$ & 234.5819026232 & 188.5895431042 & 19.6060987675 & 42.5033196807 & 81.8812452259 \\
-$f_{ch}$ & 45.7827448845 & 45.3263297677 & 0.9969231991 & 9.5379967242 & 79.1668307606 \\
-$p_T^D$ & 236.2553179264 & 55.3592890501 & 76.5680241461 & 17.6750160754 & 92.5186801167 \\
-$q$ & 79.3719366193 & 18.1521996856 & 77.1302043786 & 4.0360288695 & 94.9150429719 \\
+$M$ & 256.7945122719 & 204.8458755016 & 20.2296429691 & 24.1946559399 & 90.5782036672 \\
+$n_{ch}$ & 234.5819026232 & 188.5895431042 & 19.6060987675 & 24.7003342956 & 89.4704859926 \\
+$f_{ch}$ & 45.7827448845 & 45.3263297677 & 0.9969231991 & 5.0793923438 & 88.9054438379 \\
+$p_T^D$ & 236.2553179264 & 55.3592890501 & 76.5680241461 & 17.6119469106 & 92.5453754586 \\
+$q$ & 79.3719366193 & 18.1521996856 & 77.1302043786 & 5.307320971 & 93.3133533121 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -410,24 +414,24 @@ $q$ & 79.3719366193 & 18.1521996856 & 77.1302043786 & 4.0360288695 & 94.91504297
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 1.9631891539 & 11.8626018345 & -504.2515980158 & 1.8839980574 & 4.0337985974 \\
-$\ln\rho$ & 9.8779270646 & 1.7308083503 & 82.47802055 & 0.2049067751 & 97.9256095563 \\
+$m$ [GeV] & 1.9631891539 & 11.8625747679 & -504.2502193108 & 1.5958890865 & 18.7093569994 \\
+$\ln\rho$ & 9.8779270646 & 1.7308083503 & 82.47802055 & 0.1994947429 & 97.9803987047 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 12.3385315391 & 2.0086364519 & 83.7206198685 & 0.2145527001 & 98.2611164108 \\
-$w$ & 11.3879423623 & 1.4651360696 & 87.1343213464 & 0.2309089368 & 97.9723383784 \\
-$\lambda^{1}_{2}$ & 8.8244132939 & 0.8334801228 & 90.5548380948 & 0.1672009843 & 98.1052453154 \\
+$\lambda^{1}_{0.5}$ & 12.3385315391 & 2.0086359513 & 83.720623926 & 0.155249714 & 98.7417488581 \\
+$w$ & 11.3879423623 & 1.4651360696 & 87.1343213464 & 0.168762068 & 98.5180635565 \\
+$\lambda^{1}_{2}$ & 8.8244132939 & 0.8334801228 & 90.5548380948 & 0.116085384 & 98.6844974267 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 2.0414274746 & 2.0414274746 & 0 & 0.1661320442 & 91.8619668715 \\
-$\tau_{21}^{(\beta=1)}$ & 10.5038527129 & 6.5773589969 & 37.3814620534 & 0.1878804853 & 98.2113183568 \\
+$z_g$\(^\dag\) & 2.0414274746 & 2.0414274746 & 0 & 0.1972248443 & 90.3388757733 \\
+$\tau_{21}^{(\beta=1)}$ & 10.5038527129 & 6.5773589969 & 37.3814620534 & 0.1412417896 & 98.6553334911 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 7.8416884444 & 12.8331095908 & -63.6523776955 & 0.3705916752 & 95.2740831536 \\
-$n_{ch}$ & 6.4474187732 & 9.7730275632 & -51.5804681989 & 0.3424672527 & 94.688304502 \\
-$f_{ch}$ & 1.024994599 & 0.9435223793 & 7.9485511147 & 0.1389098405 & 86.4477490309 \\
-$p_T^D$ & 8.342363183 & 4.0291264288 & 51.70281681 & 0.244934848 & 97.0639632604 \\
-$q$ & 2.0273640089 & 0.9957887052 & 50.8825893692 & 0.0958195448 & 95.2736881787 \\
+$M$ & 7.8416884444 & 12.8331095908 & -63.6523776955 & 0.2620979224 & 96.6576340764 \\
+$n_{ch}$ & 6.4474187732 & 9.7730275632 & -51.5804681989 & 0.1871917637 & 97.0966402167 \\
+$f_{ch}$ & 1.024994599 & 0.9435223925 & 7.9485498346 & 0.112118342 & 89.061567528 \\
+$p_T^D$ & 8.342363183 & 4.0291264506 & 51.7028165499 & 0.2841117054 & 96.5943498363 \\
+$q$ & 2.0273640089 & 0.9957895619 & 50.8825471119 & 0.1101925676 & 94.5647369117 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -447,24 +451,24 @@ $q$ & 2.0273640089 & 0.9957887052 & 50.8825893692 & 0.0958195448 & 95.2736881787
 & \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 7.8090980373 & 45.934589576 & -488.2188872054 & 7.4891789414 & 4.0967483619 \\
-$\ln\rho$ & 39.2748792187 & 6.8889291666 & 82.4597062966 & 0.8054535588 & 97.9491889604 \\
+$m$ [GeV] & 7.8090980373 & 45.934589576 & -488.2188872054 & 6.3467267653 & 18.7265067629 \\
+$\ln\rho$ & 39.2748792187 & 6.8889291666 & 82.4597062966 & 0.7830011647 & 98.006356276 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 48.9794217337 & 8.0138935421 & 83.6382438615 & 0.8509197945 & 98.2626993861 \\
-$w$ & 45.2302572908 & 5.8371180508 & 87.0946609627 & 0.9044400959 & 98.0003649103 \\
-$\lambda^{1}_{2}$ & 35.0773740147 & 3.3152624103 & 90.5487155084 & 0.6501906183 & 98.1464102243 \\
+$\lambda^{1}_{0.5}$ & 48.9794217337 & 8.0138901346 & 83.6382508185 & 0.6152848825 & 98.7437890021 \\
+$w$ & 45.2302572908 & 5.8371180508 & 87.0946609627 & 0.6574012049 & 98.5465455112 \\
+$\lambda^{1}_{2}$ & 35.0773740147 & 3.3152624079 & 90.5487155151 & 0.447536974 & 98.7241434499 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
-$z_g$\(^\dag\) & 8.0863218607 & 8.0863218607 & 0 & 0.6642653165 & 91.7853218312 \\
-$\tau_{21}^{(\beta=1)}$ & 41.7543509502 & 26.1705092614 & 37.3226773599 & 0.7442765978 & 98.2174873256 \\
+$z_g$\(^\dag\) & 8.0863218607 & 8.0863218607 & 0 & 0.7874869301 & 90.2614941169 \\
+$\tau_{21}^{(\beta=1)}$ & 41.7543509502 & 26.1705092614 & 37.3226773599 & 0.5580416737 & 98.6635125179 \\
 \midrule
 \multicolumn{6}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 31.1005297084 & 49.8465730636 & -60.2756400969 & 1.4410163036 & 95.3665859806 \\
-$n_{ch}$ & 25.5759196819 & 38.3823403546 & -50.0721805199 & 1.3326896771 & 94.7892795502 \\
-$f_{ch}$ & 4.0949352109 & 3.7658116699 & 8.0373320708 & 0.5546811515 & 86.4544584251 \\
-$p_T^D$ & 33.0496107562 & 16.045843072 & 51.4492222302 & 0.970569571 & 97.0632950016 \\
-$q$ & 7.9823972057 & 3.9212192006 & 50.8766715111 & 0.3414855321 & 95.7220177936 \\
+$M$ & 31.1005297084 & 49.8465730636 & -60.2756400969 & 1.0048708678 & 96.7689589945 \\
+$n_{ch}$ & 25.5759196819 & 38.3823403546 & -50.0721805199 & 0.7118497007 & 97.2167190483 \\
+$f_{ch}$ & 4.0949352109 & 3.7658115708 & 8.037334491 & 0.4479786073 & 89.0601783866 \\
+$p_T^D$ & 33.0496107562 & 16.0458430227 & 51.4492223793 & 1.1206300624 & 96.609248833 \\
+$q$ & 7.9823972057 & 3.9212192006 & 50.8766715111 & 0.3855977391 & 95.1693992517 \\
 \multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
@@ -479,38 +483,26 @@ $q$ & 7.9823972057 & 3.9212192006 & 50.8766715111 & 0.3414855321 & 95.7220177936
 % width-limited and fills the page. On a portrait page the same figure is
 % limited by the narrower dimension instead and renders at 58% scale, which
 % is what made the panel text unreadable.
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
 \begin{landscape}
 \thispagestyle{empty}
-\ReportSection{Detector-level distributions}
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{1}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/detector_level.pdf}{1}
 \clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{2}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{3}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{4}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{5}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/detector_level.pdf}{6}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/detector_level.pdf}{2}
 \end{landscape}
 \clearpage
 
 
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
 \begin{landscape}
 \thispagestyle{empty}
-\ReportSection{Particle-level distributions}
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{1}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/particle_level.pdf}{1}
 \clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{2}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{3}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{4}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{5}
-\clearpage
-\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/particle_level.pdf}{6}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/particle_level.pdf}{2}
 \end{landscape}
 \clearpage
 
@@ -518,14 +510,14 @@ $q$ & 7.9823972057 & 3.9212192006 & 50.8766715111 & 0.3414855321 & 95.7220177936
 \ReportSection{Training diagnostics}
 \FigureLabel{Training losses}
 \begin{center}
-\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/losses.pdf}{0.355\textheight}
+\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/losses.pdf}{0.355\textheight}
 \end{center}
 
 \vfill
 
 \FigureLabel{Selection criteria}
 \begin{center}
-\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-11T023002Z/artifacts/selection.pdf}{0.355\textheight}
+\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-11T160419Z/artifacts/selection.pdf}{0.355\textheight}
 \end{center}
 
 \end{document}

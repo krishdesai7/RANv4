@@ -15,6 +15,7 @@ from .constants import JET_VARIABLE_GROUPS as JET_VARIABLE_GROUPS
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
 from .constants import PANEL_COLUMNS as PANEL_COLUMNS
+from .constants import PANEL_WIDTH_INCHES as PANEL_WIDTH_INCHES
 from .constants import PANELS_PER_PAGE as PANELS_PER_PAGE
 from .constants import POISON_SENTINEL as POISON_SENTINEL
 from .constants import RUN_DIR as RUN_DIR

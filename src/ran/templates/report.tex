@@ -126,14 +126,18 @@
     % A six-panel page is square, so it is width-limited and leaves roughly a
     % third of the page height spare; the fills centre it rather than letting
     % it ride the top margin.
-    \vspace*{\fill}
-    \begin{center}
+    % No \vspace{\fill} and no `center` ENVIRONMENT, both of which cost a
+    % page here. The graphic clears the block by ~6pt, so the environment's
+    % \topsep alone is enough to force a break; and a leading \fill on a
+    % fresh page yields a page of nothing but fill. A figure sized to 99% of
+    % the block does not need centring.
+    %
     % Measured inside a `pdflscape` landscape block with this geometry:
     % \linewidth is 625.5pt and \textheight is 511.9pt -- the package swaps
     % them, so \linewidth really is the wide dimension here.
-    \includegraphics[width=\linewidth,page=#2]{#1}
-    \end{center}
-    \vspace*{\fill}
+    \null\vfill
+    {\centering\includegraphics[width=\linewidth,page=#2]{#1}\par}
+    \vfill
 }{
     \fbox{\parbox[c][0.4\textheight][c]{0.94\linewidth}{
         \centering\color{ReportGray}
@@ -336,17 +340,21 @@
 % width-limited and fills the page. On a portrait page the same figure is
 % limited by the narrower dimension instead and renders at 58% scale, which
 % is what made the panel text unreadable.
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
 \begin{landscape}
 \thispagestyle{empty}
-\ReportSection{Detector-level distributions}
 <<DETECTOR_FIGURES>>
 \end{landscape}
 \clearpage
 
 
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
 \begin{landscape}
 \thispagestyle{empty}
-\ReportSection{Particle-level distributions}
 <<PARTICLE_FIGURES>>
 \end{landscape}
 \clearpage

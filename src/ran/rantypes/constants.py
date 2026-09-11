@@ -214,35 +214,38 @@ JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = 
 )
 
 
-# How the level figures paginate, and why so few to a page.
+# The level figures' page layout.
 #
-# What governs legibility is not the panel count but the scale
-# `\includegraphics` applies: a figure `W` inches wide rendered into a text
-# block `TW` points wide is scaled by `min(TW / 72W, TH / 72H)`, and every
-# font in it scales with it. The report's base font is 18pt, so a scale of
-# 0.29 -- which is what a twelve-panel 12x24in figure gets on a portrait page
-# -- renders axis labels at 5pt.
+# The panel ASPECT is what makes these readable, and it was the thing wrong
+# with them: a hist-over-ratio cell wants to be WIDER than tall, roughly 5:4,
+# the shape a hand-written notebook reaches for (a 30x16in figure of 3x2
+# cells is 10x8 per cell). A 4x6 cell is the same panel turned on its end,
+# and no amount of paginating fixes it.
 #
-# Shrinking the panels does not help, because the scale falls in step. Fewer
-# panels per page does. Measured against a landscape text block (260x176mm =
-# 737x499pt), with 4x6in panels:
+# Two facts constrain the rest. A panel's width on the page is
+# `linewidth / columns` whatever the figure measures in inches -- widening a
+# cell shrinks the `\includegraphics` scale by exactly as much -- so the
+# column count alone sets it. And every font scales with that same factor,
+# so the cell's absolute inches set the rendered text size and nothing else:
+# at 3 columns in a landscape block, a 4in cell renders 18pt labels at 13pt,
+# a 6in cell at 8.7pt. The latter is a normal figure text size in print.
 #
-#     3 cols x 4 rows  panel  83pt  text  5.2pt  height used  15%
-#     3 cols x 2 rows  panel 166pt  text 10.4pt  height used  30%
-#     3 cols x 1 row   panel 208pt  text 13.0pt  height used  61%
-#     2 cols x 1 row   panel 313pt  text 19.5pt  height used  92%
+# Hence 6.0 x 4.8in cells, three across and two down -- six to a page, the
+# arrangement a hand-written notebook reaches for -- giving 2.9 x 2.3in
+# panels with 8.7pt text. Six 5:4 cells in a 3x2 grid make a figure of
+# aspect 1.875 against a landscape block's 1.222, so a third of the page
+# height goes unused. That is inherent to the arrangement, not a defect:
+# filling it means either 2x2 (bigger panels, more pages) or 3x3 (an
+# awkward 9 + 3 split for twelve observables).
 #
-# A panel's width on the page is `linewidth / columns` whatever the figure's
-# inch dimensions, so the column count is the only lever on it -- widening
-# the panels in inches shrinks the scale by exactly as much. Two across, one
-# row, which is also the only arrangement that fills the page height rather
-# than stranding 40% of it.
-#
-# `report.py` needs the same numbers to know how many `\includegraphics`
-# pages to emit, and must stay free of matplotlib, so they live here rather
-# than in `plotting`.
-PANEL_COLUMNS: Final[int] = 2
-PANELS_PER_PAGE: Final[int] = 2
+# `report.py` needs the same numbers to know how many
+# `\includegraphics` pages to emit, and must stay free of matplotlib, so
+# they live here rather than in `plotting`.
+PANEL_COLUMNS: Final[int] = 3
+PANELS_PER_PAGE: Final[int] = 6
+# Width in inches; the height comes from `_LevelStyle.height_per_dim`, which
+# is 4.8 for both levels -- a 5:4 cell.
+PANEL_WIDTH_INCHES: Final[float] = 6.0
 
 
 def figure_pages(dim: int, /) -> int:

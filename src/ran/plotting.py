@@ -14,7 +14,12 @@ from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
 from .evaluate import _get_weights
-from .rantypes import PANEL_COLUMNS, PANELS_PER_PAGE, display_order
+from .rantypes import (
+    PANEL_COLUMNS,
+    PANEL_WIDTH_INCHES,
+    PANELS_PER_PAGE,
+    display_order,
+)
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -110,7 +115,7 @@ class _LevelStyle(NamedTuple):
     title_prefix: str  # "Detector Level" / "Particle Level"
     nature_label: str  # legend entry for the reference sample
     mc_label: str  # legend entry for the simulated sample
-    height_per_dim: float  # figure inches per dimension
+    height_per_dim: float  # panel height in inches; see PANEL_WIDTH_INCHES
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
@@ -296,7 +301,7 @@ _DETECTOR = _LevelStyle(
     title_prefix="Detector Level",
     nature_label="Data",
     mc_label="Sim",
-    height_per_dim=6,
+    height_per_dim=4.8,
     bins_span_both=False,
 )
 _PARTICLE = _LevelStyle(
@@ -305,7 +310,7 @@ _PARTICLE = _LevelStyle(
     title_prefix="Particle Level",
     nature_label="Truth",
     mc_label="Gen.",
-    height_per_dim=6,
+    height_per_dim=4.8,
     bins_span_both=True,
 )
 
@@ -413,7 +418,7 @@ def _page_figure(
     """One page of the level figure: up to `PANELS_PER_PAGE` panels."""
     ncols: int = min(PANEL_COLUMNS, len(indices))
     nrows: int = math.ceil(len(indices) / ncols)
-    figure = Figure(figsize=(4.0 * ncols, style.height_per_dim * nrows))
+    figure = Figure(figsize=(PANEL_WIDTH_INCHES * ncols, style.height_per_dim * nrows))
     figure.canvas = FigureCanvasPdf(figure)
     # Absolute margins in inches do not survive a figure whose height varies
     # with `nrows`; `tight_layout` at the end replaces them. Row/column spacing

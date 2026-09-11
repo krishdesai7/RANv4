@@ -332,21 +332,21 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     return _last_drawn_figure()
 
 
-def test_twelve_observables_are_paginated_two_to_a_page(
+def test_twelve_observables_are_paginated_six_to_a_page(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""`\includegraphics` scales a figure to its text block and every font
     scales with it, so a twelve-panel 12x24in figure renders its 18pt labels
     at 5pt. A panel's width on the page is `linewidth / columns` whatever the
-    figure's inch dimensions, so the column count is the only lever on it:
-    two across gives 313pt panels and 19.5pt text, and fills 92% of the page
-    height rather than stranding 40% of it.
+    figure's inch dimensions, so the column count sets it and the cell's
+    absolute inches set the text size. Six 5:4 cells three across, at 6x4.8in,
+    give 2.9x2.3in panels with 8.7pt text.
     """
     save_path: Path = tmp_path / "detector.pdf"
     _plot_twelve_dim_level(save_path, monkeypatch)
 
     pages: list[Figure] = _drawn_pages()
-    assert len(pages) == figure_pages(12) == 6
+    assert len(pages) == figure_pages(12) == 2
     assert len(_drawn_panels()) == 12
 
     for page in pages:
@@ -355,7 +355,13 @@ def test_twelve_observables_are_paginated_two_to_a_page(
         columns = {round(a.get_position().x0, 3) for a in hist_axes}
         rows = {round(a.get_position().y0, 3) for a in hist_axes}
         assert len(columns) == PANEL_COLUMNS
-        assert len(rows) == 1
+        assert len(rows) == PANELS_PER_PAGE // PANEL_COLUMNS
+        # A cell is wider than it is tall -- a hist over a ratio panel wants
+        # roughly 5:4. The 4x6 cell this replaced was the same panel on its
+        # end, which no amount of paginating fixes.
+        cell = page.get_figwidth() / PANEL_COLUMNS
+        cell_h = page.get_figheight() / (PANELS_PER_PAGE // PANEL_COLUMNS)
+        assert cell / cell_h > 1.0
         # Wider than the landscape text block, so `\includegraphics`
         # fits it to the page WIDTH. Fitting to the height instead is
         # what rendered the panel text at 5pt.
@@ -369,8 +375,8 @@ def test_a_page_counter_appears_only_when_there_is_more_than_one_page(
     """A single-page figure must read exactly as it did before pagination."""
     _plot_twelve_dim_level(tmp_path / "detector.pdf", monkeypatch)
     multi = [p.get_suptitle() for p in _drawn_pages()]
-    assert multi[0] == "Detector Level (1 of 6)"
-    assert multi[-1] == "Detector Level (6 of 6)"
+    assert multi[0] == "Detector Level (1 of 2)"
+    assert multi[-1] == "Detector Level (2 of 2)"
 
     _ = _one_dim_level(tmp_path, monkeypatch)
     assert len(_drawn_pages()) == 1

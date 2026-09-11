@@ -171,7 +171,10 @@ def load_params(run_dir: Path, /) -> EpochParams:
                     jnp.asarray(a=f[k])  # pyrefly: ignore[unknown-argument-type]
                     for k in sorted(
                         (k for k in keys if k.split(sep=":")[0] == field),
-                        key=lambda k: int(k.split(sep=":")[1]),
+                        # `NpzFile.keys()` is untyped, so `k` reads as
+                        # unknown however `keys` is annotated; the suppression
+                        # has to sit on each use rather than at the source.
+                        key=lambda k: int(k.split(sep=":")[1]),  # pyrefly: ignore[unknown-argument-type]
                     )
                 ]
                 for field in EpochParams._fields

@@ -3,7 +3,7 @@
   "n_samples": 1600000,
   "dim": 12,
   "dataset": "jets",
-  "seed": 1025884356,
+  "seed": 799905857,
   "data_seed": 42,
   "hidden_units": 128,
   "n_layers": 3,
@@ -27,7 +27,7 @@
     4.2809838668457685,
     6.054225444793701
   ],
-  "mmd_test": 0.0004391670227050781,
-  "best_epoch": 92,
+  "mmd_test": 0.00020003318786621094,
+  "best_epoch": 23,
   "variables": ["m", "M", "w", "tau21", "zg", "sdm", "q", "f_ch", "lha", "ang2", "ptd", "n_ch"]
 }

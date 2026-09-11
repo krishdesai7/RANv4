@@ -1,10 +1,10 @@
 {
-  "total_seconds": 49.27570691102301,
+  "total_seconds": 56.67896451399429,
   "compile_cache_warm": true,
   "phases": [
     {
       "name": "train",
-      "seconds": 36.2092423280119,
+      "seconds": 41.87316396899405,
       "depth": 0,
       "detail": null,
       "failed": false,
@@ -12,7 +12,7 @@
     },
     {
       "name": "transfer",
-      "seconds": 2.037423742003739,
+      "seconds": 6.98797149398888,
       "depth": 1,
       "detail": null,
       "failed": false,
@@ -20,7 +20,7 @@
     },
     {
       "name": "compile",
-      "seconds": 3.415061441017315,
+      "seconds": 3.748421801996301,
       "depth": 1,
       "detail": null,
       "failed": false,
@@ -28,7 +28,7 @@
     },
     {
       "name": "epochs",
-      "seconds": 29.5224091320124,
+      "seconds": 29.800801046993,
       "depth": 1,
       "detail": null,
       "failed": false,
@@ -36,7 +36,7 @@
     },
     {
       "name": "select",
-      "seconds": 1.0425462919811253,
+      "seconds": 1.1320825580041856,
       "depth": 1,
       "detail": null,
       "failed": false,
@@ -44,7 +44,7 @@
     },
     {
       "name": "particle_mmd",
-      "seconds": 0.4086526989995036,
+      "seconds": 0.3997263579949504,
       "depth": 0,
       "detail": null,
       "failed": false,
@@ -52,7 +52,7 @@
     },
     {
       "name": "save",
-      "seconds": 0.5196981269982643,
+      "seconds": 0.2760131579998415,
       "depth": 0,
       "detail": null,
       "failed": false,
@@ -60,7 +60,7 @@
     },
     {
       "name": "data",
-      "seconds": 1.5060533400101122,
+      "seconds": 1.5230464870110154,
       "depth": 0,
       "detail": "cache hit",
       "failed": false,
@@ -68,7 +68,7 @@
     },
     {
       "name": "load",
-      "seconds": 2.463136944017606,
+      "seconds": 2.957062268993468,
       "depth": 0,
       "detail": null,
       "failed": false,
@@ -76,7 +76,7 @@
     },
     {
       "name": "plots",
-      "seconds": 8.163655152980937,
+      "seconds": 9.645293706998928,
       "depth": 0,
       "detail": null,
       "failed": false,
@@ -84,7 +84,7 @@
     },
     {
       "name": "evaluate",
-      "seconds": 0.005268320004688576,
+      "seconds": 0.0046585660020355135,
       "depth": 0,
       "detail": null,
       "failed": false,

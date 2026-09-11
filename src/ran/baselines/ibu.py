@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
 from ..evaluate import apply_to_runs, render_metrics
-from ..rantypes import DEFAULT_PURITY_THRESHOLD, IBUResult, VariableOutcome
+from ..rantypes import (
+    DEFAULT_PURITY_THRESHOLD,
+    IBUResult,
+    VariableOutcome,
+    artifacts_dir,
+)
 from ..train import EPS
 from ._shared import (
     evaluate_dimension,
@@ -85,11 +90,14 @@ def _unfolded_to_bin_weights(unfolded: EventArray, prior: EventArray) -> EventAr
         raise ValueError("unfolded and prior must be finite")
     if np.any(a=unfolded < 0) or np.any(a=prior < 0):
         raise ValueError("unfolded and prior must be nonnegative")
-    if np.any(a=(prior == 0) & (unfolded > EPS)):
+    zero_prior_mass: NDArray[np.bool_] = cast(
+        "NDArray[np.bool_]", (prior == 0) & (unfolded > EPS)
+    )
+    if np.any(a=zero_prior_mass):
         raise ValueError("unfolded mass in a zero-prior bin")
 
     weights: EventArray = np.zeros_like(a=unfolded)
-    np.divide(unfolded, prior, out=weights, where=prior > 0)
+    _ = np.divide(unfolded, prior, out=weights, where=prior > 0)
     return weights
 
 
@@ -150,7 +158,7 @@ def _next_pure_edge(
     # Among those elements, count the ones satisfying min(gen, reco) >= lo.
     prefix: NDArray[np.ulong] = np.empty(shape=lower_by_upper.size + 1, dtype=np.ulong)
     prefix[0] = 0
-    np.cumsum(
+    _ = np.cumsum(
         a=lower_by_upper >= lo,
         dtype=np.ulong,
         out=prefix[1:],
@@ -158,20 +166,21 @@ def _next_pure_edge(
     n_both: NDArray[np.ulong] = prefix[upper_stop]
 
     purity: NDArray[np.double] = np.zeros(shape=n_candidates, dtype=np.double)
-    np.divide(
+    _ = np.divide(
         n_both,
         n_truth,
         out=purity,
         where=n_truth != 0,
     )
 
-    qualifying: NDArray[np.intp] = np.flatnonzero(
-        a=(n_truth != 0) & (purity > purity_threshold)
+    resolved: NDArray[np.bool_] = cast(
+        "NDArray[np.bool_]", (n_truth != 0) & (purity > purity_threshold)
     )
+    qualifying: NDArray[np.intp] = np.flatnonzero(a=resolved)
     if qualifying.size == 0:
         return None
 
-    return candidates[qualifying[0]]
+    return np.single(candidates[qualifying[0]])
 
 
 def _purity_bins(
@@ -251,16 +260,17 @@ def _ibu(
     posterior: EventArray = prior.copy()
 
     for _ in range(n_iterations):
-        # The NumPy-stub loses the specific floating precision
-        # There is no type promotion at runtime
-        marginal: EventArray = response.T @ posterior  # pyrefly: ignore[bad-assignment]
-        if strict and np.any(a=(marginal == 0) & (data_hist != 0)):
+        marginal: EventArray = response.T @ posterior
+        unsupported: NDArray[np.bool_] = cast(
+            "NDArray[np.bool_]", (marginal == 0) & (data_hist != 0)
+        )
+        if strict and np.any(a=unsupported):
             raise ValueError(
                 "Observed data has zero support under the response and prior"
             )
         # `out=` makes the value of the skipped entries zero.
         likelihood: EventArray = np.zeros_like(a=posterior)
-        np.divide(
+        _ = np.divide(
             data_hist,
             marginal,
             out=likelihood,
@@ -345,7 +355,8 @@ def _run_and_evaluate(
     weights: NDArray[np.single] = np.empty(
         shape=(config.dim, len(test.mc)), dtype=np.single
     )
-    metrics: dict[str, MetricRecord] = {}
+    detector: dict[str, MetricRecord] = {}
+    particle: dict[str, MetricRecord] = {}
     outcomes: list[VariableOutcome] = []
 
     for dimension, variable_name in enumerate(iterable=config.variable_names):
@@ -362,16 +373,22 @@ def _run_and_evaluate(
         )
         weights[dimension] = test_weights
         outcomes.append(unfolding.outcome)
-        metrics[f"detector_{variable_name}"] = evaluate_dimension(
+        detector[f"detector_{variable_name}"] = evaluate_dimension(
             reference=test.data[:, dimension],
             comparison=test.mc.x[:, dimension],
             weights=test_weights,
         )
-        metrics[f"particle_{variable_name}"] = evaluate_dimension(
+        particle[f"particle_{variable_name}"] = evaluate_dimension(
             reference=test_truth[:, dimension],
             comparison=test.mc.z[:, dimension],
             weights=test_weights,
         )
+
+    # Every detector entry, then every particle entry -- the order
+    # `evaluate.evaluate_run` writes. Two files in the same nominal format with
+    # different key orders is the shape of bug that surfaces the first time
+    # someone zips them positionally.
+    metrics: dict[str, MetricRecord] = detector | particle
 
     return IBUResult(
         metrics=metrics,
@@ -387,15 +404,29 @@ def evaluate_single(
     n_iterations: int = 10,
     purity_threshold: np.double = DEFAULT_PURITY_THRESHOLD,
 ) -> dict[str, MetricRecord]:
-    """Run IBU on a single run's dataset and save comparison metrics."""
-    out_path: Path = run_dir / "metrics_ibu.json"
+    """Run IBU on a single run's dataset and save comparison metrics.
 
-    if out_path.exists() and not force:
+    The cache hit requires both `metrics_ibu.json` and `ibu_outcomes.json` to
+    exist -- a directory holding only the former is an incomplete result (an
+    older run, or one interrupted between the two writes), and Task 12 needs
+    the outcomes file to mark variables IBU refused to unfold. Missing either
+    file is treated as a cache miss and recomputes both.
+    """
+    out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
+    outcomes_path: Path = artifacts_dir(run_dir) / "ibu_outcomes.json"
+
+    if out_path.exists() and outcomes_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
-        return json.loads(s=out_path.read_text())
+        return cast("dict[str, MetricRecord]", json.loads(s=out_path.read_text()))
 
     raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
     config: RunConfig = parse_run_config(raw_config)
+    if out_path.exists() and not outcomes_path.exists():
+        logger.info(
+            "%s: metrics_ibu.json exists but ibu_outcomes.json is missing, "
+            "recomputing both",
+            run_dir.name,
+        )
     logger.info(
         "%s: running IBU (niter=%d, purity=%.4f)...",
         run_dir.name,
@@ -409,14 +440,22 @@ def evaluate_single(
     )
 
     json.dump(obj=result.metrics, fp=out_path.open(mode="w"), indent=2)
-    weights_path: Path = run_dir / "ibu_weights.npz"
+
+    # `outcomes` records the variables IBU's purity binning gave up on and
+    # returned unchanged. Without it, a report showing `IBU == Sim` and a 0.0%
+    # improvement reads as a measurement rather than a refusal.
+    _ = (artifacts_dir(run_dir) / "ibu_outcomes.json").write_text(
+        data=json.dumps(obj=[asdict(obj=o) for o in result.outcomes], indent=2)
+    )
+
+    weights_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     np.savez(
         weights_path,
         # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. The keys are
         # built by f-string, so their type is plain `str`.
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
-        },  # pyrefly: ignore[bad-argument-type]
+        },
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",

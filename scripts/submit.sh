@@ -6,7 +6,17 @@
 #SBATCH -G1
 #SBATCH -c32
 
-#SBATCH -t00:15:00
+# Sized from a measured run, not guessed: 12 vars / 500k / 100 epochs reports
+# 18.7s total across timings.json's three merged passes (train 11.2, plots 3.2,
+# evaluate 3.1). Scaling rows by 3.2x and the net by ~7x for -u128 -l3 puts the
+# whole pipeline -- train, IBU, the reload that replots with the baseline
+# overlaid, evaluate -- near 4 minutes. 15 gives ~4x margin.
+#
+# Requesting more is not free even though NERSC charges elapsed time rather
+# than the request: `-t` is what Slurm's backfill scheduler matches against, so
+# a short request slots into gaps a long one cannot reach. The counter-pressure
+# is that overrunning kills the job outright, which is what the margin is for.
+#SBATCH -t00:5:00
 #SBATCH -Am3246_g
 #SBATCH -Jran_e2e
 #SBATCH -oslurm-%j.log
@@ -17,7 +27,68 @@ PROJECT_DIR=/global/u1/k/kdesai/RANv4
 cd "${PROJECT_DIR}"
 
 echo "RAN_CACHE_DIR = ${RAN_CACHE_DIR:-<unset: using ./.cache>}"
-TRAIN_ARGS=(-Djets -n1000000 -l3 -u128)
+
+# Report where the wall clock went. `timings.json` lands in the run directory
+# alongside config.json, so it joins against it without walking a tree. This
+# script makes three passes over that directory (train, IBU baseline, then a
+# reload to redraw the figures with the baseline overlaid), and each pass
+# merges its phases into the same file by name rather than overwriting it, so
+# the file accumulates all three passes' phases instead of only the last one's.
+export RAN_TIMING=1
+
+# The full 12: the OmniFold six plus q, f_ch, lha, ang2, ptd, n_ch.
+#
+# Deliberately NOT passed as `--var` flags. `--var` is a repeatable option, so
+# click *appends* rather than replacing -- naming all twelve here would turn a
+# `sbatch scripts/submit.sh --var m` into thirteen names with a duplicate, and
+# `load_jet_dataset` rejects duplicates. Omitting it lets the loader's own
+# default (all of SUBSTRUCTURE_VARIABLES) stand while keeping a subset
+# selectable from the command line. Scalar flags below still follow the
+# last-occurrence rule, so `-n`/`-u`/`-l` remain overridable.
+N_REQUESTED=1600000
+
+# The Zenodo release holds ~1.6M jets per generator, and `load_jet_dataset`
+# raises rather than truncating when asked for more than is on disk -- which
+# would burn the whole allocation on an immediate ValueError. Read the real
+# count off the cache and clamp. All twelve observables are derived from the
+# same events in one pass of `download_jet_data`, so variables[0] settles it,
+# which is the file the loader checks too.
+N_SAMPLES="$(uv run python - "${N_REQUESTED}" <<'PY'
+import sys
+
+import numpy as np
+
+from ran.rantypes.constants import (
+    CACHE_DIR,
+    CACHE_FILENAMES,
+    SUBSTRUCTURE_VARIABLES,
+)
+
+requested = int(sys.argv[1])
+missing = [
+    v for v in SUBSTRUCTURE_VARIABLES
+    if not (CACHE_DIR / f"{CACHE_FILENAMES[v]}.npz").exists()
+]
+if missing:
+    # Cold cache: 3.3GB from Zenodo. Say so and let the run decide -- the job
+    # will pull it, which is exactly what warming on a login node avoids.
+    print(f"COLD {' '.join(missing)}", file=sys.stderr)
+    print(requested)
+    raise SystemExit(0)
+
+path = CACHE_DIR / f"{CACHE_FILENAMES[SUBSTRUCTURE_VARIABLES[0]]}.npz"
+with np.load(file=path) as f:
+    available = min(len(f["z_true"]), len(f["z_gen"]))
+print(min(requested, available))
+PY
+)"
+
+if [[ "${N_SAMPLES}" -lt "${N_REQUESTED}" ]]; then
+  echo "Clamped n_samples ${N_REQUESTED} -> ${N_SAMPLES} (all that is on disk)."
+fi
+echo "n_samples = ${N_SAMPLES}, all 12 jet observables"
+
+TRAIN_ARGS=(-Djets "-n${N_SAMPLES}" -l3 -u128)
 
 mkdir -p runs
 marker="$(mktemp)"
@@ -35,6 +106,9 @@ echo "Run dir: ${RUN_DIR}"
 uv run ran baseline ibu --run-dir "${RUN_DIR}"
 uv run ran train --load-run "${RUN_DIR}"
 uv run ran evaluate --run-dir "${RUN_DIR}" --force
+
+module load texlive
+uv run ran report "${RUN_DIR}"
 
 echo "Artifacts in ${RUN_DIR}:"
 ls -1 "${RUN_DIR}"

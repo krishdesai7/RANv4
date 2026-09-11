@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,9 +21,8 @@ from .data import (
 from .evaluate import evaluate_run
 from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
 from .plotting import (
-    plot_detector_level,
+    plot_levels,
     plot_losses,
-    plot_particle_level,
     plot_selection,
 )
 from .rantypes import (
@@ -30,7 +30,9 @@ from .rantypes import (
     DatasetName,
     GaussianConfig,
     VarInfo,
+    artifacts_dir,
 )
+from .timing import phase, report, write
 from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
 
 if TYPE_CHECKING:
@@ -41,6 +43,22 @@ if TYPE_CHECKING:
     from .train import EpochParams, TrainResult
 
 logger: Logger = logging.getLogger(__name__)
+
+# `json.dump(indent=2)` has no way to keep one array inline, and a twelve-name
+# variable list costs fourteen lines of a config a person is meant to read.
+_VARIABLES_ARRAY: re.Pattern[str] = re.compile(
+    pattern=r'("variables": )\[[^\]]*\]', flags=re.DOTALL
+)
+
+
+def _compact_variables(text: str, /) -> str:
+    """Re-render the `variables` array of a dumped config on a single line."""
+
+    def _one_line(match: re.Match[str]) -> str:
+        names: list[str] = json.loads(s=match.group(0).split(sep=": ", maxsplit=1)[1])
+        return match.group(1) + json.dumps(obj=names)
+
+    return _VARIABLES_ARRAY.sub(repl=_one_line, string=text)
 
 
 def _prepare_gaussian(
@@ -158,16 +176,55 @@ def _save_run(
     hyperparameters: dict[str, Any],
     run_dir: Path | None = None,
 ) -> Path:
+    with phase("save"):
+        return _write_run_dir(
+            g,
+            d,
+            history,
+            params,
+            batch_size=batch_size,
+            n_samples=n_samples,
+            dim=dim,
+            dataset=dataset,
+            init_seed=init_seed,
+            data_seed=data_seed,
+            gaussian_params=gaussian_params,
+            variables=variables,
+            hyperparameters=hyperparameters,
+            run_dir=run_dir,
+        )
+
+
+def _write_run_dir(
+    g: RANModel,
+    d: RANModel,
+    history: dict[str, list[float]],
+    params: EpochParams,
+    *,
+    batch_size: int,
+    n_samples: int,
+    dim: int,
+    dataset: str,
+    init_seed: int,
+    data_seed: int,
+    gaussian_params: GaussianConfig | None,
+    variables: tuple[str, ...],
+    hyperparameters: dict[str, Any],
+    run_dir: Path | None = None,
+) -> Path:
+    """Everything `_save_run` puts on disk. Split out only so the timer wraps a
+    call rather than an indented body."""
     run_dir = _new_run_dir(run_dir)
 
-    g.save(run_dir / "generator.keras")
-    d.save(run_dir / "discriminator.keras")
+    artifacts: Path = artifacts_dir(run_dir)
+    g.save(artifacts / "generator.keras")
+    d.save(artifacts / "discriminator.keras")
     # Every epoch's parameters, not just the selected one's. `scan` already
     # emitted the stack; dropping it on the floor is what made re-scoring a run
     # under a different criterion cost a full retrain.
-    save_params(run_dir, params)
+    _ = save_params(run_dir, params)
     np.savez(
-        file=run_dir / "history.npz",
+        file=artifacts / "history.npz",
         # See ran.baselines.ibu: unpacking a str-keyed dict into savez means a
         # key could in principle be "allow_pickle", which is declared bool.
         **{k: np.array(object=v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
@@ -190,19 +247,35 @@ def _save_run(
         config_out["gaussian_params"] = gaussian_params.model_dump()
     else:
         config_out["variables"] = list(variables)
-    json.dump(obj=config_out, fp=(run_dir / "config.json").open(mode="w"), indent=2)
+    _ = (run_dir / "config.json").write_text(
+        data=_compact_variables(json.dumps(obj=config_out, indent=2))
+    )
     logger.info("Saved run to %s", run_dir)
     return run_dir
 
 
 def _load_artifacts(run_dir: Path) -> tuple[RANModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
-    g: RANModel = keras.saving.load_model(run_dir / "generator.keras")
+    artifacts: Path = artifacts_dir(run_dir)
+    g: RANModel = keras.saving.load_model(artifacts / "generator.keras")
     history: dict[str, list[float]] = {
-        k: v.tolist() for k, v in np.load(file=run_dir / "history.npz").items()
+        k: v.tolist() for k, v in np.load(file=artifacts / "history.npz").items()
     }
     logger.info("Loaded run from %s", run_dir)
     return g, history
+
+
+def _display_variables(
+    dataset: DatasetName, variables: tuple[str, ...]
+) -> tuple[str, ...] | None:
+    """Column names for `_plot_level`'s presentation order, or `None`.
+
+    Only a jet run has named columns; a Gaussian run's `variables` argument is
+    unused filler, and passing it through would give `display_order` real
+    names to (fail to) match against instead of the `dim_i` identity it falls
+    back to.
+    """
+    return variables if dataset == DatasetName.jets else None
 
 
 def _draw_figures(
@@ -213,15 +286,17 @@ def _draw_figures(
     dim: int,
     var_info: list[VarInfo] | None,
     best_epoch: int,
+    variables: tuple[str, ...] | None,
     /,
     *,
     plots: bool,
 ) -> None:
-    """Draw a run's figures, unless this is a sweep.
+    """Draw a run's figures, unless plots are turned off.
 
     Matplotlib is a large share of a short run's wall clock and none of it is
-    needed to score one, so a sweep turns it off. The artifacts are already on
-    disk by then, so `--load-run` on the same directory draws them later.
+    needed to score one, so plots can be turned off for hyperparameter sweeps,
+    bootstrapping, etc. The artifacts are already on disk by then, so
+    `--load-run` on the same directory draws them later.
 
     The guard lives here rather than at the call site because the IBU overlay is
     part of the same decision: `_load_baseline_weights` exists only to feed
@@ -236,23 +311,19 @@ def _draw_figures(
     if not plots:
         return
     ibu_weights: list[EventArray] | None = _load_baseline_weights(run_dir, dim)
-    plot_detector_level(
+    artifacts: Path = artifacts_dir(run_dir)
+    plot_levels(
         splits.test,
         g,
-        save_path=run_dir / "detector_level.pdf",
+        detector_path=artifacts / "detector_level.pdf",
+        particle_path=artifacts / "particle_level.pdf",
         var_info=var_info,
         ibu_weights=ibu_weights,
+        variables=variables,
     )
-    plot_particle_level(
-        splits.test,
-        g,
-        save_path=run_dir / "particle_level.pdf",
-        var_info=var_info,
-        ibu_weights=ibu_weights,
-    )
-    plot_losses(history, save_path=run_dir / "losses.pdf")
+    plot_losses(history, save_path=artifacts / "losses.pdf")
     if "val_mmd" in history:
-        plot_selection(history, best_epoch, save_path=run_dir / "selection.pdf")
+        plot_selection(history, best_epoch, save_path=artifacts / "selection.pdf")
     else:
         logger.debug("No val_mmd in history, skipping selection.pdf")
 
@@ -263,7 +334,7 @@ def _load_baseline_weights(
 ) -> list[EventArray] | None:
     """Pick up IBU weights from the run dir, if that baseline has run."""
     ibu_weights: list[EventArray] | None = None
-    ibu_path: Path = run_dir / "ibu_weights.npz"
+    ibu_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
         ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
@@ -346,8 +417,67 @@ def run(
     plots: bool = True,
     run_dir: Path | None = None,
 ) -> None:
+    """Train (or reload) one run, then report where its wall clock went.
+
+    The timing report is in a `finally` because a run that fell over is exactly
+    the one whose breakdown is worth having --- the phase that raised is
+    recorded with the time it burned before it did.
+
+    `timings.json` needs a directory to land in. `--run-dir` and `--load-run`
+    both name one up front, so a crash there still gets a file; a fresh run
+    under the default timestamp has no directory until `_save_run` makes one,
+    and if it dies first the table on stderr is all there is.
+    """
     _reject_conflicting_outputs(load_run, run_dir)
 
+    written_to: Path | None = load_run or run_dir
+    try:
+        written_to = _pipeline(
+            batch_size,
+            n_samples,
+            config,
+            dataset,
+            variables,
+            load_run,
+            hidden_units,
+            n_layers,
+            seed,
+            data_seed,
+            n_epochs=n_epochs,
+            n_disc_steps=n_disc_steps,
+            lr_g=lr_g,
+            lr_d=lr_d,
+            lambda_dispersion=lambda_dispersion,
+            plots=plots,
+            run_dir=run_dir,
+        )
+    finally:
+        report()
+        if written_to is not None:
+            write(written_to, pass_name="load" if load_run is not None else "train")
+
+
+def _pipeline(
+    batch_size: int,
+    n_samples: int,
+    config: Path | None,
+    dataset: DatasetName,
+    variables: tuple[str, ...],
+    load_run: Path | None,
+    hidden_units: int,
+    n_layers: int,
+    seed: int | None,
+    data_seed: int,
+    *,
+    n_epochs: int,
+    n_disc_steps: int,
+    lr_g: float,
+    lr_d: float,
+    lambda_dispersion: float,
+    plots: bool,
+    run_dir: Path | None,
+) -> Path:
+    """The run itself, returning the directory its artifacts landed in."""
     # Each dataset fills in only its own metadata, but the plots and the saved
     # config are handed both, so the other one has to exist as None.
     gaussian_params: GaussianConfig | None = None
@@ -382,44 +512,50 @@ def run(
                 saved_config.source["gaussian_params"], dim
             )
 
-    if dataset == DatasetName.gaussian:
-        splits, dim, gaussian_params = _prepare_gaussian(
-            config,
-            saved_gaussian_config,
-            batch_size,
-            n_samples,
-            data_seed,
-        )
-    elif dataset == DatasetName.jets:
-        splits, dim, var_info = _prepare_jets(
-            n_samples, batch_size, variables, data_seed
-        )
-    else:
-        raise ValueError(f"Unknown dataset: {dataset!r}")
+    with phase("data"):
+        # Which branch this took --- cache hit, generated, downloaded --- is
+        # filled in from inside the loaders, which know and this does not.
+        if dataset == DatasetName.gaussian:
+            splits, dim, gaussian_params = _prepare_gaussian(
+                config,
+                saved_gaussian_config,
+                batch_size,
+                n_samples,
+                data_seed,
+            )
+        elif dataset == DatasetName.jets:
+            splits, dim, var_info = _prepare_jets(
+                n_samples, batch_size, variables, data_seed
+            )
+        else:
+            raise ValueError(f"Unknown dataset: {dataset!r}")
 
     g: RANModel
     history: dict[str, list[float]]
     best_epoch: int
     if load_run is not None:
         run_dir = Path(load_run)
-        g, history = _load_artifacts(run_dir)
+        with phase("load"):
+            g, history = _load_artifacts(run_dir)
         best_epoch = saved_best_epoch
     else:
-        result: TrainResult = train(
-            splits,
-            dim,
-            hidden_units,
-            n_layers,
-            seed,
-            n_epochs=n_epochs,
-            n_disc_steps=n_disc_steps,
-            lr_g=lr_g,
-            lr_d=lr_d,
-            lambda_dispersion=lambda_dispersion,
-        )
+        with phase("train"):
+            result: TrainResult = train(
+                splits,
+                dim,
+                hidden_units,
+                n_layers,
+                seed,
+                n_epochs=n_epochs,
+                n_disc_steps=n_disc_steps,
+                lr_g=lr_g,
+                lr_d=lr_d,
+                lambda_dispersion=lambda_dispersion,
+            )
         g = result.g
         best_epoch = result.best_epoch
-        history, mmd_record = _finish_run(splits, result)
+        with phase("particle_mmd"):
+            history, mmd_record = _finish_run(splits, result)
         run_dir = _save_run(
             result.g,
             result.d,
@@ -446,10 +582,24 @@ def run(
             run_dir=run_dir,
         )
 
-    _draw_figures(run_dir, splits, g, history, dim, var_info, best_epoch, plots=plots)
+    with phase("plots"):
+        _draw_figures(
+            run_dir,
+            splits,
+            g,
+            history,
+            dim,
+            var_info,
+            best_epoch,
+            _display_variables(dataset, variables),
+            plots=plots,
+        )
 
     # Metrics (run last so failures don't block plots/checkpoints)
-    try:
-        evaluate_run(run_dir, force=(load_run is None))
-    except Exception:
-        logger.exception(msg="Metric evaluation failed")
+    with phase("evaluate"):
+        try:
+            _ = evaluate_run(run_dir, force=(load_run is None))
+        except Exception:
+            logger.exception(msg="Metric evaluation failed")
+
+    return run_dir

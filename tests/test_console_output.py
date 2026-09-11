@@ -1,7 +1,16 @@
+from __future__ import annotations
+
 from io import StringIO
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.progress import Progress
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    import pytest
 
 
 def test_render_metrics_outputs_named_columns_and_values() -> None:
@@ -33,15 +42,19 @@ def test_render_metrics_outputs_named_columns_and_values() -> None:
     assert "75.0%" in rendered
 
 
-def test_download_file_updates_a_rich_progress_task(monkeypatch, tmp_path) -> None:
+def test_download_file_updates_a_rich_progress_task(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from ran.data import download
 
-    completed = []
+    completed: list[tuple[str, Path]] = []
 
-    def fake_urlretrieve(url, filename, reporthook) -> None:
-        reporthook(0, 25, 100)
-        reporthook(2, 25, 100)
-        reporthook(4, 25, 100)
+    def fake_urlretrieve(
+        url: str, filename: Path, reporthook: Callable[[int, int, int], object]
+    ) -> None:
+        _ = reporthook(0, 25, 100)
+        _ = reporthook(2, 25, 100)
+        _ = reporthook(4, 25, 100)
         completed.append((url, filename))
 
     monkeypatch.setattr(download.urllib.request, "urlretrieve", fake_urlretrieve)

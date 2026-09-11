@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Flag, auto
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import numpy as np
 
@@ -44,7 +44,7 @@ class Events:
         return self.z.dtype
 
     def __len__(self) -> int:
-        return self.z.shape[0]
+        return int(self.z.shape[0])
 
     @classmethod
     def concatenate(cls, parts: Sequence[Self]) -> Self:
@@ -125,11 +125,14 @@ class ZXY:
                 f"y has shape {self.y.shape}; expected one label per event in a "
                 f"one-dimensional array of length {len(self.events)}"
             )
-        if np.any((self.y != 0) & (self.y != 1)):
+        bad_labels: NDArray[np.bool_] = cast(
+            "NDArray[np.bool_]", (self.y != 0) & (self.y != 1)
+        )
+        if np.any(bad_labels):
             raise ValueError("labels must be zero (MC) or one (nature)")
 
     def __len__(self) -> int:
-        return self.y.shape[0]
+        return int(self.y.shape[0])
 
     @property
     def z(self) -> EventArray:

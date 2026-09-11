@@ -32,16 +32,16 @@ class TestWeightedW1:
         v = rng.normal(loc=0.3, size=600)
         wv = rng.gamma(2.0, size=600)
 
-        assert w1_weighted(u, v, v_weights=wv) == pytest.approx(
-            wasserstein_distance(u, v, v_weights=wv), rel=1e-9
-        )
+        reference: float = wasserstein_distance(u, v, v_weights=wv)
+        assert w1_weighted(u, v, v_weights=wv) == pytest.approx(reference, rel=1e-9)
 
     def test_matches_scipy_without_weights(self) -> None:
         rng = np.random.default_rng(1)
         u = rng.normal(size=300)
         v = rng.normal(loc=-0.5, scale=1.4, size=300)
 
-        assert w1_weighted(u, v) == pytest.approx(wasserstein_distance(u, v), rel=1e-9)
+        reference: float = wasserstein_distance(u, v)
+        assert w1_weighted(u, v) == pytest.approx(reference, rel=1e-9)
 
     def test_is_zero_for_a_sample_against_itself(self) -> None:
         x = np.random.default_rng(2).normal(size=256)
@@ -247,7 +247,7 @@ class TestFloorSampleSize:
         pool = np.random.default_rng(1).normal(size=(600, 2))
 
         with pytest.raises(ValueError, match="two disjoint"):
-            null_floors(pool, n=400, seed=0, n_projections=8)
+            _ = null_floors(pool, n=400, seed=0, n_projections=8)
 
     def test_the_floor_falls_roughly_as_the_square_root(self) -> None:
         rng = np.random.default_rng(2)

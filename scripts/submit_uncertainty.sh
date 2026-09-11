@@ -4,11 +4,13 @@
 #
 # One cell is one `ran uncertainty run`, so cells are independent and pack onto
 # whatever GPUs the allocation has. Sizing, written out rather than guessed at:
-# a cell is one ordinary training run (~3 min at the defaults below) plus the
-# jet cache read, call it 4 minutes; B*S cells over NODES*4 GPUs is
-# ceil(B*S / (NODES*4)) waves. The default 8x8 on two nodes is 8 waves, ~35
-# minutes, inside the hour requested. Raising NODES cuts waves and buys queue
-# time; it does not make a cell faster.
+# a cell is one ordinary training run plus the jet cache read. Scaled from a
+# measured 12-var/500k/100-epoch run (`timings.json`: epochs 6.3s) by 3.2x the
+# rows and ~7x the network for `-u128 -l3`, a 1.6M cell is ~3 min of training
+# and ~4 minutes all in. B*S cells over NODES*4 GPUs is ceil(B*S / (NODES*4))
+# waves. The default 8x8 on two nodes is 8 waves, ~32 minutes, inside the hour
+# requested. Raising NODES cuts waves and buys queue time; it does not make a
+# cell faster.
 #
 # Defaults measure the decomposition. For the bin-to-bin covariance the
 # bootstrap axis is what needs replicates, not the seed one -- S can stay at 2
@@ -16,12 +18,22 @@
 #
 #   B=100 S=2 NODES=4 TIME=01:30:00 bash scripts/submit_uncertainty.sh
 #
-# This is the grid the published numbers use (src/ran/uncertainty/README.md):
-# a B=50 run confirmed against it (every lag correlation within 0.01, every
-# effective rank within 0.2) before B=100 superseded it as the smaller grid's
-# individual off-diagonal entries moved by up to 0.39 -- too much to publish
-# a single matrix entry from, even though the aggregate structure was already
-# right.
+# That is 200 cells over 16 GPUs -- 13 waves, ~52 min at the 1.6M cell above,
+# inside the 90 minutes requested.
+#
+# This is the grid shape the published numbers use
+# (src/ran/uncertainty/README.md): a B=50 run confirmed against it (every lag
+# correlation within 0.01, every effective rank within 0.2) before B=100
+# superseded it as the smaller grid's individual off-diagonal entries moved by
+# up to 0.39 -- too much to publish a single matrix entry from, even though the
+# aggregate structure was already right.
+#
+# Those published numbers were measured at `-n1000000`. The default below is
+# now 1.6M, matching what `scripts/submit.sh` trains, so a design run here
+# supersedes them rather than describing a different model -- see the note in
+# `src/ran/uncertainty/README.md` under "What the design measured". Both grids
+# have to be rerun for that to hold: a decomposition at one sample size and a
+# covariance at another do not describe the same measurement.
 #
 # Warm the jet cache on a login node first; a cold cache pulls 3.3GB from
 # Zenodo inside the job.
@@ -45,8 +57,11 @@ GPUS_TOTAL=$((NODES * GPUS_PER_NODE))
 
 # The design measures RAN as the paper ships it, so these are the paper's
 # values and not a cheaper stand-in. A design run at other settings is a
-# variance budget for a model nobody is publishing.
-RUN_ARGS=${RUN_ARGS:--Djets -n1000000 -l3 -u128}
+# variance budget for a model nobody is publishing -- which is why this tracks
+# `scripts/submit.sh` and why the two must be changed together. All twelve
+# observables, by way of `load_jet_dataset`'s default: `--var` is repeatable
+# and would append rather than replace.
+RUN_ARGS=${RUN_ARGS:--Djets -n1600000 -l3 -u128}
 
 DESIGN_DIR="${PROJECT_DIR}/runs/unc_$(date -u +%Y-%m-%dT%H%M%SZ)"
 mkdir -p "${DESIGN_DIR}"

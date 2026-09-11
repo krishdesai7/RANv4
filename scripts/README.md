@@ -54,28 +54,6 @@ The default `TRAIN_ARGS` is _prepended_ to the command line arguments. Since cli
 - `|| true` ensures a run that crashes does not abort the batch under `set -e`. It just leaves no `SUMMARY` line in its log, and the collection step tolerates the gap.
 - Once the batch is complete, the script pulls the `SUMMARY` line out of each per-run log, in seed order, and appends to f64.log/f32.log. A run that crashed leaves no `SUMMARY` line and is silently skipped here; check its own log file under `RUN_DIR` to diagnose.
 
-## submit_sweep.sh
-
-Launch the cubic-response RAN-vs-IBU sweep as ONE packed multi-node job. Run on the login node with `zsh scripts/submit_sweep.sh`. Do NOT sbatch this file itself; it computes the sweep directory and submits the job.
-
-On Perlmutter the queue wait for a 2-hour 1-node job can be ~1 day, while 4-7 node jobs slide into a ~2-hour wait window. We grab a few nodes at once (4 A100 GPUs per node) and run the sweep points concurrently, one GPU per point, via a bash background loop + srun step placement. The collect step runs inline at the end of the same job.
-
-### Nodes
-
-`NODES=6` -> 24 GPUs == 24 points -> every point runs at once, one GPU each (single wave, no risk of a 2nd wave overrunning the wall clock). Lower `NODES` to use fewer GPUs at the cost of extra waves; all sit in the same Perlmutter queue window. Keep `GPUS_TOTAL >= N_POINTS` for the clean one-point-per-GPU mapping.
-
-### Job
-
-The heredoc is the batch script; it is quoted (`EOF`) so shell expansion happens at job runtime, not now. `SWEEP_DIR`, `N_POINTS`, `GPUS_TOTAL` reach the job via `--export`. `--output` lives on the command line because SLURM does not expand shell vars in `#SBATCH` lines. Everything the job needs reaches it via `--export`.
-
-Each point is one srun step pinned to a single GPU. `--exact` lets multiple steps share the allocation simultaneously (without it the first step grabs whole nodes and the rest block). `--gpus-per-task=1` sets `CUDA_VISIBLE_DEVICES` per step so JAX in each point sees exactly one GPU, which matters, because JAX preallocates most of the memory on every device it can see. ~16 cores/56GB per A100 (4 GPUs, 64 cores, 256GB on a Perlmutter GPU node).
-
-Each point's log is captured so a crash in one point is easy to find and never sinks the others (collect tolerates missing point files). Each point runs both methods, so a point file is complete or absent, never half.
-
-Throttle to `GPUS_TOTAL` concurrent steps; start the next as soon as one frees a GPU (dynamic, so an uneven `N_POINTS`-over-`GPUS_TOTAL` split wastes no idle GPU time when `NODES` is lowered below the single-wave setting). `|| true` ensures a point that crashes does not abort the sweep under `set -e`. It just leaves its point file missing, and collect tolerates the gap.
-
-Join the per-point files into results.npz + wasserstein_vs_s.pdf (runs on the head node of the allocation; resilience to gaps is built into collect).
-
 ## submit_hparam.sh
 
 One hyperparameter arm sweep, packed into a single multi-node job: three levels of one knob x eight initialization seeds = 24 runs, one A100 each, a single wave on 6 nodes. Run it on a login node with `zsh scripts/submit_hparam.sh`. Do NOT sbatch this file itself; it computes the arm directory and submits the job. The collect step runs inline at the end of the same job.

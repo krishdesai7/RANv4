@@ -165,6 +165,29 @@ ran evaluate --force
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
 
+### Reports
+
+One PDF dossier per run — configuration, timing, both metrics tables and every
+figure — built from the JSON a run already writes:
+
+```bash
+# Compile runs/<timestamp>/report.pdf
+ran report runs/2026-03-14T061023Z
+
+# Rebuild one that already exists
+ran report runs/2026-03-14T061023Z --force
+
+# Emit artifacts/report.tex alone, without a TeX installation
+ran report runs/2026-03-14T061023Z --no-compile
+```
+
+`report.tex` is written into `artifacts/`; `report.pdf` lands at the run root
+beside `config.json`. Compilation needs `pdflatex` on `PATH`. A run missing its
+baseline, its timings or even its metrics still reports: the affected cells
+degrade to dashes or a labelled row rather than failing. `scripts/submit.sh`
+ends with `ran report`, so the report sees the IBU overlay, the redrawn figures
+and the recomputed metrics.
+
 ### Baseline Comparisons
 
 Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head comparison:
@@ -178,19 +201,6 @@ ran baseline ibu
 ```
 
 Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
-
-### Cubic-Response Sweep
-
-Sweeps the strength $s$ of a cubic detector response $r(s, z) = z + s z^3$ and
-records how well each method unfolds it. Each point trains RAN and unfolds the
-same populations with IBU in one pass, writing both into `point_NN.json`;
-`collect` joins them into `results.npz` and `wasserstein_vs_s.pdf`.
-
-```bash
-ran sweep ran --s-index 0 --sweep-dir runs/cubic-sweep
-ran sweep collect --sweep-dir runs/cubic-sweep
-bash scripts/submit_sweep.sh   # every point at once on SLURM
-```
 
 ### Leakage Verification
 
@@ -222,7 +232,7 @@ The project runs in float32 end to end. The pin is a single constant, `EVENT_DTY
 
 This is a measured choice, not a default. Every jet observable is float32-clean — `mass` and `mult` survive a float32 round trip bit-exactly, and the other four lose exactly half a ULP, the least a cast can cost. Across 20 paired seeds, float32 and float64 agree on unfolding improvement to within ±0.5 percentage points (equivalence test p=0.015), while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
 
-Two boundaries stay float64 deliberately: the metrics (Wasserstein, JS, triangular discriminator) come back from scipy in float64 and are not narrowed — what is pinned is the data, not the measurement of it — and `ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
+`ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
 
 `src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
@@ -286,8 +296,6 @@ RANv4/
 │   ├── baselines/
 │   │   ├── _shared.py            Run config and populations a baseline needs, minus the unfolder
 │   │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
-│   ├── experiments/
-│   │   └── cubic_sweep.py        Cubic-response RAN-vs-IBU sweep
 │   ├── models.py                 Generator and discriminator architectures
 │   ├── train.py                  JAX adversarial training loop with early stopping
 │   ├── plotting.py               Detector-level, particle-level, and loss curve plots
@@ -299,7 +307,6 @@ RANv4/
 │   └── 6d_correlated.yaml
 ├── scripts/
 │   ├── submit.sh                 Training and baseline SLURM submission script
-│   └── submit_sweep.sh           Packed cubic-response sweep launcher
 ├── tests/                        pytest tests
 ├── .github/workflows/ci.yml      Lint, format, types, complexity, tests, audit
 ├── Justfile                      Development recipes (just validate, just lint-fix, ...)
@@ -308,8 +315,7 @@ RANv4/
 └── .cache/                       Cached datasets
 ```
 
-`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
-`src/ran/experiments/` carry their own `README.md` with module-level detail.
+`src/ran/rantypes/`, `src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with module-level detail.
 
 ## Datasets
 
@@ -334,30 +340,54 @@ All variables are z-score standardized using MC gen-level statistics only (no in
 
 ## Output
 
-Each run produces a timestamped directory under `runs/` containing:
+Each run produces a timestamped directory under `runs/`. The root holds only
+what a person opens by hand -- `config.json` (run configuration, for
+reproducibility) and, later, `report.pdf`. Everything else is supporting
+material and lives one level down, flat, in `artifacts/`:
+
+```text
+runs/<timestamp>/
+├── report.pdf
+├── config.json
+└── artifacts/   figures, metrics/timings JSON, checkpoints, arrays
+```
 
 - **`generator.keras`**/**`discriminator.keras`** -- Saved model checkpoints
 - **`history.npz`** -- Training loss history
-- **`config.json`** -- Run configuration (reproducibility)
 - **`detector_level.pdf`** -- Histogram comparing data, MC, and reweighted MC at detector level with ratio panel
 - **`particle_level.pdf`** -- Same comparison at particle level
 - **`losses.pdf`** -- Training curves with log(2) equilibrium target
+- **`selection.pdf`** -- Per-epoch MMD curves and the epoch model selection restored
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
 - **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
+- **`timings.json`** -- Per-phase wall clock, when the run was made under `RAN_TIMING=1`
+- **`report.tex`** -- The LaTeX source `ran report` compiles into the run root's `report.pdf`
 
 ## Training Hyperparameters
 
 These are internal training defaults in `src/ran/train.py`; the CLI-exposed
 training options are listed above.
 
-| Parameter      | Default | Description                                |
-| -------------- | ------- | ------------------------------------------ |
-| `n_epochs`     | 100     | Maximum training epochs                    |
-| `n_disc_steps` | 5       | Discriminator updates per generator update |
-| `lr_g`         | 1e-4    | Generator learning rate (Adam)             |
-| `lr_d`         | 1e-4    | Discriminator learning rate (Adam)         |
-| `hidden_units` | 64      | Units per hidden layer                     |
-| `n_layers`     | 2       | Number of hidden layers                    |
+| Parameter            | Default | Description                                     |
+| -------------------- | ------- | ----------------------------------------------- |
+| `n_epochs`           | 100     | Training epochs — a fixed `scan` trip count      |
+| `n_disc_steps`       | 5       | Discriminator updates per generator update       |
+| `lr_g`               | 3e-5    | Generator learning rate (Adam)                   |
+| `lr_d`               | 1e-4    | Discriminator learning rate (Adam)               |
+| `lambda_dispersion`  | 0.015   | Penalty on the variance of `g`'s weights         |
+| `hidden_units`       | 64      | Units per hidden layer                           |
+| `n_layers`           | 2       | Number of hidden layers                          |
+
+`lr_g` and `lambda_dispersion` are both measured rather than chosen, and they
+act on the same axis: the dispersion of `g`'s normalized MC weights. See "What
+tuning actually found" and "The dispersion penalty: the trade made explicit" in
+`benchmarks/README.md`. Because the penalty is **on** by default, a run left at
+these defaults already carries it — which is the configuration any comparison
+should be made against, not a variant of it.
+
+`n_epochs` is not a maximum in the early-stopping sense. `scan` needs a fixed
+trip count, so every run executes all of them; the best epoch is then restored
+on the host by the detector-level MMD argmin.
 
 ## Development
 
@@ -381,7 +411,6 @@ cognitive complexity of 10.
 - [`JAX`](https://docs.jax.dev/) >= 0.11 \(`jax[cuda13]` on x86_64 Linux\)
 - [`Keras`](https://keras.io/) >= 3.15.1
 - [`NumPy`](https://numpy.org/) >= 2.5.1
-- [`SciPy`](https://scipy.org/) >= 1.18.0
 - [`Matplotlib`](https://matplotlib.org/) >= 3.11.1
 - [`Typer`](https://typer.tiangolo.com/) >= 0.27.1
 - [`PyYAML`](https://pyyaml.org/) >= 6.0.3

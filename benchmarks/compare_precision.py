@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from scipy import stats
 
 if TYPE_CHECKING:
-    from collections.abc import Buffer, Callable
-    from typing import IO, Final, TextIO
+    from typing import Final
 
     from numpy.typing import NDArray
 
@@ -46,21 +45,26 @@ def _describe(values: NDArray[np.double], name: str, /) -> str:
 def _paired_report(
     a: NDArray[np.double], b: NDArray[np.double], names: tuple[str, str], margin: float
 ) -> None:
-    out: Callable[[IO[bytes] | TextIO, Buffer | str], int] = sys.stdout.write
+    def out(text: str) -> None:
+        _ = sys.stdout.write(text)
+
     diff: NDArray[np.double] = a - b
     n: int = diff.size
-    t_stat, p_value = stats.ttest_rel(a, b)
-    _, p_wilcoxon = stats.wilcoxon(diff)
+    ttest: Any = stats.ttest_rel(a, b)
+    t_stat: float = ttest.statistic
+    p_value: float = ttest.pvalue
+    wilcoxon: Any = stats.wilcoxon(diff)
+    p_wilcoxon: float = wilcoxon.pvalue
 
-    stderr: float = float(diff.std(ddof=1) / np.sqrt(n))
+    stderr: float = diff.std(ddof=1) / np.sqrt(n)
     lo, hi = stats.t.interval(CONFIDENCE, n - 1, loc=diff.mean(), scale=stderr)
     wins = int((diff > 0).sum())
 
     out(f"\npaired on seed (n={n})\n")
     out(f"  mean difference   : {diff.mean():+.4f} pp ({names[0]} - {names[1]})\n")
     out(f"  95% CI            : [{lo:+.4f}, {hi:+.4f}] pp\n")
-    out(f"  paired t-test     : t={float(t_stat):.3f}  p={float(p_value):.5f}\n")
-    out(f"  Wilcoxon signed   : p={float(p_wilcoxon):.5f}\n")
+    out(f"  paired t-test     : t={t_stat:.3f}  p={p_value:.5f}\n")
+    out(f"  Wilcoxon signed   : p={p_wilcoxon:.5f}\n")
     out(f"  {names[0]} better in : {wins}/{n} seeds\n")
 
     # A t-test can only ever fail to find a difference; it cannot show there
@@ -87,7 +91,7 @@ def _paired_report(
         )
     else:
         out(
-            f"\n--> Inconclusive: no significant difference (p={float(p_value):.3f}) "
+            f"\n--> Inconclusive: no significant difference (p={p_value:.3f}) "
             f"and no\n    demonstrated equivalence within +/-{margin:.2f}pp "
             f"(TOST p={p_tost:.3f}).\n    More seeds, or a margin you can defend "
             "as physically irrelevant.\n"
@@ -103,7 +107,9 @@ def main() -> None:
     a_by_seed, a_name = _read(Path(sys.argv[1]))
     b_by_seed, b_name = _read(Path(sys.argv[2]))
 
-    out: Callable[[IO[bytes] | TextIO, Buffer | str], int] = sys.stdout.write
+    def out(text: str) -> None:
+        _ = sys.stdout.write(text)
+
     out(_describe(np.array(object=list(a_by_seed.values())), a_name) + "\n")
     out(_describe(np.array(object=list(b_by_seed.values())), b_name) + "\n")
 

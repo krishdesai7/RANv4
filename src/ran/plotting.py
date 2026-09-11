@@ -301,7 +301,7 @@ _DETECTOR = _LevelStyle(
     title_prefix="Detector Level",
     nature_label="Data",
     mc_label="Sim",
-    height_per_dim=4.8,
+    height_per_dim=6.6,
     bins_span_both=False,
 )
 _PARTICLE = _LevelStyle(
@@ -310,7 +310,7 @@ _PARTICLE = _LevelStyle(
     title_prefix="Particle Level",
     nature_label="Truth",
     mc_label="Gen.",
-    height_per_dim=4.8,
+    height_per_dim=6.6,
     bins_span_both=True,
 )
 

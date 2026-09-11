@@ -225,10 +225,10 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         assert content.y1 <= page.y1
 
 
-# Measured inside a `pdflscape` landscape block with this document's
-# geometry: \linewidth 625.5pt, \textheight 511.9pt. A figure wider than
-# this is fitted to the page width rather than its height.
-_LANDSCAPE_BLOCK_ASPECT: float = 625.5 / 511.9
+# Measured inside a `pdflscape` landscape block under the template's
+# `\newgeometry{margin=8mm}`: \linewidth 749.4pt, \textheight 568.8pt. A
+# figure wider than this is fitted to the page width rather than its height.
+_LANDSCAPE_BLOCK_ASPECT: float = 749.4 / 568.8
 
 _LAST_PAGES: list[list[Figure]] = []
 
@@ -339,8 +339,8 @@ def test_twelve_observables_are_paginated_six_to_a_page(
     scales with it, so a twelve-panel 12x24in figure renders its 18pt labels
     at 5pt. A panel's width on the page is `linewidth / columns` whatever the
     figure's inch dimensions, so the column count sets it and the cell's
-    absolute inches set the text size. Six 5:4 cells three across, at 6x4.8in,
-    give 2.9x2.3in panels with 8.7pt text.
+    absolute inches set the text size. Six 7:6.6 cells three across, at
+    7x6.6in, give 3.5x3.3in panels with 9.1pt text.
     """
     save_path: Path = tmp_path / "detector.pdf"
     _plot_twelve_dim_level(save_path, monkeypatch)
@@ -357,7 +357,7 @@ def test_twelve_observables_are_paginated_six_to_a_page(
         assert len(columns) == PANEL_COLUMNS
         assert len(rows) == PANELS_PER_PAGE // PANEL_COLUMNS
         # A cell is wider than it is tall -- a hist over a ratio panel wants
-        # roughly 5:4. The 4x6 cell this replaced was the same panel on its
+        # roughly 7:6.6. The 4x6 cell this replaced was the same panel on its
         # end, which no amount of paginating fixes.
         cell = page.get_figwidth() / PANEL_COLUMNS
         cell_h = page.get_figheight() / (PANELS_PER_PAGE // PANEL_COLUMNS)

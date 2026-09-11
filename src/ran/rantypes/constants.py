@@ -244,8 +244,18 @@ JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = 
 PANEL_COLUMNS: Final[int] = 3
 PANELS_PER_PAGE: Final[int] = 6
 # Width in inches; the height comes from `_LevelStyle.height_per_dim`, which
-# is 4.8 for both levels -- a 5:4 cell.
-PANEL_WIDTH_INCHES: Final[float] = 6.0
+# is 6.6 for both levels -- a 7:6.6 cell, chosen so a page of six spans 83%
+# of the landscape block's height instead of the 65% a 5:4 cell left.
+#
+# Two independent knobs hide in one number. A panel's width on the page is
+# `linewidth / PANEL_COLUMNS` whatever the figure's inch size, because
+# `\includegraphics[width=\linewidth]` scales the figure by exactly as much
+# as widening it grew the figure. What the inches DO set is the rendered text
+# size: `font.size * linewidth_pt / (72 * figure_width_in)`. So the column
+# count sizes the panels and this constant sizes their labels, downwards.
+# At 7.0 in x 3 columns against the 749.4pt landscape block, the 18pt base
+# renders at 8.9pt.
+PANEL_WIDTH_INCHES: Final[float] = 7.0
 
 
 def figure_pages(dim: int, /) -> int:

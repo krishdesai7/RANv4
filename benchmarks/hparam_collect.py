@@ -58,16 +58,19 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from ran.logging_config import configure_logging
+from ran.rantypes import artifacts_dir
 from rich.console import Console
 from rich.table import Table
 from scipy import stats
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
+
+    from numpy.typing import NDArray
 
 logger = logging.getLogger("ran.hparam")
 
@@ -157,7 +160,9 @@ def particle_improvements(metrics: Mapping[str, Any]) -> dict[str, float]:
     this tool can score, so it comes back empty and the caller drops it.
     """
     return {
-        key.removeprefix("particle_"): float(value["wasserstein_improvement_pct"])
+        key.removeprefix("particle_"): cast(
+            "float", value["wasserstein_improvement_pct"]
+        )
         for key, value in metrics.items()
         if key.startswith("particle_")
     }
@@ -202,7 +207,7 @@ def load_records(root: Path) -> list[RunRecord]:
     records: list[RunRecord] = []
     for run_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         config_path = run_dir / "config.json"
-        metrics_path = run_dir / "metrics.json"
+        metrics_path = artifacts_dir(run_dir) / "metrics.json"
         if not (config_path.exists() and metrics_path.exists()):
             logger.warning("%s: incomplete, skipping", run_dir.name)
             continue
@@ -259,14 +264,14 @@ def _selected_ess(run_dir: Path, config: Mapping[str, Any]) -> float:
     A missing history is not an error: the field postdates several runs in
     `runs/`, and a run that cannot report ESS can still be scored.
     """
-    history_path = run_dir / "history.npz"
+    history_path = artifacts_dir(run_dir) / "history.npz"
     best_epoch = config.get("best_epoch")
     if not history_path.exists() or best_epoch is None:
         return float("nan")
     with np.load(history_path) as history:
         if "val_ess" not in history:
             return float("nan")
-        curve = history["val_ess"]
+        curve: NDArray[np.double] = cast("NDArray[np.double]", history["val_ess"])
         if not 0 <= int(best_epoch) < len(curve):
             return float("nan")
         return float(curve[int(best_epoch)])
@@ -382,13 +387,18 @@ def paired_delta(baseline: Mapping[int, float], arm: Mapping[int, float]) -> Pai
             f"paired comparison needs at least two shared seeds, found {len(shared)}"
         )
     differences = np.array([arm[s] - baseline[s] for s in shared], dtype=np.double)
-    result = stats.ttest_rel([arm[s] for s in shared], [baseline[s] for s in shared])
+    result: Any = stats.ttest_rel(
+        [arm[s] for s in shared], [baseline[s] for s in shared]
+    )
+    t_statistic: float = result.statistic
+    p_value: float = result.pvalue
+    standard_error: float = np.std(differences, ddof=1) / np.sqrt(len(differences))
     return Paired(
         n=len(shared),
         delta=float(np.mean(differences)),
-        standard_error=float(np.std(differences, ddof=1) / np.sqrt(len(differences))),
-        t_statistic=float(result.statistic),
-        p_value=float(result.pvalue),
+        standard_error=standard_error,
+        t_statistic=t_statistic,
+        p_value=p_value,
     )
 
 
@@ -522,19 +532,19 @@ def _report(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--arm-dir", type=Path, required=True)
-    parser.add_argument(
+    _ = parser.add_argument("--arm-dir", type=Path, required=True)
+    _ = parser.add_argument(
         "--exclude",
         action="append",
         default=[],
         help="observable to drop from the aggregate but still report",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--baseline",
         default=None,
         help="arm label to compare against; default is the lexically first",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--pair-on",
         default=PAIRING_KEY,
         choices=sorted(SEED_KEYS),
@@ -543,23 +553,28 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging(level="info")
 
-    records = load_records(args.arm_dir)
-    logger.info("%s: %d runs", args.arm_dir.name, len(records))
+    arm_dir: Path = args.arm_dir
+    exclude: list[str] = args.exclude
+    pair_on: str = args.pair_on
+    baseline_label: str | None = args.baseline
+
+    records = load_records(arm_dir)
+    logger.info("%s: %d runs", arm_dir.name, len(records))
     grouped = _group(records)
     summaries = [
-        summarize_arm(label, grouped[label], args.exclude, args.pair_on)
+        summarize_arm(label, grouped[label], exclude, pair_on)
         for label in sorted(grouped)
     ]
-    baseline = args.baseline or summaries[0].label
+    baseline = baseline_label or summaries[0].label
     if all(s.label != baseline for s in summaries):
         raise SystemExit(
             f"no arm labelled {baseline!r}; found {[s.label for s in summaries]}"
         )
     scored = (
-        f"mean of {len(summaries[0].per_observable) - len(args.exclude)} observables"
-        + (f", excluding {', '.join(args.exclude)}" if args.exclude else "")
+        f"mean of {len(summaries[0].per_observable) - len(exclude)} observables"
+        + (f", excluding {', '.join(exclude)}" if exclude else "")
     )
-    _report(summaries, baseline, scored, args.pair_on)
+    _report(summaries, baseline, scored, pair_on)
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import functools
 import operator
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -64,7 +64,9 @@ class MMDCache(NamedTuple):
 
 
 def squared_distances(
-    a: Float[Array | NDArray, "n d"], b: Float[Array | NDArray, "m d"], /
+    a: Float[Array | NDArray[np.single], "n d"],
+    b: Float[Array | NDArray[np.single], "m d"],
+    /,
 ) -> Float[Array, "n m"]:
     """Pairwise squared distances via expansion, never an (n, m, d) tensor."""
     return (
@@ -72,7 +74,7 @@ def squared_distances(
     )
 
 
-def median_bandwidth(x: Float[Array | NDArray, "n d"], /) -> float:
+def median_bandwidth(x: Float[Array | NDArray[np.single], "n d"], /) -> float:
     """`sigma` such that the kernel at the median distance is `exp(-1)`.
 
     Computed from the data side alone. `x_data` is fixed by `data_seed`, so
@@ -83,7 +85,7 @@ def median_bandwidth(x: Float[Array | NDArray, "n d"], /) -> float:
 
 
 def bandwidths(
-    x: Float[Array | NDArray, "n d"], /, *, scales: Sequence[float] = _SCALES
+    x: Float[Array | NDArray[np.single], "n d"], /, *, scales: Sequence[float] = _SCALES
 ) -> tuple[float, ...]:
     median: float = median_bandwidth(x)
     return tuple(median * s for s in scales)
@@ -95,8 +97,8 @@ def subsample_indices(seed: int, n: int, m: int, /) -> NDArray[np.intp]:
 
 
 def _kernel(
-    a: Float[Array | NDArray, "n d"],
-    b: Float[Array | NDArray, "m d"],
+    a: Float[Array | NDArray[np.single], "n d"],
+    b: Float[Array | NDArray[np.single], "m d"],
     sigmas: Sequence[float],
     /,
 ) -> Float[Array, "n m"]:
@@ -107,8 +109,8 @@ def _kernel(
 
 
 def build_cache(
-    x_data: Float[Array | NDArray, "n d"],
-    y_mc: Float[Array | NDArray, "m d"],
+    x_data: Float[Array | NDArray[np.single], "n d"],
+    y_mc: Float[Array | NDArray[np.single], "m d"],
     /,
     *,
     sigmas: Sequence[float],
@@ -124,7 +126,7 @@ def build_cache(
     return MMDCache(
         k_yy=k_yy,
         v_xy=jnp.mean(_kernel(x_data, y_mc, sigmas), axis=0),
-        diag_yy=jnp.diagonal(k_yy),
+        diag_yy=cast("Array", jnp.diagonal(k_yy)),
         term_xx=term_xx,
     )
 

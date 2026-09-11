@@ -7,7 +7,7 @@ from pathlib import Path
 def test_builder_contract_hides_unsupported_model_members(tmp_path: Path) -> None:
     """Pyrefly sees narrow builder and persisted-model contracts."""
     probe = tmp_path / "builder_contract.py"
-    probe.write_text(
+    _ = probe.write_text(
         "from pathlib import Path\n\n"
         "from ran.models import build_generator\n"
         "from ran.workflow import _load_artifacts\n\n"
@@ -38,7 +38,7 @@ def test_builder_contract_hides_unsupported_model_members(tmp_path: Path) -> Non
 def test_builder_contract_rejects_invalid_keras_construction(tmp_path: Path) -> None:
     """Pyrefly checks the narrow Keras construction surface."""
     probe = tmp_path / "keras_construction_contract.py"
-    probe.write_text(
+    _ = probe.write_text(
         "from ran.models import _keras_dense, _keras_input, _keras_model\n\n"
         "inputs = _keras_input(shape=(1,), dtype='float64')\n"
         "_keras_input(shape=(1,), dtype='float64', unexpected=True)\n"

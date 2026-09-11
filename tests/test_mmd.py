@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from numpy.random._generator import Generator
 
 
-def _samples(n: int = 1024, d: int = 6, shift=0.0, seed=0) -> Array:
+def _samples(n: int = 1024, d: int = 6, shift: float = 0.0, seed: int = 0) -> Array:
     rng: Generator = np.random.default_rng(seed)
     return jnp.asarray(rng.normal(loc=shift, scale=1.0, size=(n, d)), dtype=jnp.float32)
 
@@ -182,7 +182,12 @@ class TestWeightedMMD:
         )
         x64 = np.asarray(x32, dtype=np.float64)
         y64 = np.asarray(y32, dtype=np.float64)
-        b, _ = weighted_mmd(build_cache(x64, y64, sigmas=sig), jnp.asarray(w))
+        # Passing float64 is the whole point of this test; the signature is
+        # pinned to float32.
+        b, _ = weighted_mmd(
+            build_cache(x64, y64, sigmas=sig),  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
+            jnp.asarray(w),
+        )
         np.testing.assert_allclose(float(a), float(b), atol=1e-6)
 
     def test_monotone_along_the_path_to_the_exact_weights(self) -> None:

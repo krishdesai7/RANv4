@@ -19,7 +19,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from ran.data.jets import load_jet_dataset
-from ran.rantypes import CACHE_FILENAMES, SUBSTRUCTURE_VARIABLES, Split
+from ran.rantypes import (
+    CACHE_FILENAMES,
+    JET_DISPLAY_ORDER,
+    JET_VARIABLE_GROUPS,
+    SUBSTRUCTURE_VARIABLES,
+    Split,
+    display_order,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -91,7 +98,7 @@ class TestColumnOrderFollowsTheRequest:
         produce a column order no caller could predict or reproduce.
         """
         with pytest.raises(TypeError, match="ordered sequence, not a set"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N,
                 batch_size=32,
                 cache_dir=cache,
@@ -102,7 +109,7 @@ class TestColumnOrderFollowsTheRequest:
     def test_duplicates_are_refused(self, cache: Path) -> None:
         """Two columns of identical data under one name would look plausible."""
         with pytest.raises(ValueError, match="duplicates"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N, batch_size=32, cache_dir=cache, variables=("m", "m")
             )
 
@@ -110,7 +117,7 @@ class TestColumnOrderFollowsTheRequest:
         self, cache: Path
     ) -> None:
         with pytest.raises(ValueError, match="unknown jet variables"):
-            load_jet_dataset(
+            _ = load_jet_dataset(
                 n_samples=_N, batch_size=32, cache_dir=cache, variables=("m", "pt")
             )
 
@@ -123,3 +130,63 @@ def test_the_canonical_order_is_an_ordering_not_a_set() -> None:
     """
     assert isinstance(SUBSTRUCTURE_VARIABLES, tuple)
     assert not isinstance(SUBSTRUCTURE_VARIABLES, (set, frozenset))
+
+
+def test_display_order_permutes_the_twelve_observables() -> None:
+    """Physics reading order: mass, angularities, splitting, hadronization."""
+    order: tuple[int, ...] = display_order(SUBSTRUCTURE_VARIABLES)
+    named: tuple[str, ...] = tuple(SUBSTRUCTURE_VARIABLES[i] for i in order)
+
+    assert named == (
+        "m",
+        "sdm",
+        "lha",
+        "w",
+        "ang2",
+        "zg",
+        "tau21",
+        "M",
+        "n_ch",
+        "f_ch",
+        "ptd",
+        "q",
+    )
+
+
+def test_display_order_filters_a_subset() -> None:
+    """`--var w --var m` still presents mass before angularity."""
+    assert tuple("wm"[i] for i in display_order(("w", "m"))) == ("m", "w")
+
+
+def test_display_order_is_the_identity_for_a_gaussian_run() -> None:
+    """A Gaussian run has `dim_0 ... dim_n` and no physics ordering."""
+    assert display_order(("dim_0", "dim_1", "dim_2")) == (0, 1, 2)
+
+
+def test_the_display_order_and_the_column_order_hold_the_same_names() -> None:
+    """Two tuples that must never drift apart, guarded rather than documented."""
+    assert set(JET_DISPLAY_ORDER) == set(SUBSTRUCTURE_VARIABLES)
+    assert len(JET_DISPLAY_ORDER) == len(SUBSTRUCTURE_VARIABLES)
+
+
+def test_the_groups_partition_the_display_order() -> None:
+    grouped: list[str] = [v for _, members in JET_VARIABLE_GROUPS for v in members]
+    assert tuple(grouped) == JET_DISPLAY_ORDER
+
+
+def test_the_column_order_is_unchanged() -> None:
+    """The cache key. See the Jet Column Order section of CLAUDE.md."""
+    assert SUBSTRUCTURE_VARIABLES == (
+        "m",
+        "M",
+        "w",
+        "tau21",
+        "zg",
+        "sdm",
+        "q",
+        "f_ch",
+        "lha",
+        "ang2",
+        "ptd",
+        "n_ch",
+    )

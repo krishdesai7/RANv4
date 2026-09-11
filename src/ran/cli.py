@@ -8,7 +8,6 @@ import typer
 
 from .baselines import evaluate_runs as ibu_evaluate_runs
 from .evaluate import evaluate_runs
-from .experiments import run_ran
 from .leakage import run_leakage_check
 from .logging_config import configure_logging
 from .rantypes import (
@@ -19,18 +18,15 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
+from .report import build_report
 from .workflow import run
 
 baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
-sweep_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 uncertainty_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 
 app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app.add_typer(
     typer_instance=baseline_app, name="baseline", help="Run comparison baselines."
-)
-app.add_typer(
-    typer_instance=sweep_app, name="sweep", help="Run cubic-response sweep steps."
 )
 app.add_typer(
     typer_instance=uncertainty_app,
@@ -104,7 +100,8 @@ def train_command(
         bool,
         typer.Option(
             "--plots/--no-plots",
-            help="Draw figures. Off is for sweeps: metrics still run.",
+            help="Draw figures. Can be turned off for hyperparameter sweeps,"
+            "bootstrapping, etc. Metrics still run.",
         ),
     ] = True,
     run_dir: Annotated[
@@ -143,6 +140,24 @@ def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
     evaluate_runs(run_dir, force)
 
 
+@app.command(name="report")
+def report_command(
+    run_dir: Annotated[Path, typer.Argument(help="Run directory to report on.")],
+    force: Annotated[
+        bool, typer.Option("--force", help="Rebuild an existing report.pdf.")
+    ] = False,
+    compile_pdf: Annotated[
+        bool,
+        typer.Option(
+            "--compile/--no-compile",
+            help="Compile the LaTeX, or stop at artifacts/report.tex.",
+        ),
+    ] = True,
+) -> None:
+    """Compile a run directory into one PDF dossier."""
+    _ = build_report(run_dir, force=force, compile_pdf=compile_pdf)
+
+
 @baseline_app.command(name="ibu")
 def ibu_command(
     run_dir: Path = RUN_DIR,
@@ -156,39 +171,6 @@ def ibu_command(
         n_iterations,
         purity_threshold=np.double(purity_threshold),
     )
-
-
-@sweep_app.command(name="ran")
-def sweep_ran_command(
-    s_index: Annotated[int, typer.Option("--s-index", "-s", min=0)],
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-    seed: int = 42,
-    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
-    ran_epochs: Annotated[int, typer.Option("--ran-epochs", "-e", min=1)] = 100,
-    init_seed: Annotated[int | None, typer.Option("--init-seed", "-I")] = None,
-) -> None:
-    run_ran(
-        s_index,
-        sweep_dir,
-        n_samples,
-        n_points,
-        seed,
-        batch_size,
-        ran_epochs,
-        init_seed,
-    )
-
-
-@sweep_app.command(name="collect")
-def sweep_collect_command(
-    sweep_dir: Annotated[Path, typer.Option("--sweep-dir", "-d")],
-    n_points: Annotated[int, typer.Option("--n-points", "-p", min=1)] = 25,
-) -> None:
-    from .experiments.cubic_sweep import collect
-
-    collect(sweep_dir, n_points)
 
 
 @uncertainty_app.command(name="run")
@@ -218,7 +200,7 @@ def uncertainty_run_command(
     """Train one (bootstrap dataset, init seed) cell of the design."""
     from .uncertainty import DesignSpec, run_cell
 
-    run_cell(
+    _ = run_cell(
         cell,
         design_dir,
         DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
@@ -250,7 +232,7 @@ def uncertainty_collect_command(
     """Decompose a finished design and write its table, npz and figure."""
     from .uncertainty import DesignSpec, collect
 
-    collect(
+    _ = collect(
         design_dir,
         DesignSpec(n_datasets, n_seeds, data_seed, init_seed),
         n_bins=n_bins,

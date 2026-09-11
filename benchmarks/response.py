@@ -43,17 +43,19 @@ Run from the repository root:
     uv run benchmarks/response.py --n-samples 200000 --x-var m
 """
 
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- argparse Namespace and numpy elementwise/boolean-index results are Any
 from __future__ import annotations
 
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "jax")
+os.environ.setdefault("KERAS_BACKEND", "jax")  # pyrefly: ignore[unused-call-result]
 
 import argparse
 import logging
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import keras
 import numpy as np
@@ -65,12 +67,16 @@ from scipy.special import expit
 try:
     from benchmarks.ceiling import _fit_classifier, _labelled
 except ModuleNotFoundError:  # Direct execution puts benchmarks/ on sys.path.
-    from ceiling import _fit_classifier, _labelled
+    from ceiling import _fit_classifier, _labelled  # pyrefly: ignore[missing-import]
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from ran.models import RANModel
-    from ran.rantypes import DatasetSplits, EventArray, Populations
+    from ran.rantypes import (
+        DatasetSplits,
+        EventArray,
+        Populations,
+        RANModel,
+    )
 
 
 LOG2: float = math.log(2.0)
@@ -148,7 +154,9 @@ class PseudoDomainRule:
         """Sample pseudo-labels from P(S=1|z) without looking at x."""
         score = (pairs.z @ self.projection - self.center) / self.scale
         probability = expit(self.strength * score)
-        positive = np.random.default_rng(seed).random(len(pairs.z)) < probability
+        positive: NDArray[np.bool_] = (
+            np.random.default_rng(seed).random(len(pairs.z)) < probability
+        )
         if positive.all() or not positive.any():
             raise ValueError("pseudo-domain assignment produced an empty class")
         return Domains(
@@ -181,7 +189,10 @@ def response_statistic(
 
     def losses(probability: NDArray[np.floating]) -> NDArray[np.floating]:
         probability = np.clip(probability, _P_CLIP, 1.0 - _P_CLIP)
-        return -(labels * np.log(probability) + (1.0 - labels) * np.log1p(-probability))
+        return cast(
+            "NDArray[np.floating]",
+            -(labels * np.log(probability) + (1.0 - labels) * np.log1p(-probability)),
+        )
 
     loss_z = losses(p_z)
     loss_zx = losses(p_zx)
@@ -242,7 +253,7 @@ def _fit(
     *,
     include_x: bool,
     label: str,
-    fit_kwargs: dict,
+    fit_kwargs: dict[str, Any],
 ) -> RANModel:
     train = _balanced(train)
     val = _balanced(val)
@@ -257,11 +268,10 @@ def _fit(
 
 
 def _probability(model: RANModel, inputs: NDArray[np.floating]) -> EventArray:
-    return (
-        np.asarray(model.predict(inputs, batch_size=8192, verbose=0))
-        .ravel()
-        .astype(np.double)
-    )
+    # `RANModel` is a narrow protocol; the classifier built here is a full
+    # `keras.Model` and `.predict` is what the batched forward pass needs.
+    predicted = cast("keras.Model", model).predict(inputs, batch_size=8192, verbose=0)
+    return cast("EventArray", np.asarray(predicted).ravel().astype(np.double))
 
 
 def _measure(
@@ -272,7 +282,7 @@ def _measure(
     *,
     seed: int,
     label: str,
-    fit_kwargs: dict,
+    fit_kwargs: dict[str, Any],
 ) -> ResponseStatistic:
     """Fit both nested predictors and score their BCE gain on the same events."""
     keras.utils.set_random_seed(seed)
@@ -323,7 +333,7 @@ def _null_statistics(
     repeats: int,
     strength: float,
     seed: int,
-    fit_kwargs: dict,
+    fit_kwargs: dict[str, Any],
 ) -> dict[str, list[float]]:
     null: dict[str, list[float]] = {name: [] for name, _pairs in train_sources}
     for source_index, ((name, train), val, test) in enumerate(
@@ -353,43 +363,43 @@ def _null_statistics(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--n-samples", type=int, default=200_000)
-    parser.add_argument(
+    _ = parser.add_argument("--n-samples", type=int, default=200_000)
+    _ = parser.add_argument(
         "--var",
         action="append",
         dest="variables",
         choices=SUBSTRUCTURE_VARIABLES,
         help="default column set for both sides (all six if omitted)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--z-var",
         action="append",
         dest="z_variables",
         choices=SUBSTRUCTURE_VARIABLES,
         help="particle-level columns to condition on; defaults to --var",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--x-var",
         action="append",
         dest="x_variables",
         choices=SUBSTRUCTURE_VARIABLES,
         help="detector-level columns to test; defaults to --var",
     )
-    parser.add_argument("--hidden-units", type=int, default=128)
-    parser.add_argument("--n-layers", type=int, default=3)
-    parser.add_argument("--epochs", type=int, default=200)
-    parser.add_argument("--patience", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=1024)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--data-seed", type=int, default=42)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
+    _ = parser.add_argument("--hidden-units", type=int, default=128)
+    _ = parser.add_argument("--n-layers", type=int, default=3)
+    _ = parser.add_argument("--epochs", type=int, default=200)
+    _ = parser.add_argument("--patience", type=int, default=10)
+    _ = parser.add_argument("--batch-size", type=int, default=1024)
+    _ = parser.add_argument("--lr", type=float, default=1e-3)
+    _ = parser.add_argument("--data-seed", type=int, default=42)
+    _ = parser.add_argument("--seed", type=int, default=0)
+    _ = parser.add_argument(
         "--null-repeats",
         type=int,
         default=0,
         help="pseudo-domain repeats per generator (0 disables calibration)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--null-strength",
         type=float,
         default=1.5,

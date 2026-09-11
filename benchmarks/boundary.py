@@ -1,9 +1,12 @@
 """Where a run's wall clock actually goes, and how much of it jnp could claim.
 
-This exists to answer one question: is it worth porting the scipy metrics in
+This existed to answer one question: is it worth porting the scipy metrics in
 `ran.evaluate` to jnp now that nothing forces the host/device split any more?
-The answer is a *fraction*, not a duration -- a faster GPU shrinks the training
-term and leaves the scipy term alone, so the ratio is what generalises.
+The answer was yes and the port has happened, so what this measures now is the
+residue -- the npz write, and the per-dimension divergence reductions that stay
+on the host in float64 because they are free there. The number to read is still
+a *fraction*, not a duration: a faster GPU shrinks the training term and leaves
+the host term alone, so the ratio is what generalises.
 
 Three things this is careful about, each of which an earlier version got wrong:
 
@@ -17,7 +20,9 @@ Three things this is careful about, each of which an earlier version got wrong:
   `evaluate` actually scores (test, ~20% of the sample) and over the same 12
   passes it makes: three metrics, two levels, before and after. Re-implementing
   that inline is how the earlier version came to measure four passes over five
-  times too many rows.
+  times too many rows. Note that `evaluate_run` itself no longer makes those 12
+  passes --- it goes through `_metrics_per_dim`, which shares one histogram
+  between the two divergences --- so this is an upper bound on what it spends.
 * Metric cost is fixed per run while training cost scales with epochs, so the
   fraction is meaningless without the epoch count attached to it.
 """
@@ -25,10 +30,9 @@ Three things this is careful about, each of which an earlier version got wrong:
 from __future__ import annotations
 
 import io
-import sys
 import time
 from contextlib import contextmanager
-from typing import IO, TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING
 
 import jax
 import numpy as np
@@ -43,8 +47,9 @@ from ran.rantypes import EVENT_DTYPE, Events, Populations
 from ran.train import train
 
 if TYPE_CHECKING:
-    from collections.abc import Buffer, Callable, Generator
+    from collections.abc import Generator
 
+    from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EventArray
 
 
@@ -92,18 +97,17 @@ def _time_metrics(test: Populations, weights: EventArray) -> None:
     ):
         with phase(f"  evaluate: {label} (2 levels x before+after)"):
             for ref, comp in levels:
-                fn(ref=ref, comp=comp)
-                fn(ref=ref, comp=comp, weights=weights)
+                _: NDArray[np.double] = fn(ref=ref, comp=comp)
+                _: NDArray[np.double] = fn(ref=ref, comp=comp, weights=weights)
 
 
 def main() -> None:
-    out: Callable[[IO[bytes] | TextIO, Buffer | str], int] = sys.stdout.write
-    out(f"backend: {jax.default_backend()}  devices: {jax.devices()}\n")
+    print(f"backend: {jax.default_backend()}  devices: {jax.devices()}")
 
-    rng: np.random.Generator = np.random.default_rng(0)
+    rng: np.random.Generator = np.random.default_rng(seed=0)
     pops: Populations = _sample(rng)
     splits: DatasetSplits = RANDataset(batch_size=1024, seed=0).splits_from_data(
-        pops.interleave()
+        data=pops.interleave()
     )
     # `evaluate` scores the test split, not the whole sample.
     test: Populations = splits.test.as_arrays().partition()
@@ -116,11 +120,11 @@ def main() -> None:
         split: TrainSplit = TrainSplit.from_zxy(splits.train.as_arrays())
         jax.block_until_ready(x=split.z)
 
-    kw = {"dim": DIM, "hidden_units": 64, "n_layers": 2, "seed": 0}
+    kw: dict[str, int] = {"dim": DIM, "hidden_units": 64, "n_layers": 2, "seed": 0}
     with phase("train(n_epochs=1)   [compile + 1 epoch]"):
-        train(splits, n_epochs=1, **kw)
+        train(splits, n_epochs=1, **kw)  # ty: ignore[invalid-argument-type]
     with phase(f"train(n_epochs={EPOCHS}) [compile + {EPOCHS} epochs]"):
-        train(splits, n_epochs=EPOCHS, **kw)
+        train(splits, n_epochs=EPOCHS, **kw)  # ty: ignore[invalid-argument-type]
 
     # --- host side: does NOT scale with the accelerator ---
     _time_metrics(test, weights)
@@ -137,7 +141,7 @@ def main() -> None:
 
     width: int = max(len(name) for name in results)
     for name, seconds in results.items():
-        out(f"{name:<{width}}  {seconds:8.3f}s\n")
+        print(f"{name:<{width}}  {seconds:8.3f}s")
 
     t1: float = results["train(n_epochs=1)   [compile + 1 epoch]"]
     tn: float = results[f"train(n_epochs={EPOCHS}) [compile + {EPOCHS} epochs]"]
@@ -145,21 +149,21 @@ def main() -> None:
     compile_s: float = t1 - per_epoch
     metrics: float = sum(v for k, v in results.items() if k.startswith("  evaluate:"))
 
-    out(f"\n{'XLA compile (once per run, fixed)':<{width}}  {compile_s:8.3f}s\n")
-    out(f"{'per epoch (steady state)':<{width}}  {per_epoch:8.3f}s\n")
-    out(f"{'scipy metrics (once per run, fixed)':<{width}}  {metrics:8.3f}s\n")
+    print(f"\n{'XLA compile (once per run, fixed)':<{width}}  {compile_s:8.3f}s")
+    print(f"{'per epoch (steady state)':<{width}}  {per_epoch:8.3f}s")
+    print(f"{'scipy metrics (once per run, fixed)':<{width}}  {metrics:8.3f}s")
 
-    out("\nmovable share of a run, by epoch count:\n")
+    print("\nmovable share of a run, by epoch count:")
     for n in (EPOCHS, 500, 1000):
         run: float = compile_s + n * per_epoch + metrics
-        out(
+        print(
             f"  {n:>5} epochs: run {run:7.1f}s   "
-            f"scipy {metrics / run:5.1%}   compile {compile_s / run:5.1%}\n"
+            f"scipy {metrics / run:5.1%}   compile {compile_s / run:5.1%}"
         )
-    out(
-        "\nOnly the scipy column is movable, and only the wasserstein and\n"
-        "jensenshannon rows within it -- the triangular metric shares the\n"
-        "histograms JS already builds. Compile is fixed and jnp cannot touch it.\n"
+    print(
+        "\nOnly the scipy column is movable, and only the wasserstein and"
+        "jensenshannon rows within it -- the triangular metric shares the"
+        "histograms JS already builds. Compile is fixed and jnp cannot touch it."
     )
 
 

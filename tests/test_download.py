@@ -1,3 +1,5 @@
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- numpy stubs return Any for elementwise operations on arrays
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -9,12 +11,15 @@ from ran.data.download import _constituents, _get_var
 from ran.rantypes import LOG_RHO_FLOOR, SUBSTRUCTURE_VARIABLES
 
 if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
+
     from numpy.typing import NDArray
 
 MAX_CONSTITUENTS = 12
 
 
-def _raw(n: int = 64, dtype: type[np.floating] = np.double) -> dict[str, NDArray]:
+def _raw(n: int = 64, dtype: type[np.floating] = np.double) -> dict[str, NDArray[Any]]:
     """One generator's raw arrays, with degenerate jets in known rows.
 
     Rows 0-2 are single-constituent jets (no width, no tau2) and rows 3-5 are
@@ -66,7 +71,7 @@ class TestDegenerateJets:
         np.testing.assert_array_equal(actual=got[:3], desired=0.0)
 
     def test_tau21_is_the_plain_ratio_where_the_jet_has_width(self) -> None:
-        raw: dict[str, NDArray] = _raw()
+        raw: dict[str, NDArray[Any]] = _raw()
         got: NDArray[np.double] = _get_var(raw, "tau21", "gen")
         expected: NDArray[np.double] = raw["gen_tau2s"][3:] / raw["gen_widths"][3:]
         np.testing.assert_array_equal(actual=got[3:], desired=expected)
@@ -76,7 +81,7 @@ class TestDegenerateJets:
         np.testing.assert_array_equal(actual=got[3:6], desired=LOG_RHO_FLOOR)
 
     def test_sdm_is_the_plain_log_where_the_jet_has_groomed_mass(self) -> None:
-        raw: dict[str, NDArray] = _raw()
+        raw: dict[str, NDArray[Any]] = _raw()
         got: NDArray[np.double] = _get_var(raw, "sdm", "gen")
         rho_sq: NDArray[np.double] = (raw["gen_sdms"][6:] / raw["gen_jets"][6:, 0]) ** 2
         np.testing.assert_allclose(actual=got[6:], desired=np.log(rho_sq), rtol=1e-15)
@@ -189,15 +194,19 @@ class TestConstituentObservables:
             (np.full(shape=(1, 2, 4), fill_value=1.6), "PID_CHARGE only encodes"),
         ],
     )
-    def test_malformed_particles_are_refused(self, bad, match: str) -> None:
+    def test_malformed_particles_are_refused(
+        self, bad: NDArray[np.double], match: str
+    ) -> None:
         with pytest.raises(expected_exception=ValueError, match=match):
-            _constituents({"gen_particles": bad}, "gen")
+            _ = _constituents({"gen_particles": bad}, "gen")
 
 
-def _shard(rows: int, gen_width: int, sim_width: int, seed: int) -> dict:
+def _shard(
+    rows: int, gen_width: int, sim_width: int, seed: int
+) -> dict[str, NDArray[Any]]:
     """One raw shard, padded to a different constituent count per level."""
     rng: np.random.Generator = np.random.default_rng(seed)
-    out: dict[str, np.ndarray] = {}
+    out: dict[str, NDArray[Any]] = {}
     for ptype, width in (("gen", gen_width), ("sim", sim_width)):
         particles: NDArray[np.double] = np.zeros(shape=(rows, width, 4))
         lengths: NDArray[np.long] = rng.integers(low=1, high=width + 1, size=rows)
@@ -227,7 +236,7 @@ def _shard(rows: int, gen_width: int, sim_width: int, seed: int) -> dict:
 
 
 def test_shards_padded_to_different_widths_still_concatenate(
-    tmp_path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The constituent axis is padded per array, not globally.
 
@@ -243,7 +252,9 @@ def test_shards_padded_to_different_widths_still_concatenate(
         for i, (gen_w, sim_w) in enumerate(iterable=widths):
             np.savez(
                 tmp_path / f"{generator}_Zjet_pTZ-200GeV_{i}.npz",
-                **_shard(rows, gen_width=gen_w, sim_width=sim_w, seed=i),
+                # str-keyed dict unpacked into savez: a key could shadow
+                # `allow_pickle`, but these are all f"{ptype}_{name}".
+                **_shard(rows, gen_width=gen_w, sim_width=sim_w, seed=i),  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
             )
     monkeypatch.setattr(download, "N_FILES", n_files)
     download.download_jet_data(cache_dir=tmp_path)
@@ -263,4 +274,4 @@ def test_shards_padded_to_different_widths_still_concatenate(
 
 def test_unknown_variable_is_refused() -> None:
     with pytest.raises(expected_exception=ValueError, match="Unknown variable"):
-        _get_var(_raw(), "nsubjettiness", "gen")
+        _ = _get_var(_raw(), "nsubjettiness", "gen")

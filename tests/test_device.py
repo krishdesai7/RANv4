@@ -72,7 +72,7 @@ class TestGrouping:
 
     def test_a_split_below_one_batch_is_refused(self) -> None:
         with pytest.raises(ValueError, match="do not fill a single batch"):
-            grouping(n=10, batch_size=32, n_disc_steps=5)
+            _ = grouping(n=10, batch_size=32, n_disc_steps=5)
 
 
 class TestTrainIndices:
@@ -99,7 +99,7 @@ class TestTrainIndices:
         a caller -- the property the old `reset()` existed to protect."""
         key = jax.random.key(3)
         a = train_indices(key, 330, 32, 5)
-        train_indices(jax.random.key(99), 330, 32, 5)  # unrelated draw
+        _ = train_indices(jax.random.key(99), 330, 32, 5)  # unrelated draw
         np.testing.assert_array_equal(
             np.asarray(a), np.asarray(train_indices(key, 330, 32, 5))
         )

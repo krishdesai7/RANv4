@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from typing import Final, LiteralString
 
 
@@ -48,6 +50,21 @@ CACHE_DIR: Final[Path] = Path(os.environ.get(CACHE_ENV_VAR) or ".cache").expandu
 COMPILE_CACHE_DIR: Final[Path] = CACHE_DIR / "jax"
 
 RUN_DIR: Final[Path] = Path("runs")
+
+# A run directory is read by people. `config.json` and `report.pdf` stay at the
+# root because they are what a person opens; everything else -- checkpoints,
+# arrays, figures, the metrics and timing JSON -- is supporting material and
+# lives one level down, flat.
+ARTIFACTS_DIR: Final[LiteralString] = "artifacts"
+
+
+def artifacts_dir(run_dir: Path, /) -> Path:
+    """The run's supporting-material subdirectory, created on demand."""
+    path: Path = run_dir / ARTIFACTS_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17
@@ -157,6 +174,108 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
         xlim=(0, 50), xlabel="Charged Constituent Multiplicity", symbol=r"$n_{ch}$"
     ),
 }
+
+# How the observables are *presented*. This is not `SUBSTRUCTURE_VARIABLES`,
+# and must never become it: that tuple is the column order, the cache key and
+# what `config.json` records, and the Jet Column Order section of `CLAUDE.md`
+# documents what happened the last time it was allowed to float. The column
+# order carries no physics; this one does, and is applied at render time only.
+#
+# m -> ln rho -> lambda^1_0.5 -> w -> lambda^1_2 -> z_g -> tau_21
+#   -> M -> n_ch -> f_ch -> p_T^D -> q
+#
+# `M` next to `n_ch` exposes the baseline hadronization ratio (n_ch / M ~ 2/3,
+# from pion isospin); `f_ch` bridges particle counting and track-based energy
+# reconstruction; `p_T^D` completes the quark/gluon discriminant system with
+# `M` and `n_ch`; `q` closes as the valence flavour indicator.
+JET_DISPLAY_ORDER: Final[tuple[LiteralString, ...]] = (
+    "m",
+    "sdm",
+    "lha",
+    "w",
+    "ang2",
+    "zg",
+    "tau21",
+    "M",
+    "n_ch",
+    "f_ch",
+    "ptd",
+    "q",
+)
+
+JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = (
+    ("Mass and hard scale (IRC-safe kinematics)", ("m", "sdm")),
+    ("Continuous angularities (IRC-safe jet shapes)", ("lha", "w", "ang2")),
+    ("Splitting and 2-prong substructure", ("zg", "tau21")),
+    (
+        "Hadronization, multiplicity and fragmentation (IRC-unsafe)",
+        ("M", "n_ch", "f_ch", "ptd", "q"),
+    ),
+)
+
+
+# The level figures' page layout.
+#
+# The panel ASPECT is what makes these readable, and it was the thing wrong
+# with them: a hist-over-ratio cell wants to be WIDER than tall, roughly 5:4,
+# the shape a hand-written notebook reaches for (a 30x16in figure of 3x2
+# cells is 10x8 per cell). A 4x6 cell is the same panel turned on its end,
+# and no amount of paginating fixes it.
+#
+# Two facts constrain the rest. A panel's width on the page is
+# `linewidth / columns` whatever the figure measures in inches -- widening a
+# cell shrinks the `\includegraphics` scale by exactly as much -- so the
+# column count alone sets it. And every font scales with that same factor,
+# so the cell's absolute inches set the rendered text size and nothing else:
+# at 3 columns in a landscape block, a 4in cell renders 18pt labels at 13pt,
+# a 6in cell at 8.7pt. The latter is a normal figure text size in print.
+#
+# Hence 6.0 x 4.8in cells, three across and two down -- six to a page, the
+# arrangement a hand-written notebook reaches for -- giving 2.9 x 2.3in
+# panels with 8.7pt text. Six 5:4 cells in a 3x2 grid make a figure of
+# aspect 1.875 against a landscape block's 1.222, so a third of the page
+# height goes unused. That is inherent to the arrangement, not a defect:
+# filling it means either 2x2 (bigger panels, more pages) or 3x3 (an
+# awkward 9 + 3 split for twelve observables).
+#
+# `report.py` needs the same numbers to know how many
+# `\includegraphics` pages to emit, and must stay free of matplotlib, so
+# they live here rather than in `plotting`.
+PANEL_COLUMNS: Final[int] = 3
+PANELS_PER_PAGE: Final[int] = 6
+# Width in inches; the height comes from `_LevelStyle.height_per_dim`, which
+# is 6.6 for both levels -- a 7:6.6 cell, chosen so a page of six spans 83%
+# of the landscape block's height instead of the 65% a 5:4 cell left.
+#
+# Two independent knobs hide in one number. A panel's width on the page is
+# `linewidth / PANEL_COLUMNS` whatever the figure's inch size, because
+# `\includegraphics[width=\linewidth]` scales the figure by exactly as much
+# as widening it grew the figure. What the inches DO set is the rendered text
+# size: `font.size * linewidth_pt / (72 * figure_width_in)`. So the column
+# count sizes the panels and this constant sizes their labels, downwards.
+# At 7.0 in x 3 columns against the 749.4pt landscape block, the 18pt base
+# renders at 8.9pt.
+PANEL_WIDTH_INCHES: Final[float] = 7.0
+
+
+def figure_pages(dim: int, /) -> int:
+    """How many pages a level figure spans for `dim` observables."""
+    return max(1, math.ceil(dim / PANELS_PER_PAGE))
+
+
+def display_order(variables: Sequence[str], /) -> tuple[int, ...]:
+    """Indices into `variables`, reordered for presentation.
+
+    Filters `JET_DISPLAY_ORDER` to what this run actually holds, so a `--var`
+    subset stays in physics order. A non-jet run (`dim_0`, `dim_1`, ...) has no
+    entry in the table and falls through to the identity.
+    """
+    position: dict[str, int] = {name: i for i, name in enumerate(iterable=variables)}
+    ordered: tuple[int, ...] = tuple(
+        position[name] for name in JET_DISPLAY_ORDER if name in position
+    )
+    return ordered if len(ordered) == len(variables) else tuple(range(len(variables)))
+
 
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)
 TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(int_type=np.short).min)

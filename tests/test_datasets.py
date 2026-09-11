@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import assert_type
+from typing import TYPE_CHECKING, assert_type, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import Any
 
 import numpy as np
 import pytest
@@ -21,7 +25,7 @@ from ran.rantypes import (
 )
 
 
-def _write_config(params: dict, tmp_path: Path) -> Path:
+def _write_config(params: dict[str, Any], tmp_path: Path) -> Path:
     """Write a config in the YAML *input* format: mu_* plus sigma_* keys.
 
     `parse_gaussian_config` promotes the sigmas to the covariance matrices of a
@@ -29,8 +33,8 @@ def _write_config(params: dict, tmp_path: Path) -> Path:
     argument below is the one that takes a `GaussianConfig` -- that is the
     already-promoted path a reloaded run uses.
     """
-    p = tmp_path / "config.yaml"
-    p.write_text(yaml.dump(params))
+    p: Path = tmp_path / "config.yaml"
+    _ = p.write_text(yaml.dump(params))
     return p
 
 
@@ -38,7 +42,7 @@ class TestGenerateGaussianDataset:
     """Test multivariate Gaussian dataset generation."""
 
     @pytest.mark.writes_default_cache
-    def test_1d_uncorrelated(self, tmp_path) -> None:
+    def test_1d_uncorrelated(self, tmp_path: Path) -> None:
         """1D scalar sigma should produce valid splits."""
         cfg = {
             "mu_gen": [0.5],
@@ -55,7 +59,7 @@ class TestGenerateGaussianDataset:
         assert splits.test is not None
 
     @pytest.mark.writes_default_cache
-    def test_2d_correlated_shapes(self, tmp_path) -> None:
+    def test_2d_correlated_shapes(self, tmp_path: Path) -> None:
         """2D with full covariance should produce correct shapes."""
         cfg = {
             "mu_gen": [0.0, 1.0],
@@ -86,7 +90,7 @@ class TestGenerateGaussianDataset:
         splits = ds.generate_gaussian_dataset(params=params, n_samples=1000)
         assert splits.train is not None
 
-    def test_dtype_controls_generated_array_runtime_type(self, tmp_path) -> None:
+    def test_dtype_controls_generated_array_runtime_type(self, tmp_path: Path) -> None:
         params = GaussianConfig(
             dim=1,
             mu_gen=np.array([0.0]),
@@ -104,7 +108,7 @@ class TestGenerateGaussianDataset:
         assert splits.select(Split.ALL).z.dtype == np.single
         assert splits.select(Split.ALL).x.dtype == np.single
 
-    def test_both_config_and_params_raises(self, tmp_path) -> None:
+    def test_both_config_and_params_raises(self, tmp_path: Path) -> None:
         """Providing both config_path and params should error."""
         cfg = {
             "mu_gen": [0.0],
@@ -124,15 +128,17 @@ class TestGenerateGaussianDataset:
         )
         ds = RANDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
-            ds.generate_gaussian_dataset(config_path=path, params=params, n_samples=100)
+            _ = ds.generate_gaussian_dataset(
+                config_path=path, params=params, n_samples=100
+            )
 
     def test_neither_config_nor_params_raises(self) -> None:
         """Providing neither config_path nor params should error."""
         ds = RANDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
-            ds.generate_gaussian_dataset(n_samples=100)
+            _ = ds.generate_gaussian_dataset(n_samples=100)
 
-    def test_caching(self, tmp_path) -> None:
+    def test_caching(self, tmp_path: Path) -> None:
         """Second call with same config should hit cache."""
         cfg = {
             "mu_gen": [0.0],
@@ -144,14 +150,14 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
         ds = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
-        ds.generate_gaussian_dataset(config_path=path, n_samples=500)
+        _ = ds.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files = list(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files) == 1
         ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
-        ds2.generate_gaussian_dataset(config_path=path, n_samples=500)
+        _ = ds2.generate_gaussian_dataset(config_path=path, n_samples=500)
 
     @pytest.mark.writes_default_cache
-    def test_smearing_preserves_event_coupling(self, tmp_path) -> None:
+    def test_smearing_preserves_event_coupling(self, tmp_path: Path) -> None:
         """Detector-level values should be correlated with particle-level."""
         cfg = {
             "mu_gen": [0.0, 0.0],
@@ -168,7 +174,7 @@ class TestGenerateGaussianDataset:
             corr = np.corrcoef(events.z[:, d], events.x[:, d])[0, 1]
             assert corr > 0.95, f"dim {d}: corr={corr}, expected >0.95"
 
-    def test_yaml_and_params_share_cache(self, tmp_path) -> None:
+    def test_yaml_and_params_share_cache(self, tmp_path: Path) -> None:
         """A YAML config and the params it promotes to must share a cache key.
 
         `sigma_gen: [1.0, 1.5]` promotes to diag(1.0, 2.25) and
@@ -188,7 +194,7 @@ class TestGenerateGaussianDataset:
         cache_dir = tmp_path / "cache"
 
         ds1 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
-        ds1.generate_gaussian_dataset(config_path=path, n_samples=500)
+        _ = ds1.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files_after_yaml = set(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files_after_yaml) == 1
 
@@ -201,7 +207,7 @@ class TestGenerateGaussianDataset:
             cov_detector=np.array([[0.25, 0.0], [0.0, 0.64]]),
         )
         ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
-        ds2.generate_gaussian_dataset(params=reload_params, n_samples=500)
+        _ = ds2.generate_gaussian_dataset(params=reload_params, n_samples=500)
 
         cache_files_after_params = set(cache_dir.glob("gaussian_*.npz"))
         assert cache_files_after_params == cache_files_after_yaml
@@ -221,7 +227,7 @@ def test_splits_from_data_builds_three_nonempty_splits() -> None:
         assert data.y.shape[0] > 0
 
 
-def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs) -> DatasetSplits:
+def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs: Any) -> DatasetSplits:
     z = np.arange(2 * n, dtype=np.single).reshape(-1, 1)
     x = -z
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
@@ -277,7 +283,7 @@ class TestArrayDataset:
 
     def test_too_few_events_to_split_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one event"):
-            _toy_splits(n=2)
+            _ = _toy_splits(n=2)
 
 
 class TestLabelledAndPhysicsForms:
@@ -291,21 +297,23 @@ class TestLabelledAndPhysicsForms:
 
     def test_events_reject_unaligned_rows(self) -> None:
         with pytest.raises(ValueError, match="row-aligned"):
-            Events(np.zeros((5, 1), dtype=np.single), np.zeros((4, 1), dtype=np.single))
+            _ = Events(
+                np.zeros((5, 1), dtype=np.single), np.zeros((4, 1), dtype=np.single)
+            )
 
     def test_labels_must_be_zero_or_one(self) -> None:
         events = Events(
             np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
         )
         with pytest.raises(ValueError, match=r"zero \(MC\) or one"):
-            ZXY(events, np.array([0, 1, 2], dtype=np.ubyte))
+            _ = ZXY(events, np.array([0, 1, 2], dtype=np.ubyte))
 
     def test_one_label_per_event(self) -> None:
         events = Events(
             np.zeros((3, 1), dtype=np.single), np.zeros((3, 1), dtype=np.single)
         )
         with pytest.raises(ValueError, match="one label per event"):
-            ZXY(events, np.ones(2, dtype=np.ubyte))
+            _ = ZXY(events, np.ones(2, dtype=np.ubyte))
 
     def test_partition_recovers_the_populations_it_was_built_from(self) -> None:
         original = self._populations()
@@ -361,7 +369,7 @@ class TestLabelledAndPhysicsForms:
         measured = Populations.create(mc=mc, data=np.ones((5, 2), dtype=np.single))
 
         with pytest.raises(ValueError, match="no particle-level truth"):
-            measured.require_truth()
+            _ = measured.require_truth()
 
     def test_require_truth_returns_real_answers(self) -> None:
         original = self._populations()
@@ -399,7 +407,7 @@ class TestLabelledAndPhysicsForms:
         )
 
         with pytest.raises(ValueError, match="nonempty"):
-            ZXY(events, np.zeros(3, dtype=np.ubyte)).partition()
+            _ = ZXY(events, np.zeros(3, dtype=np.ubyte)).partition()
 
     def test_select_concatenates_only_the_requested_splits(self) -> None:
         splits = _toy_splits(n=200)
@@ -431,22 +439,26 @@ class TestCacheDirIsRelocatable:
     """
 
     @pytest.fixture(autouse=True)
-    def _restore(self):
+    def _restore(self) -> Iterator[None]:
         yield
-        importlib.reload(constants)
+        _ = importlib.reload(constants)
 
     @staticmethod
-    def _with(env: str | None, monkeypatch) -> Path:
+    def _with(env: str | None, monkeypatch: pytest.MonkeyPatch) -> Path:
         if env is None:
             monkeypatch.delenv(constants.CACHE_ENV_VAR, raising=False)
         else:
             monkeypatch.setenv(constants.CACHE_ENV_VAR, env)
-        return importlib.reload(constants).CACHE_DIR
+        return cast("Path", importlib.reload(constants).CACHE_DIR)
 
-    def test_unset_gives_the_project_local_default(self, monkeypatch) -> None:
+    def test_unset_gives_the_project_local_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         assert self._with(None, monkeypatch) == Path(".cache")
 
-    def test_both_caches_move_together(self, monkeypatch, tmp_path) -> None:
+    def test_both_caches_move_together(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         root: Path = tmp_path / "scratch"
         monkeypatch.setenv(constants.CACHE_ENV_VAR, str(root))
         reloaded = importlib.reload(constants)
@@ -454,7 +466,7 @@ class TestCacheDirIsRelocatable:
         assert root == reloaded.CACHE_DIR
         assert root / "jax" == reloaded.COMPILE_CACHE_DIR
 
-    def test_a_tilde_expands(self, monkeypatch) -> None:
+    def test_a_tilde_expands(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A SLURM `--export` carries the string through without a shell to
         expand it, so `~/ran-cache` would otherwise become a literal directory
         named `~`."""
@@ -462,7 +474,9 @@ class TestCacheDirIsRelocatable:
 
         assert self._with("~/ran-cache", monkeypatch) == expected
 
-    def test_empty_falls_back_rather_than_meaning_cwd(self, monkeypatch) -> None:
+    def test_empty_falls_back_rather_than_meaning_cwd(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """An unset variable forwarded by `--export` arrives as empty, not
         absent. `Path("")` is `Path(".")`, so taking it literally would scatter
         the cache into whatever directory each job happened to start in."""

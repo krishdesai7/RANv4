@@ -60,13 +60,15 @@ uv run benchmarks/tilt.py --dataset jets --degree 2 --n-samples 1000000
 ```
 """
 
+# pyrefly: ignore-errors[unknown-argument-type]
+# -- argparse Namespace and numpy elementwise ops are Any under the stubs
 from __future__ import annotations
 
 import argparse
 import logging
 from itertools import combinations_with_replacement
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import numpy as np
 import ran  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
@@ -101,7 +103,7 @@ class Tilt(NamedTuple):
 
     @property
     def n_params(self) -> int:
-        return int(self.beta.size)
+        return self.beta.size
 
 
 def _design(a: NDArray[np.double], degree: int, /) -> NDArray[np.double]:
@@ -154,7 +156,7 @@ def _weights(
     log_w = -(t_z @ beta)
     log_w -= log_w.max()
     w = np.exp(log_w)
-    return w * (len(w) / w.sum())
+    return cast("NDArray[np.double]", w * (len(w) / w.sum()))
 
 
 def _moment_residual(
@@ -240,7 +242,7 @@ def fit_tilt(
 def tilt_weights(tilt: Tilt, z: EventArray, /) -> EventArray:
     """Apply a fitted tilt to any sample of nominal-level events."""
     scaled = (np.asarray(z, dtype=_SOLVE_DTYPE) - tilt.center) / tilt.scale
-    return _weights(_design(scaled, tilt.degree), tilt.beta)
+    return cast("EventArray", _weights(_design(scaled, tilt.degree), tilt.beta))
 
 
 def _report_first_moments(
@@ -314,7 +316,7 @@ def _report_level(
     return mean
 
 
-def _load(args) -> tuple[DatasetSplits, tuple[str, ...]]:
+def _load(args: argparse.Namespace) -> tuple[DatasetSplits, tuple[str, ...]]:
     """Either data source, reduced to splits plus the column names."""
     if args.dataset == "jets":
         chosen = set(args.variables or SUBSTRUCTURE_VARIABLES)
@@ -339,15 +341,17 @@ def _load(args) -> tuple[DatasetSplits, tuple[str, ...]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--dataset", choices=("gaussian", "jets"), default="gaussian")
-    parser.add_argument("--config", type=Path, default=None)
-    parser.add_argument(
+    _ = parser.add_argument(
+        "--dataset", choices=("gaussian", "jets"), default="gaussian"
+    )
+    _ = parser.add_argument("--config", type=Path, default=None)
+    _ = parser.add_argument(
         "--var", action="append", dest="variables", choices=SUBSTRUCTURE_VARIABLES
     )
-    parser.add_argument("--degree", type=int, choices=(1, 2, 3), default=1)
-    parser.add_argument("--n-samples", type=int, default=1_000_000)
-    parser.add_argument("--batch-size", type=int, default=1024)
-    parser.add_argument("--data-seed", type=int, default=42)
+    _ = parser.add_argument("--degree", type=int, choices=(1, 2, 3), default=1)
+    _ = parser.add_argument("--n-samples", type=int, default=1_000_000)
+    _ = parser.add_argument("--batch-size", type=int, default=1024)
+    _ = parser.add_argument("--data-seed", type=int, default=42)
     args = parser.parse_args()
 
     configure_logging(level="info")

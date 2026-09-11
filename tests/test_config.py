@@ -13,7 +13,9 @@ from ran.data import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Any
 
+    from numpy.typing import ArrayLike, NDArray
     from ran.rantypes import GaussianConfig
 
 
@@ -21,19 +23,46 @@ class TestSigmaToCovariance:
     """Test the three sigma forms: scalar, vector, matrix."""
 
     def test_scalar_1d(self) -> None:
-        cov = sigma_to_covariance(2.0, 1)
-        expected = np.array([[4.0]])
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance(2.0, 1)
+        expected: NDArray[np.double] = np.array(object=[[4.0]])
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
 
     def test_scalar_3d(self) -> None:
-        cov = sigma_to_covariance(1.5, 3)
-        expected = 2.25 * np.eye(3)
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance(1.5, 3)
+        expected: NDArray[np.double] = 2.25 * np.eye(N=3)
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
+
+    @pytest.mark.parametrize(argnames="spelling", argvalues=[2.0, [2.0], [[2.0]]])
+    def test_single_element_is_a_scalar_sigma(self, spelling: ArrayLike) -> None:
+        """One element is one sigma at any nesting depth, and is squared.
+
+        `[[2.0]]` used to reach the matrix branch and pass through unsquared,
+        so the same sigma gave 4.0 written two ways and 2.0 written a third.
+        """
+        cov: NDArray[np.double] = sigma_to_covariance(spelling, 3)
+        np.testing.assert_array_almost_equal(actual=cov, desired=4.0 * np.eye(N=3))
 
     def test_vector(self) -> None:
-        cov = sigma_to_covariance([1.0, 2.0], 2)
-        expected = np.diag([1.0, 4.0])
-        np.testing.assert_array_almost_equal(cov, expected)
+        cov: NDArray[np.double] = sigma_to_covariance([1.0, 2.0], 2)
+        expected: NDArray[np.double] = np.diag(v=[1.0, 4.0])
+        np.testing.assert_array_almost_equal(actual=cov, desired=expected)
+
+    @pytest.mark.parametrize(argnames="dim", argvalues=[0, -1])
+    def test_degenerate_dim_rejected(self, dim: int) -> None:
+        """There is no 0x0 covariance, and numpy will not object to one.
+
+        `np.identity(-1)` raises, but `np.identity(0)` and `np.diag([])` both
+        return a legal `(0, 0)` array, so leaning on numpy catches only half of
+        this -- which is what made the `dim=0` case of this test fail.
+        """
+        with pytest.raises(expected_exception=ValueError, match="at least 1"):
+            _ = sigma_to_covariance(0.5, dim)
+
+    @pytest.mark.parametrize(argnames="empty", argvalues=[[], [[]]])
+    def test_empty_sigma_rejected(self, empty: ArrayLike) -> None:
+        """Empty needs no branch: the length and shape checks already catch it."""
+        with pytest.raises(expected_exception=ValueError, match="dim"):
+            _ = sigma_to_covariance(empty, 2)
 
     def test_matrix_passthrough(self) -> None:
         mat = [[1.0, 0.5], [0.5, 2.0]]
@@ -42,33 +71,33 @@ class TestSigmaToCovariance:
 
     def test_vector_wrong_dim(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([1.0, 2.0, 3.0], 2)
+            _ = sigma_to_covariance([1.0, 2.0, 3.0], 2)
 
     def test_matrix_wrong_shape(self) -> None:
         with pytest.raises(ValueError, match="dim"):
-            sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], 3)
+            _ = sigma_to_covariance([[1.0, 0.0], [0.0, 1.0]], 3)
 
     def test_not_positive_definite(self) -> None:
         """A matrix with negative eigenvalue should fail."""
         bad = [[1.0, 5.0], [5.0, 1.0]]
         with pytest.raises(np.linalg.LinAlgError):
-            sigma_to_covariance(bad, 2)
+            _ = sigma_to_covariance(bad, 2)
 
     def test_asymmetric_matrix_raises(self) -> None:
         """An asymmetric matrix should be rejected."""
         asym = [[1.0, 0.5], [999.0, 2.0]]
         with pytest.raises(ValueError, match="symmetric"):
-            sigma_to_covariance(asym, 2)
+            _ = sigma_to_covariance(asym, 2)
 
     def test_negative_scalar_raises(self) -> None:
-        """Negative scalar sigma is physically nonsensical."""
-        with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance(-1.0, 2)
+        """A non-positive scalar sigma is physically nonsensical."""
+        with pytest.raises(ValueError, match="positive"):
+            _ = sigma_to_covariance(-1.0, 2)
 
     def test_negative_vector_element_raises(self) -> None:
-        """Negative elements in sigma vector should be rejected."""
-        with pytest.raises(ValueError, match="negative"):
-            sigma_to_covariance([1.0, -0.5], 2)
+        """Non-positive elements in a sigma vector should be rejected."""
+        with pytest.raises(ValueError, match="positive"):
+            _ = sigma_to_covariance([1.0, -0.5], 2)
 
 
 class TestParseGaussianConfig:
@@ -81,13 +110,13 @@ class TestParseGaussianConfig:
     input, so it never round-trips through `GaussianConfig.model_dump()`.
     """
 
-    def _write_yaml(self, data: dict, tmp_path: Path) -> Path:
-        p = tmp_path / "config.yaml"
-        p.write_text(yaml.dump(data))
+    def _write_yaml(self, data: dict[str, Any], tmp_path: Path) -> Path:
+        p: Path = tmp_path / "config.yaml"
+        _ = p.write_text(data=yaml.dump(data))
         return p
 
-    def test_valid_2d_config(self, tmp_path) -> None:
-        cfg = {
+    def test_valid_2d_config(self, tmp_path: Path) -> None:
+        cfg: dict[str, list[float] | list[list[float]]] = {
             "mu_gen": [0.0, 1.0],
             "mu_true": [0.2, 0.8],
             "sigma_gen": [1.0, 1.5],
@@ -102,7 +131,7 @@ class TestParseGaussianConfig:
         assert params.cov_true.shape == (2, 2)
         assert params.cov_detector.shape == (2, 2)
 
-    def test_scalar_sigma(self, tmp_path) -> None:
+    def test_scalar_sigma(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0],
             "mu_true": [0.5],
@@ -116,7 +145,7 @@ class TestParseGaussianConfig:
         np.testing.assert_array_almost_equal(params.cov_gen, [[1.0]])
         np.testing.assert_array_almost_equal(params.cov_detector, [[0.25]])
 
-    def test_missing_key(self, tmp_path) -> None:
+    def test_missing_key(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0],
             "mu_true": [0.5],
@@ -124,9 +153,9 @@ class TestParseGaussianConfig:
         }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="missing"):
-            parse_gaussian_config(path)
+            _ = parse_gaussian_config(path)
 
-    def test_dim_mismatch(self, tmp_path) -> None:
+    def test_dim_mismatch(self, tmp_path: Path) -> None:
         cfg = {
             "mu_gen": [0.0, 1.0],
             "mu_true": [0.5],
@@ -136,7 +165,7 @@ class TestParseGaussianConfig:
         }
         path = self._write_yaml(cfg, tmp_path)
         with pytest.raises(ValueError, match="dim"):
-            parse_gaussian_config(path)
+            _ = parse_gaussian_config(path)
 
 
 class TestGaussianConfigFromRunConfig:
@@ -184,6 +213,26 @@ class TestGaussianConfigFromRunConfig:
         )
         np.testing.assert_array_almost_equal(params.cov_gen, [[1.0, 0.5], [0.5, 2.25]])
 
+    def test_master_era_1x1_sigma_key_is_still_a_covariance(self) -> None:
+        """The 1D case of the format above, which the size-1 rule nearly broke.
+
+        `sigma_to_covariance` reads `[[0.81]]` as one sigma and squares it. A
+        master-era `sigma_gen` holding a 1x1 *covariance* must not be squared,
+        so the reader keeps the 2-D rule rather than delegating that call.
+        """
+        params = gaussian_config_from_run_config(
+            {
+                "mu_gen": [0.5],
+                "mu_true": [0.0],
+                "sigma_gen": [[0.81]],
+                "sigma_true": [[1.0]],
+                "sigma_detector": [[0.25]],
+            },
+            dim=1,
+        )
+        np.testing.assert_array_almost_equal(params.cov_gen, [[0.81]])
+        np.testing.assert_array_almost_equal(params.cov_detector, [[0.25]])
+
     def test_ancient_scalar_sigma_is_promoted(self) -> None:
         """The oldest runs stored a raw sigma, which still needs squaring."""
         params = gaussian_config_from_run_config(
@@ -216,7 +265,7 @@ class TestGaussianConfigFromRunConfig:
 
     def test_missing_covariance_key_is_named(self) -> None:
         with pytest.raises(ValueError, match="cov_detector"):
-            gaussian_config_from_run_config(
+            _ = gaussian_config_from_run_config(
                 {
                     "mu_gen": [0.0],
                     "mu_true": [0.5],
@@ -228,4 +277,4 @@ class TestGaussianConfigFromRunConfig:
 
     def test_missing_mu_is_reported_as_missing(self) -> None:
         with pytest.raises(ValueError, match="missing"):
-            gaussian_config_from_run_config({"sigma_gen": 1.0}, dim=1)
+            _ = gaussian_config_from_run_config({"sigma_gen": 1.0}, dim=1)

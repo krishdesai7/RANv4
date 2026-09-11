@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
-    from typing import Final
+    from typing import Any, Final
 
     from numpy.typing import NDArray
-    from ran.rantypes import DatasetSplits, RANModel
+    from ran.rantypes import DatasetSplits, EventArray, RANModel
     from ran.train import TrainResult
 
     class ModelBuilder(Protocol):
@@ -59,7 +59,7 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """Rebuild the model factories at `dtype` without mutating the source file."""
     source: str = (REPO_ROOT / "src" / "ran" / "models.py").read_text()
-    namespace: dict = {}
+    namespace: dict[str, Any] = {}
     exec(  # ruff: ignore[exec-builtin] -- module's own source, recompiled with one literal changed
         compile(
             source=source.replace('"float32"', f'"{dtype}"'),
@@ -77,8 +77,11 @@ def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
 def main() -> None:
     scalar: type[np.double | np.single] = np.double if DTYPE == "float64" else np.single
     generator, discriminator = _builders_at(DTYPE)
-    train_module.build_generator: ModelBuilder = generator
-    train_module.build_discriminator: ModelBuilder = discriminator
+    # Rebinding the module's builders to the same factories recompiled at
+    # another dtype -- the measurement. Left unannotated: pyrefly rejects an
+    # annotation on a non-self attribute.
+    train_module.build_generator = generator  # ty: ignore[invalid-assignment]
+    train_module.build_discriminator = discriminator  # ty: ignore[invalid-assignment]
 
     rng: np.random.Generator = np.random.default_rng(seed=0)
     z_true: NDArray[scalar] = rng.normal(size=(N_SAMPLES, DIM)).astype(dtype=scalar)
@@ -87,13 +90,22 @@ def main() -> None:
     )
     # `Populations` is pinned to the package dtype, so the arrays are cast on
     # the way in rather than through a container-level `astype`.
+    # This benchmark deliberately runs the pipeline at float64 as well, so the
+    # arrays here can be wider than `EventArray`'s pinned float32. The cast is
+    # the measurement, not a mistake.
     pops = Populations(
         mc=Events(
-            z=z_gen,
-            x=(z_gen + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(dtype=scalar),
+            z=cast("EventArray", z_gen),
+            x=cast(
+                "EventArray",
+                (z_gen + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(dtype=scalar),
+            ),
         ),
-        data=(z_true + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(dtype=scalar),
-        truth=z_true,
+        data=cast(
+            "EventArray",
+            (z_true + 0.5 * rng.normal(size=(N_SAMPLES, DIM))).astype(dtype=scalar),
+        ),
+        truth=cast("EventArray", z_true),
     )
 
     splits: DatasetSplits = RANDataset(batch_size=1024, seed=0).splits_from_data(
@@ -109,7 +121,7 @@ def main() -> None:
     )
 
     raw: NDArray[np.double] = (
-        np.asarray(a=result.g(inputs=pops.mc.z)).ravel().astype(dtype=np.double)
+        np.asarray(a=result.g(pops.mc.z)).ravel().astype(dtype=np.double)
     )
     weights: NDArray[np.double] = raw * len(raw) / raw.sum()
 
@@ -119,11 +131,11 @@ def main() -> None:
     gen: NDArray[np.double] = pops.mc.z.astype(dtype=np.double)
     improvements: list[float] = []
     for i in range(DIM):
-        before = wasserstein_distance(truth[:, i], gen[:, i])
-        after = wasserstein_distance(truth[:, i], gen[:, i], v_weights=weights)
+        before: float = wasserstein_distance(truth[:, i], gen[:, i])
+        after: float = wasserstein_distance(truth[:, i], gen[:, i], v_weights=weights)
         improvements.append(100.0 * (before - after) / before)
 
-    sys.stdout.write(
+    _ = sys.stdout.write(
         f"SUMMARY dtype={DTYPE} seed={SEED} "
         f"mean_improvement={np.mean(improvements):.4f} "
         f"min_improvement={np.min(improvements):.4f} "

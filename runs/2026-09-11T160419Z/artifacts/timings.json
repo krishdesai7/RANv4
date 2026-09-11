@@ -1,0 +1,94 @@
+{
+  "total_seconds": 53.56513094715774,
+  "compile_cache_warm": true,
+  "phases": [
+    {
+      "name": "train",
+      "seconds": 40.64290028507821,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "transfer",
+      "seconds": 5.713707817019895,
+      "depth": 1,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "compile",
+      "seconds": 3.909618998062797,
+      "depth": 1,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "epochs",
+      "seconds": 29.72909948497545,
+      "depth": 1,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "select",
+      "seconds": 1.080106002977118,
+      "depth": 1,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "particle_mmd",
+      "seconds": 0.4029611269943416,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "save",
+      "seconds": 0.3516182240564376,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "train"
+    },
+    {
+      "name": "data",
+      "seconds": 1.4860305880429223,
+      "depth": 0,
+      "detail": "cache hit",
+      "failed": false,
+      "pass": "load"
+    },
+    {
+      "name": "load",
+      "seconds": 1.4042831240221858,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "load"
+    },
+    {
+      "name": "plots",
+      "seconds": 9.27314410393592,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "load"
+    },
+    {
+      "name": "evaluate",
+      "seconds": 0.004193495027720928,
+      "depth": 0,
+      "detail": null,
+      "failed": false,
+      "pass": "load"
+    }
+  ]
+}

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import tempfile
 from importlib import resources
@@ -89,6 +90,27 @@ def worker_script() -> AbstractContextManager[Path]:
     )
 
 
+def _worker_env() -> dict[str, str]:
+    """The worker's environment, with its own directory off `sys.path`.
+
+    `PYTHONSAFEPATH` is load-bearing and the reason is a name collision this
+    module creates. A script's own directory goes on `sys.path[0]`, and the
+    worker's own directory is this one --- which contains `omnifold.py`. So the
+    worker's `from omnifold import MLP, DataLoader, MultiFold` resolved to *this
+    module* rather than to the installed package, and then died on
+    `from .. import timing` with "attempted relative import with no known parent
+    package": a confusing error a long way from its cause.
+
+    `PYTHONSAFEPATH=1` (3.11+) stops the interpreter prepending the script
+    directory, which is exactly the shadowing and nothing else. The worker
+    imports nothing local, so it loses nothing.
+
+    Renaming this module would also have worked, at the cost of
+    `ran.baselines.omnifold` no longer being called after the thing it runs.
+    """
+    return os.environ | {"PYTHONSAFEPATH": "1"}
+
+
 def _invoke(worker: Path, in_path: Path, out_path: Path) -> None:
     """Run the worker, translating the two failures a caller can act on."""
     # Fixed argv, no shell; the interpolated elements are paths this process
@@ -110,6 +132,7 @@ def _invoke(worker: Path, in_path: Path, out_path: Path) -> None:
             text=True,
             check=False,
             timeout=WORKER_TIMEOUT_SECONDS,
+            env=_worker_env(),
         )
     except FileNotFoundError as error:
         raise RuntimeError(

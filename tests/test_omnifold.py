@@ -309,3 +309,65 @@ class TestEvaluateSingle:
         monkeypatch.setattr(omnifold, "unfold", _explode)
         again = omnifold.evaluate_single(run_dir)
         assert again == metrics
+
+
+class TestTheWorkerDoesNotImportThisPackage:
+    """The worker's `import omnifold` must find the package, not this module.
+
+    `_omnifold_worker.py` sits in the same directory as `omnifold.py`, and a
+    script's own directory goes on `sys.path[0]`. So the worker's
+    `from omnifold import MLP, DataLoader, MultiFold` resolved to the host half
+    instead of the installed package, and died on its `from .. import timing`
+    with "attempted relative import with no known parent package" -- an error
+    naming neither the collision nor the file that caused it.
+
+    Reproduced here with the same *shape* rather than the same names: a worker
+    whose directory contains a module it is about to import.
+    """
+
+    @staticmethod
+    def _shadowed(tmp_path: Path) -> Path:
+        """A worker with a poisoned sibling it must not be able to import."""
+        (tmp_path / "omnifold.py").write_text(
+            "raise RuntimeError('the sibling was imported')\n"
+        )
+        worker = tmp_path / "shadow_worker.py"
+        _ = worker.write_text(
+            "import sys\n"
+            "import numpy as np\n"
+            "try:\n"
+            "    import omnifold\n"
+            "except ImportError:\n"
+            "    shadowed = 'no'\n"
+            "else:\n"
+            "    shadowed = 'yes'\n"
+            "with np.load(sys.argv[1], allow_pickle=False) as p:\n"
+            "    np.savez(\n"
+            "        sys.argv[2],\n"
+            "        weights=np.ones(len(p['z_target']), dtype=np.single),\n"
+            "        device=np.array('GPU shadowed=' + shadowed),\n"
+            "    )\n"
+        )
+        return worker
+
+    def test_the_workers_directory_is_not_on_sys_path(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.INFO, logger=omnifold.logger.name):
+            _ = omnifold.unfold(
+                x_data=np.zeros((4, 1), dtype=np.single),
+                x_sim=np.zeros((4, 1), dtype=np.single),
+                z_gen=np.zeros((4, 1), dtype=np.single),
+                z_target=np.zeros((4, 1), dtype=np.single),
+                out_dir=tmp_path / "artifacts",
+                worker=self._shadowed(tmp_path),
+            )
+
+        assert "shadowed=no" in caplog.text, (
+            "the worker imported a module from its own directory; "
+            "PYTHONSAFEPATH is not reaching it"
+        )
+
+    def test_the_env_sets_safepath(self) -> None:
+        """The mechanism itself, so a removal is not silent."""
+        assert omnifold._worker_env()["PYTHONSAFEPATH"] == "1"

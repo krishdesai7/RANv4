@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import uuid
 from typing import TYPE_CHECKING, cast
 
 import jax
@@ -45,6 +46,39 @@ _ONE_SOURCE_ONLY: Final[LiteralString] = (
 # matmul precision in `_draw_gaussian`, which moves every drawn value by ~5e-4
 # relative on a GPU and by nothing at all on a CPU.
 _RNG_VERSION: Final[LiteralString] = "jax-v2"
+
+
+def _savez_atomic(path: Path, /, **arrays: NDArray[Any]) -> None:
+    """Write an `.npz` that a concurrent reader either misses or sees whole.
+
+    `np.savez` streams into the destination it is handed, so a reader that
+    arrives mid-write gets a truncated zip rather than an error it could
+    recover from. RAN's cache is shared by construction: `RAN_CACHE_DIR` is one
+    directory on `$SCRATCH`, `submit_uncertainty.sh` packs a grid of cells onto
+    a node against it, and `pytest -n16` does the same thing on a smaller
+    scale -- two workers that land on tests sharing a cache key are two writers
+    on one path.
+
+    Writing beside the target and renaming makes publishing a single atomic
+    `rename(2)`, which POSIX guarantees within a directory; the temp file is
+    created in that same directory for exactly that reason. Two writers racing
+    is then harmless -- each builds its own file, one rename wins, and both
+    hold identical bytes because the key is a hash of what produced them.
+
+    The temp name keeps a `.npz` suffix because `np.savez` appends one to any
+    path lacking it, which would otherwise leave the real output beside a
+    stray. `unlink` runs from a `finally`: after a successful rename there is
+    nothing at the temp path and `missing_ok` absorbs it, and a failed write
+    leaves no partial file behind.
+    """
+    tmp: Path = path.with_name(name=f"{path.name}.{uuid.uuid4().hex}.tmp.npz")
+    try:
+        np.savez(file=tmp, **arrays)  # pyrefly: ignore[bad-argument-type]
+        # `Path.replace` is `os.replace`: one atomic `rename(2)`. The result
+        # is the destination path, which nothing here wants.
+        _ = tmp.replace(target=path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _draw_gaussian(
@@ -276,7 +310,7 @@ class RANDataset:
             # Uncompressed, for the reason spelled out in `ran.data.download`:
             # these are incompressible floats, so DEFLATE is a large read tax
             # for a few percent of disk. Existing compressed caches still load.
-            np.savez(file=cache_path, z=data.z, x=data.x, y=data.y)
+            _savez_atomic(cache_path, z=data.z, x=data.x, y=data.y)
             logger.info("Generated and saved dataset to cache: %s", cache_path)
 
         return self.splits_from_data(data)

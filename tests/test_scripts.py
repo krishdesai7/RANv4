@@ -7,11 +7,11 @@ reaches a compute node intact and costs an allocation to discover.
 
 Both checks exist because both have already happened:
 
-* `module load cudatoolkit/12.9` died with `command not found: module`, because
-  `module` is a shell function a *login* shell defines and a batch script is not
-  one. bash used to export the function through the environment, so the move
-  from bash to zsh is what exposed it. `scripts/_lmod.zsh` defines it; the test
-  is that every script calling `module` actually sources that.
+* `module load cudatoolkit/12.9` died with `command not found: module`. It is a
+  shell function a site defines in an rc file, and a batch script runs zsh
+  non-interactive and non-login, which does not read those -- so the function is
+  present at a prompt and absent in the job. `scripts/_lmod.zsh` initialises it;
+  the test is that every script calling `module` actually sources that first.
 * `{ ... } always { ... }` does not run under `set -e`, so a cleanup written
   that way silently does not happen.
 """
@@ -74,11 +74,11 @@ def test_the_script_parses(script: Path) -> None:
 def test_a_script_using_module_initialises_it_first(script: Path) -> None:
     r"""`module` must be defined before it is called.
 
-    It is a shell function from Lmod, defined in an init script that only a
-    login shell sources. A SLURM batch script is not a login shell, so without
-    `scripts/_lmod.zsh` the first `module load` dies with
-    `command not found: module` --- under `set -e`, taking the job with it,
-    after the expensive part has already run.
+    It is a shell function from Lmod, defined in a startup file that a
+    non-interactive, non-login shell does not read -- which is what a SLURM
+    batch script is. Without `scripts/_lmod.zsh` the first `module load` dies
+    with `command not found: module`, and under `set -e` that takes the job with
+    it, after the expensive part has already run.
     """
     text: str = script.read_text()
     uses: list[int] = [

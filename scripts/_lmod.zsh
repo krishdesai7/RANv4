@@ -1,16 +1,20 @@
 # Make `module` usable inside a batch script. Sourced, never executed.
 #
-# `module` is a shell function rather than a program: Lmod defines it in an init
-# script that a *login* shell sources. A SLURM batch script is not a login
-# shell, so the function is simply absent and the first `module load ...` dies
-# with `command not found: module` -- which under `set -e` takes the whole job
-# with it, after the expensive part has already run.
+# `module` is a shell function rather than a program, and a SLURM batch script
+# does not get it: the first `module load ...` dies with
+# `command not found: module`, which under `set -e` takes the whole job with it
+# after the expensive part has already run.
 #
-# This did not bite while the scripts were bash. Bash exports functions through
-# the environment (`BASH_FUNC_module%%`) and SLURM propagates the environment,
-# so the function arrived for free. zsh does not import those, so moving the
-# scripts to zsh is precisely what exposed it. Observed as
-# `slurm_script:65: command not found: module`.
+# A batch script runs zsh *non-interactive and non-login*, which
+# reads only `/etc/zshenv` and `~/.zshenv`. The rc files -- where a site defines
+# `module` -- are interactive-only, and the profile files are login-only. So
+# `whence module` at a prompt finds the function and the same check inside the
+# job does not. On a login node:
+#
+#     whence module          # the Lmod function
+#     zsh -c 'whence module' # nothing: this is what the batch script sees
+#
+# Observed as `slurm_script:65: command not found: module`.
 #
 # `MODULESHOME` is an ordinary exported *variable*, so unlike the function it
 # does survive into the job; it is the thing to trust, with Perlmutter's path as

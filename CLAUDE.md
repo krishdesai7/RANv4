@@ -435,14 +435,16 @@ assumed.
 
 **`module` is not available in a batch script until it is initialised**, which
 is what `scripts/_lmod.zsh` does and every script calling `module` sources
-first. It is a shell function Lmod defines in an init script only a *login*
-shell sources, so a batch job gets `command not found: module` --- and under
-`set -e` that takes the job with it. This did not bite while the scripts were
-bash, which exports functions through the environment; zsh does not import
-those, so the move to zsh is exactly what exposed it. `submit.zsh` had the same
-latent bug in its `module load texlive`, where it cost only the PDF because it
-sits last. `tests/test_scripts.py` asserts the ordering, and `zsh -n` parses
-every script --- a shell script is otherwise covered by nothing here.
+first. It is a shell function Lmod defines in a startup file that only an
+interactive or login shell reads; a batch script is neither, so it reads
+`/etc/zshenv` and `~/.zshenv` and nothing else, and the first `module load`
+dies with `command not found: module` --- under `set -e`, taking the job with
+it. The asymmetry is confusing precisely because `whence module` at a login
+prompt finds it; `zsh -c 'whence module'` is what the job actually sees.
+`submit.zsh` had the same latent bug in its `module load texlive`, where it cost
+only the PDF because it sits last. `tests/test_scripts.py` asserts the ordering,
+and `zsh -n` parses every script --- a shell script is otherwise covered by
+nothing here.
 
 ### Getting OmniFold onto the figures
 

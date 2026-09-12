@@ -26,8 +26,9 @@ def _completion_records(
 def test_raw_download_records_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from ran.data import download
     from rich.progress import Progress
+
+    from ran.data import download
 
     destination: Path = tmp_path / "sample.npz"
 
@@ -60,8 +61,9 @@ def test_evaluation_records_metrics_artifact_completion(
 ) -> None:
     import keras
     import numpy as np
-    from ran import evaluate
     from ran.rantypes import ZXY, Events
+
+    from ran import evaluate
 
     run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
@@ -116,6 +118,7 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     import numpy as np
+
     from ran.baselines import _shared as shared
     from ran.baselines import ibu
 

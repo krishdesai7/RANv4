@@ -20,8 +20,6 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
-from ran import plotting
-from ran.data import ArrayDataset
 from ran.plotting import (
     _DETECTOR,
     _hist_ratio_panel,
@@ -40,6 +38,9 @@ from ran.rantypes import (
     Populations,
     figure_pages,
 )
+
+from ran import plotting
+from ran.data import ArrayDataset
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

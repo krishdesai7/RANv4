@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from ran import report
 from ran.rantypes import SUBSTRUCTURE_VARIABLES
+
+from ran import report
 
 
 def test_the_template_ships_with_the_package() -> None:

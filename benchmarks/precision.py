@@ -39,9 +39,7 @@ os.environ["KERAS_BACKEND"] = "jax"
 os.environ["JAX_ENABLE_X64"] = str(object=int(DTYPE == "float64"))
 
 import numpy as np
-import ran  # ruff: ignore[unused-import] -- import order is load-bearing; see above
 import ran.train as train_module
-from ran.data import RANDataset
 from ran.rantypes import (
     Events,
     Populations,
@@ -49,6 +47,9 @@ from ran.rantypes import (
 from scipy.stats import (
     wasserstein_distance,
 )
+
+import ran  # ruff: ignore[unused-import] -- import order is load-bearing; see above
+from ran.data import RANDataset
 
 N_SAMPLES: int = 200_000
 DIM: int = 6

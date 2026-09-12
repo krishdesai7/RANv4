@@ -45,14 +45,15 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import jax.numpy as jnp
 import numpy as np
-import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
-from ran.data import load_jet_dataset
 from ran.logging_config import configure_logging
 from ran.mmd import bandwidths, build_cache, weighted_mmd
 from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
 from ran.train import MMD_SUBSAMPLE
 from rich.console import Console
 from rich.table import Table
+
+import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
+from ran.data import load_jet_dataset
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 import numpy as np
 import pytest
 import yaml
+from ran.data import RANDataset
 from ran.rantypes import (
     EVENT_DTYPE,
     TRUTH_SENTINEL,
@@ -22,8 +23,6 @@ from ran.rantypes import (
     Split,
     constants,
 )
-
-from ran.data import RANDataset
 
 
 def _write_config(params: dict[str, Any], tmp_path: Path) -> Path:

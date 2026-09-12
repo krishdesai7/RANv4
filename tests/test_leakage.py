@@ -5,9 +5,8 @@ on is the assertion: the bad argument must be refused before any model is built.
 """
 
 import pytest
-from ran.rantypes import POISON_SENTINEL, TRUTH_SENTINEL
-
 from ran import leakage
+from ran.rantypes import POISON_SENTINEL, TRUTH_SENTINEL
 
 
 class ReachedTrainingError(Exception):

@@ -12,6 +12,7 @@ import keras
 import numpy as np
 import typer
 from jax import Array
+from ran.data import load_jet_dataset
 from ran.evaluate import _improvement, _wd_per_dim
 from ran.logging_config import configure_logging
 from ran.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
@@ -24,8 +25,6 @@ from ran.train import (
     normalize_weights,
     weighted_bce,
 )
-
-from ran.data import load_jet_dataset
 
 if TYPE_CHECKING:
     from logging import Logger

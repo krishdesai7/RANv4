@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING
 
 import jax
 import numpy as np
+import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND/x64 before keras or jax load
+from ran.data import RANDataset
 from ran.data.device import TrainSplit
 
 # Private on purpose: the point is to time what `evaluate` runs, not a
@@ -43,9 +45,6 @@ from ran.data.device import TrainSplit
 from ran.evaluate import _js_per_dim, _triangular_per_dim, _wd_per_dim
 from ran.rantypes import EVENT_DTYPE, Events, Populations
 from ran.train import train
-
-import ran  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND/x64 before keras or jax load
-from ran.data import RANDataset
 
 if TYPE_CHECKING:
     from collections.abc import Generator

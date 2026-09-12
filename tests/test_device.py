@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from ran.data import RANDataset
 from ran.data.device import (
     DEFAULT_EVAL_BATCH_SIZE,
     DeviceSplits,
@@ -21,8 +22,6 @@ from ran.data.device import (
     train_indices,
 )
 from ran.rantypes import ZXY, DatasetSplits, Events
-
-from ran.data import RANDataset
 
 
 def _toy(n: int = 200, batch_size: int = 32, seed: int = 4) -> DatasetSplits:

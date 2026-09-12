@@ -16,9 +16,8 @@ from io import StringIO
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from rich.console import Console
-
 from ran import timing
+from rich.console import Console
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -429,9 +428,8 @@ class TestTrainIntegration:
     @staticmethod
     def _splits() -> DatasetSplits:
         import numpy as np
-        from ran.rantypes import ZXY, Events
-
         from ran.data import RANDataset
+        from ran.rantypes import ZXY, Events
 
         rng = np.random.default_rng(21)
         n = 512

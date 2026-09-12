@@ -3,10 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from ran import cli
 from ran.cli import app, baseline_app, uncertainty_app
 from typer.testing import CliRunner
-
-from ran import cli
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -21,13 +21,12 @@ from typing import TYPE_CHECKING, override
 
 import numpy as np
 import pytest
+from ran import workflow
+from ran.data import RANDataset, parse_gaussian_config
 from ran.rantypes import ZXY, DatasetName, Events, Populations
 from ran.rantypes.events import DatasetSplits
 from ran.train import TrainResult, train
 from ran.workflow import _compact_variables
-
-from ran import workflow
-from ran.data import RANDataset, parse_gaussian_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable

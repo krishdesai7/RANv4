@@ -127,7 +127,7 @@ scripts/
 ├── submit_precision.zsh       float32 vs float64 paired ensemble
 └── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (568 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (572 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -220,7 +220,7 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 568 cases are
+The split is there because the cost is wildly uneven: 37 of the 572 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
@@ -458,9 +458,20 @@ OmniFold needs --- it reweights events, not observables. OmniFold draws crimson
 dash-dot with triangles against IBU's green dotted squares, distinguished by
 linestyle as well as colour so the panels survive greyscale printing.
 
-The report's *tables* do not yet carry an OmniFold column; `metrics_omnifold.json`
-is written and the figures show the curve, but `report.py` has not been taught
-the third arm.
+The report's tables carry the third arm too: `render` reads
+`metrics_omnifold.json` when it exists, and fills the two OmniFold columns with
+dashes when it does not, because the template fixes the column count. Columns
+run Sim, IBU, OmniFold, RAN --- the method under test last, where the eye lands,
+behind what it is being compared against.
+
+Eight columns do not fit at the default column padding. The six tables overran
+the text block by ~24pt, which `pdflatex` reports as an overfull hbox and
+*still compiles* --- so nothing failed and the numbers simply ran off the page.
+They now set `\tabcolsep` to 4pt and drop the method name from each improvement
+heading (`impr. (\%)`, unambiguous because it sits beside its method's column).
+`_TABLE_COLUMNS` is the one place the count lives, and a test asserts it against
+the template's own `tabular` specification --- the two have no other connection,
+and had already drifted once.
 
 ## Uncertainty
 

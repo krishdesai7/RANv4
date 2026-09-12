@@ -226,14 +226,21 @@
 \FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_WASSERSTEIN>>
 \bottomrule
 \end{tabular}
@@ -243,14 +250,21 @@
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_JS>>
 \bottomrule
 \end{tabular}
@@ -260,14 +274,21 @@
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_VLC>>
 \bottomrule
 \end{tabular}
@@ -283,14 +304,21 @@
 \FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_WASSERSTEIN>>
 \bottomrule
 \end{tabular}
@@ -300,14 +328,21 @@
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_JS>>
 \bottomrule
 \end{tabular}
@@ -317,14 +352,21 @@
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_VLC>>
 \bottomrule
 \end{tabular}

@@ -303,6 +303,39 @@ _METRICS: Final[tuple[tuple[str, str], ...]] = (
     ("VLC", "triangular"),
 )
 
+# Observable, Sim, then a (value, improvement) pair for each of IBU, OmniFold
+# and RAN. Named once because three separate `\multicolumn` spans and the
+# template's column specification all have to agree, and they had already
+# drifted: two comments here said "sixteen columns" while the spans said six.
+_TABLE_COLUMNS: Final[int] = 8
+
+
+def _method_cells(
+    source: Mapping[str, Any] | None,
+    level: str,
+    variable: str,
+    metric: str,
+    scale: float,
+    /,
+) -> tuple[str, str]:
+    """One method's `(value, improvement)` pair, or dashes where it has not run.
+
+    A baseline that has not been run on a directory has no entry, and the
+    template fixes the column count, so the pair has to be *filled* rather than
+    omitted. Factored out because there are now three methods on a row and the
+    IBU branch was already being written twice.
+    """
+    entry: Mapping[str, float] | None = (
+        source.get(f"{level}_{variable}") if source is not None else None
+    )
+    if entry is None:
+        return (_DASH, _DASH)
+    return (
+        decimal(entry[f"{metric}_after"] * scale),
+        # Improvements are ratios: scaling them would be wrong.
+        decimal(entry[f"{metric}_improvement_pct"]),
+    )
+
 
 def _row(
     variable: str,
@@ -310,14 +343,19 @@ def _row(
     metric: str,
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
+    omnifold: Mapping[str, Any] | None,
     daggered: bool,
     /,
 ) -> str:
-    """One variable's six cells for one metric: label, Sim, IBU, IBU%, RAN, RAN%.
+    """One variable's eight cells: label, Sim, then a pair per method.
 
-    Six columns rather than the sixteen of a combined table: three metrics
-    side by side needed `adjustbox` to shrink the whole thing to 7pt, which is
-    below what anyone reads. Split, each table sets at full size.
+    Eight columns rather than the twenty-four of a combined table: three
+    metrics side by side needed `adjustbox` to shrink the whole thing to 7pt,
+    which is below what anyone reads. Split, each table sets at full size.
+
+    RAN goes last rather than first. The eye reads a row left to right and
+    stops at the end, so the method under test sits where a reader lands, with
+    the baselines it is being compared against in front of it.
     """
     symbol: str = (
         JET_OBS[variable].symbol if variable in JET_OBS else latex_text(variable)
@@ -325,21 +363,10 @@ def _row(
     label: str = rf"{symbol}\(^\dag\)" if daggered else symbol
     scale: float = _SCALE[metric]
     ours: Mapping[str, float] = ran[f"{level}_{variable}"]
-    theirs: Mapping[str, float] | None = (
-        ibu.get(f"{level}_{variable}") if ibu is not None else None
-    )
 
     cells: list[str] = [label, decimal(ours[f"{metric}_before"] * scale)]
-    if theirs is None:
-        cells.extend((_DASH, _DASH))
-    else:
-        cells.extend(
-            (
-                decimal(theirs[f"{metric}_after"] * scale),
-                # Improvements are ratios: scaling them would be wrong.
-                decimal(theirs[f"{metric}_improvement_pct"]),
-            )
-        )
+    cells.extend(_method_cells(ibu, level, variable, metric, scale))
+    cells.extend(_method_cells(omnifold, level, variable, metric, scale))
     cells.extend(
         (
             decimal(ours[f"{metric}_after"] * scale),
@@ -352,11 +379,11 @@ def _row(
 # A daggered label is meaningless without this line. IBU returning its input
 # unchanged records an "after" bit-identical to its "before" and a 0.0%
 # improvement, which reads as "IBU tried and achieved nothing"; the truth is
-# that it declined to unfold the observable at all. The row spans all sixteen
-# columns and sits immediately before the template's `\bottomrule`.
+# that it declined to unfold the observable at all. The row spans the whole
+# table and sits immediately before the template's `\bottomrule`.
 _DAGGER_LEGEND: Final[str] = (
-    r"\multicolumn{6}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning "
-    r"produced a single bin, so IBU failed to unfold.} \\"
+    rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\footnotesize \(^\dag\) "
+    r"IBU's purity binning produced a single bin, so IBU failed to unfold.} \\"
 )
 
 
@@ -367,6 +394,7 @@ def _group_lines(
     metric: str,
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
+    omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
 ) -> list[str]:
@@ -378,8 +406,8 @@ def _group_lines(
     """
     return [
         r"\midrule",
-        rf"\multicolumn{{6}}{{@{{}}l}}{{\bfseries {label}}} \\",
-        *(_row(v, level, metric, ran, ibu, v in skipped) for v in members),
+        rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\bfseries {label}}} \\",
+        *(_row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in members),
     ]
 
 
@@ -402,6 +430,7 @@ def metrics_table(
     variables: Sequence[str],
     ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
+    omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
 ) -> str:
@@ -417,14 +446,18 @@ def metrics_table(
     lines: list[str] = [
         line
         for label, members in groups
-        for line in _group_lines(label, members, level, metric, ran, ibu, skipped)
+        for line in _group_lines(
+            label, members, level, metric, ran, ibu, omnifold, skipped
+        )
     ]
     emitted: list[str] = [v for _, members in groups for v in members]
 
     if not lines:  # a non-jet run: rows, no grouping
         emitted = list(variables)
         lines.append(r"\midrule")
-        lines.extend(_row(v, level, metric, ran, ibu, v in skipped) for v in emitted)
+        lines.extend(
+            _row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in emitted
+        )
 
     # Only when the mark is actually on the page: an unexplained legend is as
     # confusing as an unexplained dagger.
@@ -461,12 +494,12 @@ def skipped_variables(
 
 # A run that died before `ran evaluate` still deserves a report: the tables
 # degrade to a single explanatory row rather than raising. The template fixes
-# sixteen columns, so the row has to span all of them.
+# the column count, so the row has to span all of them.
 _NO_METRICS: Final[str] = (
     r"\midrule"
     "\n"
-    r"\multicolumn{6}{@{}l}{\itshape metrics.json not found: "
-    r"run \texttt{ran evaluate} for this run.} \\"
+    rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\itshape metrics.json not "
+    r"found: run \texttt{ran evaluate} for this run.} \\"
 )
 
 
@@ -492,13 +525,14 @@ def _table(
     variables: Sequence[str],
     ran: Mapping[str, Any] | None,
     ibu: Mapping[str, Any] | None,
+    omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
 ) -> str:
     """A metrics body, or the not-found row when there are no metrics."""
     if not ran:
         return _NO_METRICS
-    return metrics_table(level, metric, variables, ran, ibu, skipped)
+    return metrics_table(level, metric, variables, ran, ibu, omnifold, skipped)
 
 
 def _figure_pages(artifacts: Path, stem: str, dim: int, /) -> str:
@@ -531,6 +565,10 @@ def render(run_dir: Path, /) -> str:
     artifacts: Path = run_dir / ARTIFACTS_DIR
     ran: dict[str, Any] | None = _read(artifacts / "metrics.json")
     ibu: dict[str, Any] | None = _read(artifacts / "metrics_ibu.json")
+    # Absent on every run that has not had `ran baseline omnifold` pointed at
+    # it, which is most of them; the column then fills with dashes rather than
+    # disappearing, because the template fixes the column count.
+    omnifold: dict[str, Any] | None = _read(artifacts / "metrics_omnifold.json")
     timings: dict[str, Any] | None = _read(artifacts / "timings.json")
     skipped: frozenset[str] = skipped_variables(run_dir, ibu)
     variables: tuple[str, ...] = _variables(config)
@@ -543,7 +581,7 @@ def render(run_dir: Path, /) -> str:
         *(
             (
                 f"<<{level.upper()}_{token}>>",
-                _table(level, metric, variables, ran, ibu, skipped),
+                _table(level, metric, variables, ran, ibu, omnifold, skipped),
             )
             for level in ("detector", "particle")
             for token, metric in _METRICS

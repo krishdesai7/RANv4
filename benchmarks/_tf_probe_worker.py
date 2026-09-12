@@ -54,7 +54,7 @@ def _peak_bytes() -> int | None:
 
     try:
         return int(tf.config.experimental.get_memory_info("GPU:0")["peak"])
-    except (KeyError, ValueError, RuntimeError):
+    except KeyError, ValueError, RuntimeError:
         return None
 
 
@@ -103,7 +103,9 @@ def probe() -> dict[str, object]:
 def main() -> None:
     try:
         result = probe()
-    except BaseException as exc:  # noqa: BLE001 -- the driver needs the reason, not a traceback on stderr
+    # The driver needs a reason on stdout, not a traceback on stderr: an
+    # unparseable worker is indistinguishable from a crashed one.
+    except BaseException as exc:  # ruff: ignore[blind-except]
         result = {
             "status": "error",
             "detail": f"{type(exc).__name__}: {exc}",

@@ -153,8 +153,11 @@ ignore = [
 # hardcoded-password check matches on the "pass" substring in the arg name.
 "tests/test_timing.py" = ["hardcoded-password-func-arg", "hardcoded-password-string"]
 # Benchmarks report to a terminal and are read by a human running them by hand;
-# routing that through the logging config would bury the numbers.
-"benchmarks/**.py" = ["T20"]
+# routing that through the logging config would bury the numbers. They also
+# shell out to developer tools by bare name (`uv`, `nvidia-smi`): the absolute
+# path differs per machine and per driver package, and resolving on PATH is the
+# behaviour wanted, not an oversight.
+"benchmarks/**.py" = ["T20", "start-process-with-partial-path"]
 # package __init__ is the backend bootstrap: must set KERAS_BACKEND and
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]

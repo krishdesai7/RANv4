@@ -20,13 +20,16 @@ the JAX backend initialises and cannot be changed afterwards. Reading them in
 one interpreter and re-importing is the obvious way to write this and it
 measures nothing: every arm after the first would inherit the first one's pool.
 
-| Arm                   | Parent                                  | What a pass means               |
-| --------------------- | --------------------------------------- | ------------------------------- |
-| `control`             | never touches JAX                       | the worker works on this node   |
-| `preallocate-default` | JAX on GPU, shipped defaults            | no fix needed                   |
-| `preallocate-false`   | `XLA_PYTHON_CLIENT_PREALLOCATE=false`   | the cheap fix works             |
-| `mem-fraction-0.4`    | `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4`    | the budgeted fix works          |
-| `parent-on-cpu`       | `JAX_PLATFORMS=cpu`                     | the fallback design works       |
+| Arm                   | Parent                    | What a pass means           |
+| --------------------- | ------------------------- | --------------------------- |
+| `control`             | never touches JAX         | the worker works on this node |
+| `preallocate-default` | JAX on GPU, defaults      | no fix needed               |
+| `preallocate-false`   | `..._PREALLOCATE=false`   | the cheap fix works         |
+| `mem-fraction-0.4`    | `..._MEM_FRACTION=0.4`    | the budgeted fix works      |
+| `parent-on-cpu`       | `JAX_PLATFORMS=cpu`       | the fallback design works   |
+
+(the two truncated names are `XLA_PYTHON_CLIENT_PREALLOCATE` and
+`XLA_PYTHON_CLIENT_MEM_FRACTION`.)
 
 `control` is the arm to read first. If it fails, nothing below it means
 anything -- the node, the CUDA driver or the uv script cache is the problem,
@@ -51,7 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -77,7 +80,9 @@ class Arm:
 
 ARMS: tuple[Arm, ...] = (
     Arm("control", touch_jax=False, note="worker alone on the card"),
-    Arm("preallocate-default", touch_jax=True, note="what `ran baseline` would do today"),
+    Arm(
+        "preallocate-default", touch_jax=True, note="what `ran baseline` would do today"
+    ),
     Arm(
         "preallocate-false",
         touch_jax=True,
@@ -90,19 +95,38 @@ ARMS: tuple[Arm, ...] = (
         env={"XLA_PYTHON_CLIENT_MEM_FRACTION": "0.4"},
         note="JAX capped, ~60% left",
     ),
-    Arm("parent-on-cpu", touch_jax=True, env={"JAX_PLATFORMS": "cpu"}, note="parent never on device"),
+    Arm(
+        "parent-on-cpu",
+        touch_jax=True,
+        env={"JAX_PLATFORMS": "cpu"},
+        note="parent never on device",
+    ),
 )
 
 
 def nvidia_free_mib() -> tuple[int, int] | None:
     """`(free, total)` MiB on GPU 0, or None where there is no nvidia-smi."""
+    # Fixed argv, no shell. `nvidia-smi` is deliberately a bare name: it is
+    # resolved on PATH because its location differs between the driver packages
+    # a cluster might have installed.
     try:
-        out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.free,memory.total",
-             "--format=csv,noheader,nounits", "--id=0"],
-            capture_output=True, text=True, check=True, timeout=30,
-        ).stdout.strip().splitlines()[0]
-    except (OSError, subprocess.SubprocessError, IndexError):
+        out = (
+            subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=memory.free,memory.total",
+                    "--format=csv,noheader,nounits",
+                    "--id=0",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+            .stdout.strip()
+            .splitlines()[0]
+        )
+    except OSError, subprocess.SubprocessError, IndexError:
         return None
     try:
         free, total = (int(v.strip()) for v in out.split(","))
@@ -119,9 +143,15 @@ def run_worker() -> dict[str, object]:
     is `>=3.14` -- irreconcilable with the worker's `==3.13.*`. That fails
     loudly rather than silently, which is the good case, but it fails.
     """
-    proc = subprocess.run(
+    # Fixed argv, no shell; the only interpolated element is a path inside
+    # this file's own directory. `uv` is a bare name on purpose -- it is what
+    # the user invoked this benchmark with.
+    proc = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
         ["uv", "run", "--no-project", str(WORKER)],
-        capture_output=True, text=True, timeout=1800,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=1800,
     )
     line = proc.stdout.strip().splitlines()
     if not line:
@@ -133,8 +163,12 @@ def run_worker() -> dict[str, object]:
     try:
         return json.loads(line[-1])
     except json.JSONDecodeError:
-        return {"status": "error", "detail": "unparseable worker stdout",
-                "stdout": proc.stdout[-800:], "stderr": proc.stderr[-1500:]}
+        return {
+            "status": "error",
+            "detail": "unparseable worker stdout",
+            "stdout": proc.stdout[-800:],
+            "stderr": proc.stderr[-1500:],
+        }
 
 
 def as_parent(arm: Arm) -> dict[str, object]:
@@ -168,8 +202,10 @@ def as_parent(arm: Arm) -> dict[str, object]:
     report["worker"] = run_worker()
 
     if held is not None:
-        # Forces the parent to still own the array across the worker's lifetime.
-        report["parent_array_live"] = bool(float(held[0]) == 1.0)
+        # Reading the array after the worker returns is what forces the parent
+        # to still own it for the worker's whole lifetime. The value is checked
+        # loosely -- the question is whether the buffer survived, not arithmetic.
+        report["parent_array_live"] = bool(abs(float(held[0]) - 1.0) < 1e-6)
     return report
 
 
@@ -178,7 +214,10 @@ def verdict(row: dict[str, object]) -> tuple[str, str]:
     return {
         "ok": ("[green]PASS[/green]", "worker ran on the GPU"),
         "oom": ("[red]FAIL[/red]", "worker could not get memory"),
-        "cpu_fallback": ("[yellow]SILENT[/yellow]", "worker saw no GPU and used the CPU"),
+        "cpu_fallback": (
+            "[yellow]SILENT[/yellow]",
+            "worker saw no GPU and used the CPU",
+        ),
     }.get(status, ("[red]ERROR[/red]", "worker did not report"))
 
 
@@ -203,8 +242,12 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--arm", action="append", choices=[a.name for a in ARMS],
-                        help="run only these arms (repeatable); default is all five")
+    parser.add_argument(
+        "--arm",
+        action="append",
+        choices=[a.name for a in ARMS],
+        help="run only these arms (repeatable); default is all five",
+    )
     parser.add_argument("--json", type=Path, help="also write the raw results here")
     parser.add_argument("--as-parent", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -227,27 +270,42 @@ def main() -> None:
     for arm in selected:
         console.print(f"[cyan]arm[/cyan] {arm.name} -- {arm.note}")
         env = os.environ | arm.env
-        proc = subprocess.run(
+        # Fixed argv, no shell: this interpreter, this file, a name from ARMS.
+        proc = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             [sys.executable, __file__, "--as-parent", arm.name],
-            capture_output=True, text=True, env=env, timeout=3600,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+            timeout=3600,
         )
         out = proc.stdout.strip().splitlines()
         if out:
             rows.append(json.loads(out[-1]) | {"env": arm.env})
         else:
-            rows.append({
-                "arm": arm.name, "env": arm.env, "parent_platform": "?",
-                "worker": {"status": "error",
-                           "detail": f"parent exited {proc.returncode}"},
-                "stderr": proc.stderr[-1500:],
-            })
+            rows.append(
+                {
+                    "arm": arm.name,
+                    "env": arm.env,
+                    "parent_platform": "?",
+                    "worker": {
+                        "status": "error",
+                        "detail": f"parent exited {proc.returncode}",
+                    },
+                    "stderr": proc.stderr[-1500:],
+                }
+            )
 
     render(rows, console)
     if args.json:
         args.json.write_text(json.dumps(rows, indent=2))
         console.print(f"wrote {args.json}")
 
-    if rows and verdict(rows[0])[0] != "[green]PASS[/green]" and selected[0].name == "control":
+    if (
+        rows
+        and verdict(rows[0])[0] != "[green]PASS[/green]"
+        and selected[0].name == "control"
+    ):
         console.print(
             "[yellow]control did not pass -- the node, the driver or the uv "
             "script cache is the problem. Discard the other arms.[/yellow]"

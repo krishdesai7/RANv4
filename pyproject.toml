@@ -75,7 +75,7 @@ filterwarnings = [
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
     # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
 ]
-addopts = "-xqn16 --dist loadfile"
+addopts = "-xqnlogical"
 env = [
     "OMP_NUM_THREADS = 1",
     "OPENBLAS_NUM_THREADS = 1",

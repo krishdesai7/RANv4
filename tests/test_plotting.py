@@ -857,3 +857,106 @@ class TestSelectionPlot:
         ax = captured_axes[0]
         _, labels = ax.get_legend_handles_labels()
         assert not any(label.startswith("selected") for label in labels)
+
+
+class TestBaselineOverlays:
+    """Two baselines on one panel, and the paint order between them.
+
+    The overlay list replaced a single `ibu_weights` parameter. What that
+    change can break is not whether a curve appears --- an assertion on the
+    legend catches that --- but which curve ends up *visible* where they agree,
+    which no test was previously in a position to notice.
+    """
+
+    def test_omnifold_repeats_one_vector_across_dimensions(self) -> None:
+        """OmniFold reweights events, not observables.
+
+        IBU's weights genuinely differ per observable and are passed as a list;
+        OmniFold's single vector has to reach every panel, and `from_shared`
+        is the only place that is said.
+        """
+        weights = np.asarray([0.5, 1.5], dtype=np.single)
+        overlay = omnifold_overlay(weights, 4)
+
+        assert len(overlay.weights) == 4
+        for i in range(4):
+            assert np.array_equal(overlay.at(i).weights, weights)
+
+    def test_the_two_baselines_differ_in_linestyle_as_well_as_colour(self) -> None:
+        """Panels are printed in greyscale, where colour alone says nothing."""
+        ibu = ibu_overlay([np.ones(2, dtype=np.single)])
+        omnifold = omnifold_overlay(np.ones(2, dtype=np.single), 1)
+
+        assert ibu.color != omnifold.color
+        assert ibu.linestyle != omnifold.linestyle
+        assert ibu.marker != omnifold.marker
+
+    def test_ran_is_painted_above_every_baseline(self) -> None:
+        """RAN is the method being showcased; it must not sit under a baseline.
+
+        The overlays are drawn *after* RAN so they read last in the legend, and
+        at linewidth 4 the last one drawn would otherwise bury RAN wherever the
+        curves agree --- which on a converged run is everywhere. Caught by
+        rendering the figure and looking at it, not by a green suite.
+        """
+        figure = Figure()
+        ax = figure.add_subplot(211)
+        ax_r = figure.add_subplot(212)
+        nature = np.array([0.1, 0.3, 0.6, 0.8], dtype=np.single)
+        mc = np.array([0.2, 0.4, 0.5, 0.9], dtype=np.single)
+        ones = np.ones(4, dtype=np.single)
+
+        _hist_ratio_panel(
+            ax,
+            ax_r,
+            nature,
+            mc,
+            ones,
+            bins=[0.0, 0.25, 0.5, 0.75, 1.0],
+            nature_label="Data",
+            mc_label="Sim",
+            xlabel="x",
+            title="Detector level",
+            overlays=[
+                ibu_overlay([ones]).at(0),
+                omnifold_overlay(ones, 1).at(0),
+            ],
+        )
+
+        by_label = {
+            label: artist
+            for artist, label in zip(*ax.get_legend_handles_labels(), strict=True)
+        }
+        ran_z = by_label["RAN"].get_zorder()
+        assert ran_z > by_label["IBU"].get_zorder()
+        assert ran_z > by_label["OmniFold"].get_zorder()
+
+    def test_every_panel_of_a_page_carries_both_baselines(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The overlays are indexed per panel; an off-by-one would drop one."""
+        monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+        rng = np.random.default_rng(0)
+        dim = 3
+        nature = rng.normal(size=(64, dim)).astype(np.single)
+        mc = rng.normal(size=(64, dim)).astype(np.single)
+        w = np.ones(64, dtype=np.single)
+
+        _plot_level(
+            nature,
+            mc,
+            w,
+            _DETECTOR,
+            tmp_path / "levels.pdf",
+            None,
+            [
+                ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)]),
+                omnifold_overlay(np.ones(64, dtype=np.single), dim),
+            ],
+        )
+
+        panels = [ax for ax in _drawn_pages()[0].get_axes() if ax.get_title()]
+        assert len(panels) == dim
+        for panel in panels:
+            _, labels = panel.get_legend_handles_labels()
+            assert labels == ["Data", "Sim", "RAN", "IBU", "OmniFold"]

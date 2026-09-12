@@ -71,6 +71,12 @@ ALPHA_IBU: Final[float] = 0.75
 ALPHA_OMNIFOLD: Final[float] = 0.75
 ALPHA_RAN: Final[float] = 0.90
 
+# Paint order, which is not legend order: baselines are created after RAN so
+# they read last in the legend, but must not paint over it. Matplotlib's
+# default for lines is 2.
+Z_BASELINE: Final[int] = 2
+Z_RAN: Final[int] = 3
+
 
 # `weighted_mmd` is the unbiased U-statistic estimator, which is negative
 # roughly half the time once the two distributions actually match (MMD^2 is 0
@@ -262,6 +268,13 @@ def _hist_ratio_panel(
             linewidth=4,
             alpha=ALPHA_RAN,
             label="RAN",
+            # Above every baseline. The overlays are drawn after this call --
+            # which is what puts them last in the legend, where they belong --
+            # and at linewidth 4 the last one drawn would otherwise bury RAN
+            # wherever the curves agree, which on a converged run is
+            # everywhere. `zorder` separates paint order from legend order;
+            # without it the method being showcased sits under the baselines.
+            zorder=Z_RAN,
         ),
     )
 
@@ -296,6 +309,7 @@ def _hist_ratio_panel(
         marker="o",
         linestyle="--",
         alpha=ALPHA_RAN,
+        zorder=Z_RAN,
     )
 
     for overlay in overlays:
@@ -311,6 +325,7 @@ def _hist_ratio_panel(
                 linewidth=4,
                 alpha=overlay.alpha,
                 label=overlay.label,
+                zorder=Z_BASELINE,
             ),
         )
         ratio_baseline: NDArray[np.double] = np.full_like(
@@ -324,6 +339,7 @@ def _hist_ratio_panel(
             marker=overlay.marker,
             linestyle="--",
             alpha=overlay.alpha,
+            zorder=Z_BASELINE,
         )
     # Every panel gets a label, a title and a legend, not only one drawn
     # against a baseline -- no `*_weights.npz` exists on the default

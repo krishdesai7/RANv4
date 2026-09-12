@@ -121,11 +121,13 @@ params/                       Gaussian config YAML files
 └── 6d_correlated.yaml
 
 scripts/
-├── submit.sh                 SLURM submission script
-├── submit_hparam.sh          Packed hyperparameter arm sweep (paired on seed)
-└── submit_uncertainty.sh     Packed bootstrap x seed grid (see Uncertainty)
+├── submit.zsh                 SLURM submission script
+├── submit_omnifold.zsh        OmniFold against an existing run dir (see OmniFold)
+├── submit_hparam.zsh          Packed hyperparameter arm sweep (paired on seed)
+├── submit_precision.zsh       float32 vs float64 paired ensemble
+└── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (561 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (568 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -201,9 +203,9 @@ ran baseline omnifold --run-dir runs/2026-...                 # OmniFold (see Om
 ran report runs/2026-...                                      # PDF dossier (see Reporting)
 ran leakage-check --clean                                     # z_true leakage sanity check
 ran --log-level DEBUG train --config params/1d_default.yaml
-sbatch scripts/submit.sh                                      # end-to-end 6-var jet run
-sbatch scripts/submit.sh --dataset gaussian --config params/2d_correlated.yaml
-bash scripts/submit_hparam.sh                                 # hyperparameter arms, 3 levels x 8 seeds
+sbatch scripts/submit.zsh                                      # end-to-end 6-var jet run
+sbatch scripts/submit.zsh --dataset gaussian --config params/2d_correlated.yaml
+bash scripts/submit_hparam.zsh                                 # hyperparameter arms, 3 levels x 8 seeds
 uv run benchmarks/hparam_collect.py --arm-dir runs/hp_...     # paired comparison of the arms
 ```
 
@@ -218,7 +220,7 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 561 cases are
+The split is there because the cost is wildly uneven: 37 of the 568 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
@@ -236,7 +238,7 @@ to measure a statistical property** (`tests/test_mmd_floor.py`). Write a new
 test against the piece directly and it costs a few milliseconds and needs no
 marker; reach for a full run and it costs a hundred times that and does.
 
-`scripts/submit.sh` is the full pipeline rather than a bare `ran train`: it
+`scripts/submit.zsh` is the full pipeline rather than a bare `ran train`: it
 trains, runs the IBU baseline on the same run directory, reloads once so the
 figures come back out with the baseline overlaid (`workflow.run` picks up
 `ibu_weights.npz` only if it exists when the plots are drawn), recomputes
@@ -250,7 +252,7 @@ anything on the command line still wins.
 That last rule is why the script does **not** name the twelve observables as
 `--var` flags, and instead lets `load_jet_dataset`'s own default stand.
 `--var` is repeatable, so click *appends* rather than replacing: naming all
-twelve would turn `sbatch scripts/submit.sh --var m` into thirteen names with a
+twelve would turn `sbatch scripts/submit.zsh --var m` into thirteen names with a
 duplicate, which `load_jet_dataset` rejects. Left off, a subset stays
 selectable from the command line.
 
@@ -303,7 +305,7 @@ against the ceiling rather than a safe round number, which is why the script
 clamps it to what the cache actually holds instead of asserting a figure.
 
 The cubic-response sweep (`ran sweep`, `src/ran/experiments/`,
-`scripts/submit_sweep.sh`) has been retired and sits under `legacy/`, which is
+`scripts/submit_sweep.zsh`) has been retired and sits under `legacy/`, which is
 a holding pen and not a supported path: it is not importable as `ran`, not
 covered by `just test`, and slated for deletion. Nothing in the package
 references it.
@@ -411,21 +413,54 @@ with JAX's default 75% preallocation held by the parent**. The worker peaks at
 needed. That was the risk worth checking before any of this was written, and it
 did not bind.
 
-### Not in `submit.sh`
+### Its own job, not a step in `submit.zsh`
 
-`scripts/submit.sh` does not run OmniFold, deliberately. The job asks for
-`--time=00:15:00`, and OmniFold at the shipped `niter=3`, `--n-epochs 50` over
-1.6M events does not fit in what is left after RAN trains. Run it as a separate
-job against an existing run directory, which is all `evaluate_single` needs:
+`scripts/submit.zsh` does not run OmniFold. That job asks for
+`--time=00:15:00`, and OmniFold alone measured **~41 minutes** on the shipped
+configuration --- 1.6M samples, twelve observables, `niter=3`, 50 epochs --- so
+it would not fit in what is left after RAN trains. It gets
+`scripts/submit_omnifold.zsh` instead, which takes an existing run directory and
+asks for 75 minutes:
 
-```bash
-module load cudatoolkit/12.9
-ran baseline omnifold --run-dir runs/<timestamp>Z
+```zsh
+sbatch scripts/submit_omnifold.zsh runs/<timestamp>Z
 ```
 
-`workflow.run` picks up `ibu_weights.npz` for the overlay plots but knows
-nothing about `omnifold_weights.npz`; the OmniFold comparison currently lives in
-`metrics_omnifold.json` and the report tables, not the figures.
+That script loads `cudatoolkit/12.9`, runs the baseline, unloads it, redraws the
+figures, re-scores and rebuilds the report. **The module unload is an EXIT trap,
+not zsh's `{ } always { }`** --- `always` does not run under `set -e`, which
+ERR_EXIT leaves before reaching, so a failed unfolding would have left the CUDA
+12 toolkit loaded over whatever ran next in the allocation. Measured, not
+assumed.
+
+### Getting OmniFold onto the figures
+
+Presence is the mechanism, and it is the same one IBU has always used.
+`_load_baseline_weights` returns one `BaselineOverlay` per `*_weights.npz` that
+exists in `artifacts/` when the figures are drawn, so:
+
+```zsh
+ran baseline omnifold --run-dir runs/<timestamp>Z   # writes omnifold_weights.npz
+ran train --load-run runs/<timestamp>Z              # reloads, redraws with it
+```
+
+`--load-run` reloads the saved generator rather than training, so the redraw is
+cheap and the run is untouched. There is no separate "add OmniFold to the plots"
+command because there is nothing for it to do that `--load-run` does not.
+
+`plotting.BaselineOverlay` is what made a second baseline cheap. The overlay
+used to be a bare `ibu_weights: list[EventArray] | None` threaded through six
+functions; with two baselines that would have become two parameters in six
+signatures. It carries one weight vector **per dimension**, because IBU unfolds
+each observable separately and its weights genuinely differ between them;
+`from_shared` repeats a single vector across the dimensions, which is what
+OmniFold needs --- it reweights events, not observables. OmniFold draws crimson
+dash-dot with triangles against IBU's green dotted squares, distinguished by
+linestyle as well as colour so the panels survive greyscale printing.
+
+The report's *tables* do not yet carry an OmniFold column; `metrics_omnifold.json`
+is written and the figures show the curve, but `report.py` has not been taught
+the third arm.
 
 ## Uncertainty
 
@@ -435,7 +470,7 @@ bootstrap datasets crossed with initialization seeds, one cell per invocation.
 ```bash
 ran uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
 ran uncertainty collect --design-dir runs/unc_x -B 8 -S 8
-bash scripts/submit_uncertainty.sh                       # packed 8x8 on SLURM
+bash scripts/submit_uncertainty.zsh                       # packed 8x8 on SLURM
 ```
 
 Three things are decided there rather than left to the caller, and the package
@@ -498,7 +533,7 @@ the phase that raised is recorded, marked `failed`, with the time it burned
 before it did.
 
 **Phases merge by name across passes, and each carries a `pass` field.**
-`scripts/submit.sh` invokes the package three times over one run directory,
+`scripts/submit.zsh` invokes the package three times over one run directory,
 and each write used to truncate the file: the final `ran evaluate` pass left a
 `timings.json` holding `evaluate` alone, with the training block --- the only
 part anyone wants --- gone. A pass now replaces its own same-named phases and
@@ -588,7 +623,7 @@ Column Order).
 `report.py` emits that many `\includegraphics[page=k]` blocks without opening
 the file. A run whose figures were drawn before pagination has a one-page PDF
 and `pdflatex` fails with "required page does not exist" --- redraw with
-`ran train --load-run <run_dir>` first. `submit.sh` keeps them in step.
+`ran train --load-run <run_dir>` first. `submit.zsh` keeps them in step.
 
 The figure pages are landscape with their own `\newgeometry{margin=8mm}`,
 and two independent knobs set how they read. A panel's width on the page is
@@ -783,9 +818,9 @@ Five gotchas worth knowing:
 - **JAX preallocates ~75% of GPU memory on its first device allocation.** With
   TensorFlow gone there is nothing on the card to collide with, so nothing in
   the package pins itself to CPU any more — `_draw_gaussian` used to, and no
-  longer does. It still matters on a shared node: `scripts/submit_uncertainty.sh`
+  longer does. It still matters on a shared node: `scripts/submit_uncertainty.zsh`
   gives each cell exactly one visible GPU via `srun --gpus-per-task=1`, as does
-  `submit_hparam.sh`, or the first step to start would swallow the whole card.
+  `submit_hparam.zsh`, or the first step to start would swallow the whole card.
 
 ## Jet Column Order
 

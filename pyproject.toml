@@ -92,7 +92,13 @@ check-unannotated-defs = true
 infer-return-types = "checked"
 preset = "all"
 permissive-ignores = true
-project-excludes = ["legacy"]
+project-excludes = [
+    "legacy",
+    # The quarantined TensorFlow workers import packages that cannot exist
+    # in this project's environment -- that impossibility is the point of
+    # them. Type-checking them here can only ever report missing-import.
+    "**/*_worker.py",
+]
 
 [tool.pyrefly.errors]
 explicit-any = false # npt.NDArray[T] is an alias for np.ndarray[tuple[Any, ...], T]

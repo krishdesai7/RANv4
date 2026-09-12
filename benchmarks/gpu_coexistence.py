@@ -161,7 +161,7 @@ def run_worker() -> dict[str, object]:
             "stderr": proc.stderr[-1500:],
         }
     try:
-        return json.loads(line[-1])
+        parsed: dict[str, object] = json.loads(line[-1])
     except json.JSONDecodeError:
         return {
             "status": "error",
@@ -169,6 +169,7 @@ def run_worker() -> dict[str, object]:
             "stdout": proc.stdout[-800:],
             "stderr": proc.stderr[-1500:],
         }
+    return parsed
 
 
 def as_parent(arm: Arm) -> dict[str, object]:
@@ -205,7 +206,7 @@ def as_parent(arm: Arm) -> dict[str, object]:
         # Reading the array after the worker returns is what forces the parent
         # to still own it for the worker's whole lifetime. The value is checked
         # loosely -- the question is whether the buffer survived, not arithmetic.
-        report["parent_array_live"] = bool(abs(float(held[0]) - 1.0) < 1e-6)
+        report["parent_array_live"] = abs(float(held[0]) - 1.0) < 1e-6
     return report
 
 
@@ -277,14 +278,14 @@ def _explain(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
+    _ = parser.add_argument(
         "--arm",
         action="append",
         choices=[a.name for a in ARMS],
         help="run only these arms (repeatable); default is all five",
     )
-    parser.add_argument("--json", type=Path, help="also write the raw results here")
-    parser.add_argument("--as-parent", help=argparse.SUPPRESS)
+    _ = parser.add_argument("--json", type=Path, help="also write the raw results here")
+    _ = parser.add_argument("--as-parent", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     by_name = {a.name: a for a in ARMS}
@@ -316,7 +317,8 @@ def main() -> None:
         )
         out = proc.stdout.strip().splitlines()
         if out:
-            rows.append(json.loads(out[-1]) | {"env": arm.env})
+            parent_report: dict[str, object] = json.loads(out[-1])
+            rows.append(parent_report | {"env": arm.env})
         else:
             rows.append(
                 {

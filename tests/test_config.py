@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import yaml
+
 from ran.data import (
     gaussian_config_from_run_config,
     parse_gaussian_config,

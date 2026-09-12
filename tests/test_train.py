@@ -15,7 +15,6 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 import pytest
-from ran.data import DeviceSplits, RANDataset, train_indices
 from ran.models import build_generator
 from ran.rantypes import (
     COMPILE_CACHE_DIR,
@@ -39,6 +38,8 @@ from ran.train import (
     weight_dispersion,
     weighted_bce,
 )
+
+from ran.data import DeviceSplits, RANDataset, train_indices
 
 if TYPE_CHECKING:
     from collections.abc import Generator

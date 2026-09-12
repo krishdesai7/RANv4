@@ -10,8 +10,9 @@ import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
-import ran  # ruff: ignore[unused-import]  -- imported for its backend bootstrap
 from ran.rantypes import constants
+
+import ran  # ruff: ignore[unused-import]  -- imported for its backend bootstrap
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence

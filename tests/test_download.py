@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from ran.data import download
 from ran.data.download import _constituents, _get_var
 from ran.rantypes import LOG_RHO_FLOOR, SUBSTRUCTURE_VARIABLES
+
+from ran.data import download
 
 if TYPE_CHECKING:
     from pathlib import Path

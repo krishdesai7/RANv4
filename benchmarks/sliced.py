@@ -55,13 +55,14 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import keras
 import numpy as np
-import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
-from ran.data import RANDataset, load_jet_dataset
 from ran.data.config import gaussian_config_from_run_config
 from ran.logging_config import configure_logging
 from ran.rantypes import Split, artifacts_dir
 from rich.console import Console
 from rich.table import Table
+
+import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
+from ran.data import RANDataset, load_jet_dataset
 
 if TYPE_CHECKING:
     from typing import Any

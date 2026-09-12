@@ -519,6 +519,7 @@ def test_the_compile_invocation_is_absolute_and_non_interactive(
 _NO_TEX = shutil.which("pdflatex") is None
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_the_report_compiles(reference_run: Path) -> None:
     produced: Path = report.build_report(reference_run)
@@ -534,6 +535,7 @@ def test_the_report_compiles(reference_run: Path) -> None:
     ]
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_run_directory_with_an_underscore_compiles(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
@@ -542,6 +544,7 @@ def test_a_run_directory_with_an_underscore_compiles(
     assert report.build_report(run_dir).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_gaussian_run_compiles(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
@@ -565,12 +568,14 @@ def test_a_gaussian_run_compiles(
     assert report.build_report(run_dir).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_run_without_a_baseline_still_compiles(reference_run: Path) -> None:
     (reference_run / "artifacts" / "metrics_ibu.json").unlink()
     assert report.build_report(reference_run, force=True).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_missing_figure_becomes_a_placeholder_rather_than_a_failure(
     reference_run: Path,

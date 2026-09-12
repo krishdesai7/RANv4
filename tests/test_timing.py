@@ -412,6 +412,7 @@ class TestEnvironment:
         assert not timing._enabled_from_env({})
 
 
+@pytest.mark.slow
 class TestTrainIntegration:
     """The nested phases inside `train`, and the risk that (ahead-of-time)
     compilation introduced to expose them changes the numbers.

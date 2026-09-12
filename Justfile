@@ -10,6 +10,7 @@ default:
     @printf '  %-26s %s\n' '        complexity'   '# Run complexity checks.'
     @printf '  %-26s %s\n' '        test *args'  '# Run tests, optionally forwarding arguments to pytest.'
     @printf '  %-26s %s\n' '      audit'        '# Audit locked dependencies for known vulnerabilities.'
+    @printf '  %-26s %s\n' '    test-fast *args' '# Run tests, minus the slow ones.'
     @printf '  \033[1m\033[33mMutable / writes:\033[0m\n'
     @printf '  %-26s %s\n' '    lint-fix'        '# Apply safe lint fixes, then format.'
     @printf '  %-26s %s\n' '    lint-fix-unsafe' '# Apply unsafe lint fixes, then format.'
@@ -38,6 +39,10 @@ complexity:
 # Run tests, optionally forwarding arguments to pytest.
 test *args:
     uv run --locked pytest -q {{ args }}
+
+# Run every test that is not marked slow -- a quick mid-work check.
+test-fast *args:
+    uv run --locked pytest -q -m 'not slow' {{ args }}
 
 # Audit locked dependencies for known vulnerabilities.
 audit:

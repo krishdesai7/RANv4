@@ -354,6 +354,22 @@ class TestFusedMetrics:
 
     It shares one histogram between the two divergences instead of building it
     twice, so what has to hold is that sharing changed no number.
+
+    Unlike `test_js_matches_scipy_on_a_continuous_sample`, these cannot build
+    the histogram once and hand it to both sides: that the fused and unfused
+    paths each bin the sample for themselves **is** the claim. So the two
+    divergences are compared at `rtol=1e-6` rather than `assert_allclose`'s
+    default `1e-7`. `_counts` scatters with `.at[].add`, which on a GPU is an
+    atomic accumulation whose summation order varies between calls, and the
+    resulting last-ulp disagreement is worth ~4e-8 relative on a divergence
+    and has been measured at 1.05e-7 --- i.e. straddling the default, which
+    made these two a coin flip on the cluster and a certainty on a CPU. 1e-6
+    clears the noise and stays three orders inside anything a real fusion bug
+    could produce, since sharing a histogram either changes the algebra
+    outright or changes nothing.
+
+    Wasserstein stays at the default. Its scan is an ordered reduction with no
+    atomics, so the agreement there is exact and worth continuing to pin.
     """
 
     def test_agrees_with_the_individual_helpers(self) -> None:
@@ -364,8 +380,12 @@ class TestFusedMetrics:
         fused = _metrics_per_dim(ref, comp)
 
         np.testing.assert_allclose(fused.wasserstein, _wd_per_dim(ref=ref, comp=comp))
-        np.testing.assert_allclose(fused.jensenshannon, _js_per_dim(ref, comp))
-        np.testing.assert_allclose(fused.triangular, _triangular_per_dim(ref, comp))
+        np.testing.assert_allclose(
+            fused.jensenshannon, _js_per_dim(ref, comp), rtol=1e-6
+        )
+        np.testing.assert_allclose(
+            fused.triangular, _triangular_per_dim(ref, comp), rtol=1e-6
+        )
 
     def test_agrees_with_the_individual_helpers_when_weighted(self) -> None:
         rng = np.random.default_rng(8)
@@ -379,10 +399,10 @@ class TestFusedMetrics:
             fused.wasserstein, _wd_per_dim(ref=ref, comp=comp, weights=w)
         )
         np.testing.assert_allclose(
-            fused.jensenshannon, _js_per_dim(ref, comp, weights=w)
+            fused.jensenshannon, _js_per_dim(ref, comp, weights=w), rtol=1e-6
         )
         np.testing.assert_allclose(
-            fused.triangular, _triangular_per_dim(ref, comp, weights=w)
+            fused.triangular, _triangular_per_dim(ref, comp, weights=w), rtol=1e-6
         )
 
     def test_accepts_weights_already_on_device(self) -> None:

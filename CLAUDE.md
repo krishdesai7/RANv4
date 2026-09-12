@@ -123,7 +123,7 @@ scripts/
 ├── submit_hparam.sh          Packed hyperparameter arm sweep (paired on seed)
 └── submit_uncertainty.sh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (547 cases; `just test`)
+tests/                        pytest tests (547 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -209,7 +209,23 @@ Development recipes go through `just` (`just` alone lists them):
 just validate   # format, lint, type-check, complexity, tests -- all read-only
 just lint-fix   # safe lint fixes, then format
 just test -k train   # extra args forward to pytest
+just test-fast  # the same suite minus `slow`, for a check mid-work
 ```
+
+**`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
+skips anything.** `just test`, `just validate` and CI all run the whole suite.
+The split is there because the cost is wildly uneven: 37 of the 547 cases are
+~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
+costs a third of the time and gives up a fixed, known list rather than a
+random one.
+
+The marker goes on a test for a *reason*, not for a measured duration --- a
+stopwatch threshold rots as the hardware and the suite move. A test is `slow`
+if it **runs a training program** (one `train()` call is ~0.5s even with the
+XLA cache warm), **shells out to `pdflatex`**, or **averages many random draws
+to measure a statistical property** (`tests/test_mmd_floor.py`). Write a new
+test against the piece directly and it costs a few milliseconds and needs no
+marker; reach for a full run and it costs a hundred times that and does.
 
 `scripts/submit.sh` is the full pipeline rather than a bare `ran train`: it
 trains, runs the IBU baseline on the same run directory, reloads once so the
@@ -649,7 +665,13 @@ Five gotchas worth knowing:
   and it is what
   `tests/test_evaluate_metrics.py::TestDivergencesPerDim::test_js_matches_scipy_on_a_continuous_sample`
   did until it started failing on the A100 and passing locally. Build the
-  histograms once, hand the same pair to both sides. If bitwise reproducibility
+  histograms once, hand the same pair to both sides. Where that is impossible
+  because the double binning *is* the claim --- `TestFusedMetrics` asks whether
+  the fused and unfused paths agree, and sharing a histogram would delete the
+  question --- widen the tolerance instead and say why: those compare at
+  `rtol=1e-6`, since the noise has been measured at 1.05e-7 relative and
+  `assert_allclose`'s default `rtol` is 1e-7, which put them right on the line
+  (a coin flip on the cluster, a certainty on a CPU). If bitwise reproducibility
   is ever actually needed, `XLA_FLAGS=--xla_gpu_deterministic_ops=true` buys it
   at a throughput cost (the same flag Seeding mentions).
 - **`np.float32` is not JSON-serializable.** `np.float64` subclasses Python

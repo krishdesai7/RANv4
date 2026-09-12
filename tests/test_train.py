@@ -131,6 +131,7 @@ class TestNormalizeWeights:
         )
 
 
+@pytest.mark.slow
 def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
     """Why `TRUTH_SENTINEL` is a number: the z_true guard is arithmetic.
 
@@ -353,6 +354,7 @@ class TestTrainSteps:
         )
         return _make_steps(g, d, opt_g, opt_d, lambda_dispersion), state, batch
 
+    @pytest.mark.slow
     def test_disc_step_updates_only_the_discriminator(self) -> None:
         (disc_step, _, _), state, batch = self._setup()
         new, loss = disc_step(state, *batch)
@@ -364,6 +366,7 @@ class TestTrainSteps:
                 actual=np.asarray(a=before), desired=np.asarray(a=after)
             )
 
+    @pytest.mark.slow
     def test_gen_step_updates_only_the_generator(self) -> None:
         (_, gen_step, _), state, batch = self._setup()
         new, loss = gen_step(state, *batch)
@@ -395,6 +398,7 @@ class TestTrainSteps:
         assert int(count) == len(batch[2])
 
 
+@pytest.mark.slow
 def test_train_runs_and_returns_usable_models(tmp_path: Path) -> None:
     """A few epochs on a tiny problem: shapes, history, and a saveable model."""
     n = 512
@@ -458,6 +462,7 @@ def test_train_runs_and_returns_usable_models(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.slow
 class TestParameterHistory:
     """A run keeps every epoch's weights, which is what moves selection out."""
 
@@ -553,6 +558,7 @@ class TestParameterHistory:
         assert len(result.history["val_d"]) == 9
 
 
+@pytest.mark.slow
 class TestMMDSelection:
     @staticmethod
     def _splits(n: int = 768) -> DatasetSplits:
@@ -617,6 +623,7 @@ class TestMMDSelection:
         assert result.mmd_test != min(result.history["val_mmd"])
 
 
+@pytest.mark.slow
 def test_training_never_reads_the_truth_rows_of_z() -> None:
     """The MMD subsample must come from `y == 0` rows only.
 
@@ -662,6 +669,7 @@ def test_training_never_reads_the_truth_rows_of_z() -> None:
     assert clean_r.best_epoch == dirty_r.best_epoch
 
 
+@pytest.mark.slow
 class TestSeeding:
     """Weight-init seeding: reproducible runs that still ensemble."""
 
@@ -784,6 +792,7 @@ class TestFusion:
             data=ZXY(Events(z, x), y)
         )
 
+    @pytest.mark.slow
     def test_fused_and_eager_runs_agree(self) -> None:
         """`fused=False` is the debugging path, so it must not be a second model.
 
@@ -975,6 +984,7 @@ class TestTrainingNeverSeesTheTestSplit:
         assert sum(sizes) == len(splits.select(Split.ALL))
         assert min(sizes) > 0
 
+    @pytest.mark.slow
     def test_corrupting_test_changes_no_weight_and_no_history_value(self) -> None:
         clean: TrainResult = self._run(self._splits())
         poisoned: TrainResult = self._run(
@@ -992,6 +1002,7 @@ class TestTrainingNeverSeesTheTestSplit:
                 actual=clean.history[key], desired=poisoned.history[key]
             )
 
+    @pytest.mark.slow
     def test_the_poison_reaches_training_at_all(self) -> None:
         """The negative control, without which the test above is vacuous.
 
@@ -1084,6 +1095,7 @@ class TestWeightDispersion:
         )
 
 
+@pytest.mark.slow
 class TestDispersionPenalty:
     """The penalty enters `g`'s gradient without entering what is recorded.
 

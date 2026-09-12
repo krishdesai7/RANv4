@@ -370,6 +370,7 @@ class TestParticleCurve:
 
         assert workflow._particle_curve(splits, result=stub) is None
 
+    @pytest.mark.slow
     def test_returns_a_curve_with_truth(self) -> None:
         """The companion case: with truth present, a real curve comes back.
 
@@ -403,6 +404,7 @@ class TestParticleCurve:
         assert all(np.isfinite(v) for v in values)
 
 
+@pytest.mark.slow
 def test_run_omits_val_mmd_particle_without_truth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

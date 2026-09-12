@@ -207,6 +207,10 @@ def run_worker() -> dict[str, object]:
     # result without the stderr attached cannot explain itself.
     if parsed.get("status") != "ok":
         parsed["stderr_tail"] = _cuda_lines(proc.stderr)
+        # The filtered view is what gets printed, but the filter is a guess at
+        # which lines matter and a missed line costs another GPU allocation to
+        # recover. The unfiltered tail goes to `--json` and is never printed.
+        parsed["stderr_full"] = proc.stderr[-40000:]
     return parsed
 
 

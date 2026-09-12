@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass, field
@@ -139,6 +140,17 @@ def nvidia_free_mib() -> tuple[int, int] | None:
 # Substrings of the TF/absl log lines that actually bear on GPU discovery. The
 # raw stderr is thousands of lines of op-registration noise at log level 0, and
 # dumping it buries the three lines that matter.
+# TensorFlow names the library it gave up on in exactly this form, at VLOG(1)
+# from dso_loader. This is the authoritative answer -- see `_dump_dlopen` for
+# why the worker's own dlopen attempt is not.
+_MISSING_RE: re.Pattern[str] = re.compile(r"Could not load dynamic library '([^']+)'")
+
+
+def _missing_libraries(stderr: str) -> list[str]:
+    """The sonames TensorFlow itself reported it could not open."""
+    return sorted(set(_MISSING_RE.findall(stderr)))
+
+
 _CUDA_SIGNALS: tuple[str, ...] = (
     "cuInit",
     "cuda",
@@ -211,6 +223,7 @@ def run_worker() -> dict[str, object]:
         # which lines matter and a missed line costs another GPU allocation to
         # recover. The unfiltered tail goes to `--json` and is never printed.
         parsed["stderr_full"] = proc.stderr[-40000:]
+        parsed["missing_libraries"] = _missing_libraries(proc.stderr)
     return parsed
 
 
@@ -283,27 +296,51 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
     console.print(table)
 
 
-def _dump_dlopen(report: dict[str, object], console: Console) -> None:
-    """Which of TF's CUDA libraries the dynamic loader could actually resolve.
+def _as_str_list(value: object) -> list[str]:
+    """A JSON-crossing list, narrowed. Element types do not survive the trip."""
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in cast("list[object]", value)]
 
-    Failures are listed first and coloured, because a single unresolved soname
-    is enough for TF to skip GPU registration entirely and the rest of the
-    table is then just confirmation.
+
+def _dump_dlopen(
+    report: dict[str, object], wheel_libs: list[str], console: Console
+) -> None:
+    """Which sonames resolve on the *system* search path -- not TF's.
+
+    Read this as supporting evidence and never as the verdict. A bare
+    `ctypes.CDLL("libcublas.so.12")` searches `LD_LIBRARY_PATH` and the ldconfig
+    cache; TensorFlow additionally reaches its own pip wheel directories
+    through the RPATH baked into its extension modules. So this table
+    over-reports: measured on Perlmutter it called nine libraries unreachable
+    while TF's own log showed it had opened eight of them and failed on exactly
+    one. Acting on this column alone fixes the wrong thing.
+
+    What it does establish is the difference between a library that is *absent*
+    and one that is merely *off the system path*, which is why each row is
+    cross-referenced against the wheels on disk.
     """
-    table = Table(title="dlopen of the sonames TensorFlow needs")
+    table = Table(title="system search path only -- NOT TensorFlow's (see note)")
     table.add_column("library", overflow="fold")
-    table.add_column("loader", overflow="fold")
+    table.add_column("ctypes.CDLL", overflow="fold")
+    table.add_column("in a pip wheel?", overflow="fold")
+
+    def wheel_note(name: str) -> str:
+        return "[yellow]yes[/yellow]" if name in wheel_libs else "[red]no[/red]"
+
     failures = {k: v for k, v in report.items() if str(v) != "ok"}
     for name, detail in failures.items():
-        table.add_row(f"[red]{name}[/red]", str(detail))
+        table.add_row(f"[red]{name}[/red]", str(detail), wheel_note(name))
     for name in report:
         if name not in failures:
-            table.add_row(name, "[green]ok[/green]")
+            table.add_row(name, "[green]ok[/green]", wheel_note(name))
     console.print(table)
     if failures:
         console.print(
-            f"[red]{len(failures)} of {len(report)} libraries did not "
-            f"load[/red] -- that is why GPU registration was skipped."
+            f"{len(failures)} of {len(report)} did not resolve on the system "
+            "path. Rows marked [yellow]yes[/yellow] are present in a pip wheel "
+            "and reachable by TF anyway -- compare `missing_libraries`, which "
+            "is TF's own verdict."
         )
 
 
@@ -322,7 +359,33 @@ def _dump_environment(env: dict[str, object], console: Console) -> None:
     console.print(table)
 
     if isinstance(dlopen, dict):
-        _dump_dlopen(cast("dict[str, object]", dlopen), console)
+        raw_wheels = env_map.get("nvidia_wheel_libs")
+        wheels = _as_str_list(raw_wheels)
+        _dump_dlopen(cast("dict[str, object]", dlopen), wheels, console)
+
+
+def _dump_tf_verdict(worker: dict[str, object], console: Console) -> None:
+    """TensorFlow's own account: the libraries it named, then its CUDA log."""
+    missing = _as_str_list(worker.get("missing_libraries"))
+    if missing:
+        names = ", ".join(missing)
+        console.print(
+            f"[bold red]TensorFlow could not open: {names}[/bold red]\n"
+            "That is TF's own verdict and the one to act on. One unreachable "
+            "library is enough for it to skip every GPU."
+        )
+
+    lines = worker.get("stderr_tail")
+    if isinstance(lines, list) and lines:
+        console.print("[bold]TensorFlow's CUDA log lines:[/bold]")
+        for line in _as_str_list(lines):
+            console.print(f"  {line}")
+    elif isinstance(lines, list):
+        console.print(
+            "[yellow]TensorFlow logged nothing about CUDA at all[/yellow] -- "
+            "that points at a CPU-only wheel rather than a driver problem; "
+            "check `built_with_cuda` above."
+        )
 
 
 def _dump_worker_diagnosis(row: dict[str, object], console: Console) -> None:
@@ -335,17 +398,7 @@ def _dump_worker_diagnosis(row: dict[str, object], console: Console) -> None:
     if isinstance(env, dict):
         _dump_environment(cast("dict[str, object]", env), console)
 
-    lines = worker.get("stderr_tail")
-    if isinstance(lines, list) and lines:
-        console.print("[bold]TensorFlow's CUDA log lines:[/bold]")
-        for line in lines:
-            console.print(f"  {line}")
-    elif isinstance(lines, list):
-        console.print(
-            "[yellow]TensorFlow logged nothing about CUDA at all[/yellow] -- "
-            "that points at a CPU-only wheel rather than a driver problem; "
-            "check `built_with_cuda` above."
-        )
+    _dump_tf_verdict(worker, console)
 
 
 def _explain(

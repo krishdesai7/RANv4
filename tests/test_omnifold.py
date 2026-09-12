@@ -328,7 +328,7 @@ class TestTheWorkerDoesNotImportThisPackage:
     @staticmethod
     def _shadowed(tmp_path: Path) -> Path:
         """A worker with a poisoned sibling it must not be able to import."""
-        (tmp_path / "omnifold.py").write_text(
+        _ = (tmp_path / "omnifold.py").write_text(
             "raise RuntimeError('the sibling was imported')\n"
         )
         worker = tmp_path / "shadow_worker.py"

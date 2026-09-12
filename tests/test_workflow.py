@@ -519,7 +519,7 @@ class TestDrawFiguresSelection:
             "detector_path": tmp_path / "artifacts" / "detector_level.pdf",
             "particle_path": tmp_path / "artifacts" / "particle_level.pdf",
             "var_info": None,
-            "ibu_weights": None,
+            "baselines": [],
             "variables": None,
         }
         assert calls["plot_losses"]

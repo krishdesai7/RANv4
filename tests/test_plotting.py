@@ -27,6 +27,8 @@ from ran.plotting import (
     _hist_ratio_panel,
     _plot_level,
     _save_fig,
+    ibu_overlay,
+    omnifold_overlay,
     plot_levels,
     plot_losses,
     plot_selection,
@@ -77,10 +79,10 @@ def test_filled_histograms_use_one_artist_per_distribution() -> None:
     assert len(ax.patches) == 3
 
 
-def test_a_panel_is_labelled_even_without_an_ibu_baseline() -> None:
-    """`ibu_weights.npz` does not exist on the default `ran train` path, so
-    a panel drawn with `w_ibu=None` must still get a y-label, a title and a
-    legend -- not only the one drawn against an IBU overlay."""
+def test_a_panel_is_labelled_even_without_a_baseline() -> None:
+    """No `*_weights.npz` exists on the default `ran train` path, so a panel
+    drawn with no overlays must still get a y-label, a title and a legend --
+    not only one drawn against a baseline."""
     figure = Figure()
     ax = figure.add_subplot(211)
     ax_r = figure.add_subplot(212)
@@ -106,9 +108,9 @@ def test_a_panel_is_labelled_even_without_an_ibu_baseline() -> None:
     assert labels == ["Data", "Sim", "RAN"]
 
 
-def test_the_legend_still_lists_ibu_when_a_baseline_is_drawn() -> None:
-    """The regression risk in moving the label/legend/title out of the IBU
-    branch: the legend must still pick up the "IBU" handle when one exists."""
+def test_the_legend_lists_every_baseline_that_is_drawn() -> None:
+    """The regression risk in moving the label/legend/title out of the overlay
+    loop: the legend must pick up one handle per overlay, in draw order."""
     figure = Figure()
     ax = figure.add_subplot(211)
     ax_r = figure.add_subplot(212)
@@ -126,11 +128,14 @@ def test_the_legend_still_lists_ibu_when_a_baseline_is_drawn() -> None:
         mc_label="Sim",
         xlabel="x",
         title="Detector level",
-        w_ibu=np.ones(4, dtype=np.single),
+        overlays=[
+            ibu_overlay([np.ones(4, dtype=np.single)]).at(0),
+            omnifold_overlay(np.ones(4, dtype=np.single), 1).at(0),
+        ],
     )
 
     _, labels = ax.get_legend_handles_labels()
-    assert labels == ["Data", "Sim", "RAN", "IBU"]
+    assert labels == ["Data", "Sim", "RAN", "IBU", "OmniFold"]
 
 
 def test_ran_is_drawn_more_prominently_than_the_baseline() -> None:
@@ -208,7 +213,7 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         _DETECTOR,
         tmp_path / "levels.pdf",
         None,
-        [np.ones(4, dtype=np.single), np.ones(4, dtype=np.single)],
+        [ibu_overlay([np.ones(4, dtype=np.single), np.ones(4, dtype=np.single)])],
     )
 
     figure = captured[0]
@@ -277,7 +282,7 @@ def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     nature = rng.normal(size=(64, dim)).astype(np.single)
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
-    ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
+    baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
     monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
@@ -286,7 +291,7 @@ def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         _DETECTOR,
         save_path,
         cast("list[Any]", _var_info_for(SUBSTRUCTURE_VARIABLES)),
-        ibu_weights,
+        baselines,
         variables=SUBSTRUCTURE_VARIABLES,
     )
 
@@ -300,7 +305,7 @@ def _panel_titles_for(
     nature = rng.normal(size=(64, dim)).astype(np.single)
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
-    ibu_weights = [np.ones(64, dtype=np.single) for _ in range(dim)]
+    baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
     monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
@@ -309,7 +314,7 @@ def _panel_titles_for(
         _DETECTOR,
         tmp_path / "levels.pdf",
         cast("list[Any]", _var_info_for(variables)),
-        ibu_weights,
+        baselines,
         variables=variables,
     )
     return [
@@ -326,9 +331,9 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     nature = rng.normal(size=(64, 1)).astype(np.single)
     mc = rng.normal(size=(64, 1)).astype(np.single)
     w = np.ones(64, dtype=np.single)
-    ibu_weights = [np.ones(64, dtype=np.single)]
+    baselines = [ibu_overlay([np.ones(64, dtype=np.single)])]
     monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
-    _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, ibu_weights)
+    _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, baselines)
     return _last_drawn_figure()
 
 

@@ -63,10 +63,12 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 COLOR_NATURE: Final[str] = "C0"  # Data / Truth
 COLOR_MC: Final[str] = "C1"  # Sim / Gen
 COLOR_IBU: Final[str] = "green"
+COLOR_OMNIFOLD: Final[str] = "#E31A1C"  # crimson; the third baseline curve
 COLOR_RAN: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
 
 ALPHA_FILL: Final[float] = 0.35  # the two filled background histograms
 ALPHA_IBU: Final[float] = 0.75
+ALPHA_OMNIFOLD: Final[float] = 0.75
 ALPHA_RAN: Final[float] = 0.90
 
 
@@ -119,6 +121,95 @@ class _LevelStyle(NamedTuple):
     bins_span_both: bool  # default binning covers both samples, not just nature
 
 
+class _PanelOverlay(NamedTuple):
+    """One baseline's curve on one panel: weights already picked per dimension."""
+
+    label: str
+    weights: EventArray
+    color: str
+    linestyle: str
+    marker: str
+    alpha: float
+
+
+class BaselineOverlay(NamedTuple):
+    """A comparison baseline's weights, and how its curve is drawn.
+
+    This replaced a bare `ibu_weights: list[EventArray] | None` that was
+    threaded through six functions. With two baselines that parameter would
+    have had to become two, and every signature between `plot_levels` and
+    `_hist_ratio_panel` would carry both --- so the shape is a list instead,
+    and a third baseline costs one constructor rather than six signatures.
+
+    `weights` holds one full-length weight vector **per dimension**, because
+    IBU unfolds each observable separately and its weights genuinely differ
+    between them. A method producing one vector for every observable, as
+    OmniFold and RAN do, repeats it; `from_shared` is that, said once.
+    """
+
+    label: str
+    weights: list[EventArray]
+    color: str
+    linestyle: str
+    marker: str
+    alpha: float
+
+    @classmethod
+    def from_shared(
+        cls,
+        label: str,
+        weights: EventArray,
+        dim: int,
+        color: str,
+        linestyle: str,
+        marker: str,
+        alpha: float,
+    ) -> BaselineOverlay:
+        """A baseline whose single weight vector applies to every dimension."""
+        return cls(label, [weights] * dim, color, linestyle, marker, alpha)
+
+    def at(self, i: int, /) -> _PanelOverlay:
+        return _PanelOverlay(
+            self.label,
+            self.weights[i],
+            self.color,
+            self.linestyle,
+            self.marker,
+            self.alpha,
+        )
+
+
+def ibu_overlay(weights: list[EventArray]) -> BaselineOverlay:
+    """IBU: dotted, green, square markers. One weight vector per observable."""
+    return BaselineOverlay(
+        label="IBU",
+        weights=weights,
+        color=COLOR_IBU,
+        linestyle=":",
+        marker="s",
+        alpha=ALPHA_IBU,
+    )
+
+
+def omnifold_overlay(weights: EventArray, dim: int) -> BaselineOverlay:
+    """OmniFold: dash-dot, crimson, triangles.
+
+    One weight vector covers every observable --- OmniFold reweights events,
+    not observables --- so it is repeated across the dimensions rather than
+    indexed. Distinguished from IBU by linestyle as well as colour, so the
+    panels survive being printed in greyscale.
+    """
+    return BaselineOverlay.from_shared(
+        label="OmniFold",
+        weights=weights,
+        dim=dim,
+        color=COLOR_OMNIFOLD,
+        linestyle="-.",
+        marker="^",
+        alpha=ALPHA_OMNIFOLD,
+    )
+
+
 def _collect_data(dataset: ArrayDataset) -> Populations:
     """Return the split as the four physics populations, each (n, dim)."""
     return dataset.as_arrays().partition()
@@ -135,7 +226,7 @@ def _hist_ratio_panel(
     mc_label: str,
     xlabel: str,
     title: str,
-    w_ibu: EventArray | None = None,
+    overlays: Sequence[_PanelOverlay] = (),
 ) -> None:
     h_nature: AxesHist = cast(
         typ=AxesHist,
@@ -207,39 +298,39 @@ def _hist_ratio_panel(
         alpha=ALPHA_RAN,
     )
 
-    if w_ibu is not None:
-        h_ibu: AxesHist = cast(
+    for overlay in overlays:
+        h_baseline: AxesHist = cast(
             typ=AxesHist,
             val=ax.hist(
                 x_mc,
                 bins=cast(typ=Sequence[float], val=h_nature[1]),
-                weights=w_ibu,
+                weights=overlay.weights,
                 histtype="step",
-                color=COLOR_IBU,
-                linestyle=":",
+                color=overlay.color,
+                linestyle=overlay.linestyle,
                 linewidth=4,
-                alpha=ALPHA_IBU,
-                label="IBU",
+                alpha=overlay.alpha,
+                label=overlay.label,
             ),
         )
-        ratio_ibu: NDArray[np.double] = np.full_like(
-            a=h_ibu[0], fill_value=np.nan, dtype=np.double
+        ratio_baseline: NDArray[np.double] = np.full_like(
+            a=h_baseline[0], fill_value=np.nan, dtype=np.double
         )
-        ratio_ibu[safe] = h_ibu[0][safe] / h_nature[0][safe]
+        ratio_baseline[safe] = h_baseline[0][safe] / h_nature[0][safe]
         _ = ax_r.plot(
             centres,
-            ratio_ibu,
-            color=COLOR_IBU,
-            marker="s",
+            ratio_baseline,
+            color=overlay.color,
+            marker=overlay.marker,
             linestyle="--",
-            alpha=ALPHA_IBU,
+            alpha=overlay.alpha,
         )
     # Every panel gets a label, a title and a legend, not only one drawn
-    # against an IBU baseline -- `ibu_weights.npz` does not exist on the
-    # default `ran train` path, and until it does every panel was unlabelled,
-    # untitled and legend-less. `ax.legend()` runs once here, after the IBU
-    # branch, so it picks up the "IBU" handle when that branch ran and omits
-    # it otherwise.
+    # against a baseline -- no `*_weights.npz` exists on the default
+    # `ran train` path, and until one did every panel was unlabelled, untitled
+    # and legend-less. `ax.legend()` runs once here, after the overlay loop, so
+    # it picks up whichever baseline handles that loop created and omits the
+    # rest.
     _ = ax.set_ylabel(ylabel="Events")
     _ = ax.set_title(label=title)
     _ = ax.legend()
@@ -377,7 +468,7 @@ def _draw_panel(
     w: EventArray,
     var_info: list[VarInfo] | None,
     style: _LevelStyle,
-    ibu_weights: list[EventArray] | None,
+    baselines: Sequence[BaselineOverlay],
 ) -> None:
     """Draw dimension `i`'s stacked hist+ratio panel into `cell`."""
     inner_grid: GridSpecFromSubplotSpec = cell.subgridspec(
@@ -399,7 +490,7 @@ def _draw_panel(
         mc_label=style.mc_label,
         xlabel=panel.xlabel,
         title=panel.title,
-        w_ibu=ibu_weights[i] if ibu_weights is not None else None,
+        overlays=[baseline.at(i) for baseline in baselines],
     )
 
 
@@ -413,7 +504,7 @@ def _page_figure(
     w: EventArray,
     var_info: list[VarInfo] | None,
     style: _LevelStyle,
-    ibu_weights: list[EventArray] | None,
+    baselines: Sequence[BaselineOverlay],
 ) -> Figure:
     """One page of the level figure: up to `PANELS_PER_PAGE` panels."""
     ncols: int = min(PANEL_COLUMNS, len(indices))
@@ -450,7 +541,7 @@ def _page_figure(
             w,
             var_info,
             style,
-            ibu_weights,
+            baselines,
         )
     # `rect`'s top leaves a fixed-fraction band for the suptitle that
     # `tight_layout`'s own margin computation does not know to reserve --
@@ -467,7 +558,7 @@ def _plot_level(
     style: _LevelStyle,
     save_path: str | Path,
     var_info: list[VarInfo] | None,
-    ibu_weights: list[EventArray] | None,
+    baselines: Sequence[BaselineOverlay],
     variables: tuple[str, ...] | None = None,
 ) -> None:
     r"""Draw one stacked hist+ratio panel per dimension, paginated.
@@ -502,7 +593,7 @@ def _plot_level(
                 w,
                 var_info,
                 style,
-                ibu_weights,
+                baselines,
             )
             for page, chunk in enumerate(iterable=chunks, start=1)
         ],
@@ -515,7 +606,7 @@ def plot_detector_level(
     g: RANModel,
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    ibu_weights: list[EventArray] | None = None,
+    baselines: Sequence[BaselineOverlay] = (),
     variables: tuple[str, ...] | None = None,
 ) -> None:
     test: Populations = _collect_data(test_dataset)
@@ -527,7 +618,7 @@ def plot_detector_level(
         style=_DETECTOR,
         save_path=save_path,
         var_info=var_info,
-        ibu_weights=ibu_weights,
+        baselines=baselines,
         variables=variables,
     )
 
@@ -537,7 +628,7 @@ def plot_particle_level(
     g: RANModel,
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    ibu_weights: list[EventArray] | None = None,
+    baselines: Sequence[BaselineOverlay] = (),
     variables: tuple[str, ...] | None = None,
 ) -> None:
     test: Populations = _collect_data(test_dataset)
@@ -549,7 +640,7 @@ def plot_particle_level(
         style=_PARTICLE,
         save_path=save_path,
         var_info=var_info,
-        ibu_weights=ibu_weights,
+        baselines=baselines,
         variables=variables,
     )
 
@@ -560,7 +651,7 @@ def plot_levels(
     detector_path: Path = Path("plots/detector_level.pdf"),
     particle_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
-    ibu_weights: list[EventArray] | None = None,
+    baselines: Sequence[BaselineOverlay] = (),
     variables: tuple[str, ...] | None = None,
 ) -> None:
     """Draw both physics levels from one partition and generator evaluation."""
@@ -573,7 +664,7 @@ def plot_levels(
         style=_DETECTOR,
         save_path=detector_path,
         var_info=var_info,
-        ibu_weights=ibu_weights,
+        baselines=baselines,
         variables=variables,
     )
     _plot_level(
@@ -583,7 +674,7 @@ def plot_levels(
         style=_PARTICLE,
         save_path=particle_path,
         var_info=var_info,
-        ibu_weights=ibu_weights,
+        baselines=baselines,
         variables=variables,
     )
 

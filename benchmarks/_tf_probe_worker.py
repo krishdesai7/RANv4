@@ -39,7 +39,16 @@ import sys
 import traceback
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+# Deliberately verbose, and it was not always: this started at "3" (fatal only),
+# which is the setting everyone copies to quieten TF's startup banner. It also
+# suppresses the `Could not load dynamic library` and
+# `failed call to cuInit` lines, which are the *only* place TensorFlow ever says
+# why it decided there is no GPU. A probe whose entire job is to explain a
+# missing GPU must not silence the explanation. The cost is nothing: TF logs to
+# stderr and this script's protocol is one line of JSON on stdout, so the driver
+# can keep the noise and still parse the result.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "0")
 
 # The size is chosen to need real memory (~3 x 512MB of float32) without being
 # a meaningful fraction of a 40GB card on its own: a failure here is a failure
@@ -56,6 +65,46 @@ def _peak_bytes() -> int | None:
         return int(tf.config.experimental.get_memory_info("GPU:0")["peak"])
     except (KeyError, ValueError, RuntimeError):
         return None
+
+
+def _environment() -> dict[str, object]:
+    """Everything that can explain a missing GPU, gathered whether or not one is.
+
+    Each entry here is a distinct way the worker can end up on the CPU on a node
+    that demonstrably has four A100s, and they are not distinguishable from the
+    outside:
+
+    * `built_with_cuda` false means uv installed the CPU-only `tensorflow`
+      wheel -- the `[and-cuda]` extra's marker did not match -- and no amount of
+      driver or allocation work will help.
+    * `nvidia_packages` empty with `built_with_cuda` true means the CUDA wheels
+      are absent even though TF expects them.
+    * `cuda_visible_devices` of `""` is a masked GPU, which SLURM does to a step
+      that did not request one. Absent entirely is different and usually fine.
+    * `ld_library_path` matters because a system CUDA ahead of the pip wheels on
+      the path is how TF ends up loading a `libcudart` it was not built against.
+    """
+    from importlib import metadata
+
+    import tensorflow as tf
+
+    packages = sorted(
+        name
+        for dist in metadata.distributions()
+        if (name := dist.metadata["Name"] or "").startswith(("nvidia-", "tensorflow"))
+    )
+    return {
+        "built_with_cuda": bool(tf.test.is_built_with_cuda()),
+        "all_devices": [d.name for d in tf.config.list_physical_devices()],
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
+        "slurm_gpu_vars": {
+            k: v
+            for k, v in sorted(os.environ.items())
+            if k.startswith("SLURM") and "GPU" in k.upper()
+        },
+        "ld_library_path": os.environ.get("LD_LIBRARY_PATH", "<unset>")[:600],
+        "nvidia_packages": packages,
+    }
 
 
 def probe() -> dict[str, object]:
@@ -75,6 +124,7 @@ def probe() -> dict[str, object]:
         # Not an error on a laptop; the driver decides whether it is one here.
         result["status"] = "cpu_fallback"
         result["detail"] = "tf.config.list_physical_devices('GPU') returned nothing"
+        result["environment"] = _environment()
         return result
 
     try:
@@ -97,6 +147,7 @@ def probe() -> dict[str, object]:
         # ResourceExhaustedError, and on a full card it is the common shape.
         result["status"] = "oom"
         result["detail"] = f"{type(exc).__name__}: {str(exc).splitlines()[0][:400]}"
+        result["environment"] = _environment()
     return result
 
 

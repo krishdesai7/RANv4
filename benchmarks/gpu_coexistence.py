@@ -58,6 +58,7 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from rich.console import Console
 from rich.table import Table
@@ -135,6 +136,39 @@ def nvidia_free_mib() -> tuple[int, int] | None:
     return free, total
 
 
+# Substrings of the TF/absl log lines that actually bear on GPU discovery. The
+# raw stderr is thousands of lines of op-registration noise at log level 0, and
+# dumping it buries the three lines that matter.
+_CUDA_SIGNALS: tuple[str, ...] = (
+    "cuInit",
+    "cuda",
+    "CUDA",
+    "cudnn",
+    "cuDNN",
+    "cublas",
+    "libcu",
+    "GPU",
+    "gpu_device",
+    "numa",
+    "dynamic library",
+    "StreamExecutor",
+)
+
+
+def _cuda_lines(stderr: str, limit: int = 40) -> list[str]:
+    """The lines of TF's stderr that say something about finding a GPU."""
+    hits = [
+        line.strip()
+        for line in stderr.splitlines()
+        if any(signal in line for signal in _CUDA_SIGNALS)
+    ]
+    # Deduplicated because TF repeats the same warning once per registered op.
+    seen: dict[str, None] = {}
+    for line in hits:
+        seen.setdefault(line, None)
+    return list(seen)[:limit]
+
+
 def run_worker() -> dict[str, object]:
     """Spawn the TensorFlow worker and parse its one line of JSON.
 
@@ -169,6 +203,10 @@ def run_worker() -> dict[str, object]:
             "stdout": proc.stdout[-800:],
             "stderr": proc.stderr[-1500:],
         }
+    # TF writes its CUDA diagnostics to stderr and its verdict to stdout, so a
+    # result without the stderr attached cannot explain itself.
+    if parsed.get("status") != "ok":
+        parsed["stderr_tail"] = _cuda_lines(proc.stderr)
     return parsed
 
 
@@ -241,6 +279,37 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
     console.print(table)
 
 
+def _dump_worker_diagnosis(row: dict[str, object], console: Console) -> None:
+    """Print the worker's own account of why it could not find a GPU."""
+    worker = row.get("worker")
+    if not isinstance(worker, dict):
+        return
+
+    env = worker.get("environment")
+    if isinstance(env, dict):
+        table = Table(title="worker environment", show_header=False)
+        table.add_column("key", style="cyan", overflow="fold")
+        table.add_column("value", overflow="fold")
+        # The worker's report crosses a process boundary as JSON, so its value
+        # types are only recoverable by assertion; everything here is rendered
+        # through `str` regardless.
+        for key, value in cast("dict[str, object]", env).items():
+            table.add_row(key, str(value))
+        console.print(table)
+
+    lines = worker.get("stderr_tail")
+    if isinstance(lines, list) and lines:
+        console.print("[bold]TensorFlow's CUDA log lines:[/bold]")
+        for line in lines:
+            console.print(f"  {line}")
+    elif isinstance(lines, list):
+        console.print(
+            "[yellow]TensorFlow logged nothing about CUDA at all[/yellow] -- "
+            "that points at a CPU-only wheel rather than a driver problem; "
+            "check `built_with_cuda` above."
+        )
+
+
 def _explain(
     rows: list[dict[str, object]],
     selected: list[Arm],
@@ -274,6 +343,7 @@ def _explain(
             "the uv script cache is the problem, not coexistence. Discard the "
             "other four arms rather than interpreting them."
         )
+        _dump_worker_diagnosis(rows[0], console)
 
 
 def main() -> None:

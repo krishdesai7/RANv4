@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 #
 # Packed launcher for the bootstrap x seed variance design.
 #

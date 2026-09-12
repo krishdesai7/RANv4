@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 set -euo pipefail
 
 PROJECT_DIR=/global/u1/k/kdesai/RANv4

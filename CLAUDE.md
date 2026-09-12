@@ -127,7 +127,7 @@ scripts/
 ├── submit_precision.zsh       float32 vs float64 paired ensemble
 └── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (587 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (589 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -220,7 +220,7 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 587 cases are
+The split is there because the cost is wildly uneven: 37 of the 589 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
@@ -384,6 +384,20 @@ regression.
 **`uv` must be on `PATH` at runtime**, since it is what provisions the worker.
 Its absence is translated into a readable message rather than a
 `FileNotFoundError` from inside `subprocess`, because the fix is an install.
+
+**The worker runs under `PYTHONSAFEPATH=1`, and must.** A script's own directory
+goes on `sys.path[0]`, and the worker's directory is `src/ran/baselines/` ---
+which contains `omnifold.py`. So the worker's
+`from omnifold import MLP, DataLoader, MultiFold` resolved to the *host half*
+rather than to the installed package, and died on its `from .. import timing`
+with "attempted relative import with no known parent package": an error naming
+neither the collision nor the file that caused it. `PYTHONSAFEPATH` stops the
+interpreter prepending that directory, which is exactly the shadowing and
+nothing else --- the worker imports nothing local, so it loses nothing. Renaming
+this module would also have worked, at the cost of `ran.baselines.omnifold` no
+longer being named after the thing it runs.
+`TestTheWorkerDoesNotImportThisPackage` reproduces the collision with a poisoned
+sibling.
 
 **The worker environment is not in `uv.lock`.** uv resolves the PEP 723 header
 on first use, which needs outbound network, and compute nodes generally have

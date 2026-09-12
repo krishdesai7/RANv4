@@ -64,7 +64,9 @@ Every dataset here is a closure test, so `truth` is always known; a real measure
 
 Draw the four Gaussian populations: `(z_true, z_gen, x_data, x_sim)`.
 
-Runs on the default device. This can be pinned to CPU, if a sibling process is running on the same card and JAX claiming a device would preallocate the GPU out from under it. If nothing else competes for the accelerator, the draw takes whatever is there.
+Runs on the default device, and no longer pins itself to CPU. It used to, because JAX preallocates ~75% of a card on its first allocation and TensorFlow was there to collide with; with TensorFlow out of the build there is nothing on the card to protect. Sharing a node is still a real concern, but it is handled where it belongs — the launchers give each step exactly one visible GPU via `srun --gpus-per-task=1`, so a sibling run cannot have the card swallowed out from under it.
+
+The draw pins its matmul precision to `HIGHEST`. Two dots produce this sample — the `@` against the Cholesky smear, and one inside `multivariate_normal(method="svd")` — and XLA runs both at TF32 on an A100 by default, which would make the sample a function of the hardware as well as of the config and the seed. Neither dot cancels, so TF32 costs only an honest ~5e-4 relative here rather than the unbounded error the same default caused in `ran.mmd`; what the pin buys is that a `.npz` drawn on a login node and one drawn on a GPU node are the same sample. The cache key is otherwise a pure function of the physics config, so `_RNG_VERSION` carries `jax-v2` to keep a pre-pin file from being silently reused.
 
 No `check_valid` equivalent is needed: `parse_gaussian_config` has already asserted positive-definiteness with a Cholesky factorization.
 

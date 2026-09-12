@@ -41,8 +41,10 @@ _ONE_SOURCE_ONLY: Final[LiteralString] = (
 
 # Bumped whenever the generator changes, because the cache key is otherwise a
 # pure function of the physics config -- an old .npz would be silently reused
-# and hand back a sample drawn from a different stream.
-_RNG_VERSION: Final[LiteralString] = "jax-v1"
+# and hand back a sample drawn from a different stream. `jax-v2` pinned the
+# matmul precision in `_draw_gaussian`, which moves every drawn value by ~5e-4
+# relative on a GPU and by nothing at all on a CPU.
+_RNG_VERSION: Final[LiteralString] = "jax-v2"
 
 
 def _draw_gaussian(
@@ -60,21 +62,35 @@ def _draw_gaussian(
 ]:
     k_true, k_gen, k_data, k_sim = jax.random.split(jax.random.key(seed), num=4)
 
-    z_true: Float[Array, "n d"] = jax.random.multivariate_normal(
-        k_true, mu_true, cov_true, shape=(n_samples,), method="svd"
-    )
-    z_gen: Float[Array, "n d"] = jax.random.multivariate_normal(
-        k_gen, mu_gen, cov_gen, shape=(n_samples,), method="svd"
-    )
+    # Two dots draw this dataset, and on an A100 XLA runs both at TF32 -- a
+    # 10-bit mantissa -- unless told otherwise. Neither cancels, so the cost is
+    # an honest ~5e-4 relative rather than the unbounded error the same default
+    # caused in `ran.mmd`; what it buys instead is that the sample is a
+    # function of the config and the seed alone, rather than of the hardware
+    # that happened to draw it. A cached .npz is keyed on the physics config,
+    # so without this a file drawn on a login node and one drawn on a GPU node
+    # are different samples sharing a key.
+    #
+    # The context manager rather than a `precision=` argument because only one
+    # of the two dots is visible here: `multivariate_normal(method="svd")` does
+    # its own internally and takes no precision parameter. This covers both --
+    # the lowered HLO carries `precision = [HIGHEST, HIGHEST]` on each.
+    with jax.default_matmul_precision("highest"):
+        z_true: Float[Array, "n d"] = jax.random.multivariate_normal(
+            k_true, mu_true, cov_true, shape=(n_samples,), method="svd"
+        )
+        z_gen: Float[Array, "n d"] = jax.random.multivariate_normal(
+            k_gen, mu_gen, cov_gen, shape=(n_samples,), method="svd"
+        )
 
-    smear: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector)).T
+        smear: Float[Array, "d d"] = jnp.linalg.cholesky(jnp.asarray(a=cov_detector)).T
 
-    x_data: Float[Array, "n d"] = (
-        z_true + jax.random.normal(key=k_data, shape=z_true.shape) @ smear
-    )
-    x_sim: Float[Array, "n d"] = (
-        z_gen + jax.random.normal(key=k_sim, shape=z_gen.shape) @ smear
-    )
+        x_data: Float[Array, "n d"] = (
+            z_true + jax.random.normal(key=k_data, shape=z_true.shape) @ smear
+        )
+        x_sim: Float[Array, "n d"] = (
+            z_gen + jax.random.normal(key=k_sim, shape=z_gen.shape) @ smear
+        )
     return z_true, z_gen, x_data, x_sim
 
 

@@ -240,6 +240,20 @@ class TestDivergencesPerDim:
         assert np.isnan(_js_from_histograms(p, q)).all()
 
     def test_js_matches_scipy_on_a_continuous_sample(self) -> None:
+        """Our JS and scipy's must agree on *one* pair of histograms.
+
+        The histograms are built once and handed to both sides rather than
+        rebuilt for each. `_counts` scatters into its bins with `.at[].add`,
+        which on a GPU is an atomic scatter-add: the summation order varies
+        between two invocations of the same kernel on the same input, so a
+        second call returns counts differing in the last float32 ulp. Calling
+        `_js_per_dim` here for the actual and `_normalized_histograms` for the
+        expected therefore compared two slightly different distributions and
+        failed at 4e-8 relative on GPU while passing on CPU, where the scatter
+        is sequential. What is being asserted is the divergence, not the
+        determinism of the binning; `_js_per_dim`'s own wiring is covered by
+        `test_js_reduces_over_histogram_bins`.
+        """
         rng = np.random.default_rng(6)
         ref = rng.normal(size=(4000, 3)).astype(np.float32)
         comp = (rng.normal(size=(4000, 3)) * 1.4).astype(np.float32)
@@ -248,9 +262,7 @@ class TestDivergencesPerDim:
         p, q = _normalized_histograms(ref, comp, weights=weights, n_bins=100)
         expected = np.array([jensenshannon(p[i], q[i]) ** 2 for i in range(3)])
 
-        np.testing.assert_allclose(
-            _js_per_dim(ref, comp, weights=weights, n_bins=100), expected, rtol=1e-9
-        )
+        np.testing.assert_allclose(_js_from_histograms(p, q), expected, rtol=1e-9)
 
 
 class TestFloat32Histograms:

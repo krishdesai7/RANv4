@@ -100,8 +100,6 @@ src/ran/                      Python package
 ├── baselines/
 │   ├── _shared.py            Run config + populations a baseline needs, minus the unfolder
 │   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
-├── experiments/
-│   └── cubic_sweep.py        Cubic-response sweep: RAN vs IBU under detector non-linearity
 ├── uncertainty/
 │   ├── design.py             Bootstrap x seed grid: resampling, one cell, loading
 │   ├── variance.py           Two-way ANOVA components, covariances, quantile binning
@@ -123,7 +121,7 @@ params/                       Gaussian config YAML files
 scripts/
 ├── submit.sh                 SLURM submission script
 ├── submit_hparam.sh          Packed hyperparameter arm sweep (paired on seed)
-└── submit_sweep.sh           Packed cubic-response sweep launcher
+└── submit_uncertainty.sh     Packed bootstrap x seed grid (see Uncertainty)
 
 tests/                        pytest tests (547 cases; `just test`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
@@ -143,8 +141,8 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 └── jax/                      XLA persistent compilation cache
 ```
 
-`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/`, `src/ran/experiments/`
-and `src/ran/uncertainty/` each carry their own `README.md`.
+`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
+`src/ran/uncertainty/` each carry their own `README.md`.
 
 ## Running
 
@@ -157,7 +155,7 @@ it does not work through `python -m`.
 
 One Typer command tree. Flags are kebab-case; subcommands are
 `train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu}`,
-`sweep {ran,collect}`, `uncertainty {run,collect}`. `--log-level` is global and
+`uncertainty {run,collect}`. `--log-level` is global and
 goes before the subcommand.
 
 Every knob that changes a run is reachable from `ran train` and recorded in
@@ -279,18 +277,11 @@ raises if `n_samples` exceeds what is on disk. 1.6M is therefore a request
 against the ceiling rather than a safe round number, which is why the script
 clamps it to what the cache actually holds instead of asserting a figure.
 
-The cubic sweep runs one point per invocation so points can go in parallel, one
-GPU each. Each point trains RAN *and* unfolds the same populations with IBU,
-writing both into one `point_NN.json` — IBU costs seconds next to training, and
-running it in the same pass is what guarantees the two methods saw identical
-inputs. `collect` reads whatever landed, joins on s_index, and reports (rather
-than hides) both failed points and points where IBU's purity binning gave up:
-
-```bash
-ran sweep ran      --s-index 0 --sweep-dir runs/sweep_x
-ran sweep collect  --sweep-dir runs/sweep_x
-bash scripts/submit_sweep.sh                             # full sweep on SLURM
-```
+The cubic-response sweep (`ran sweep`, `src/ran/experiments/`,
+`scripts/submit_sweep.sh`) has been retired and sits under `legacy/`, which is
+a holding pen and not a supported path: it is not importable as `ran`, not
+covered by `just test`, and slated for deletion. Nothing in the package
+references it.
 
 ## Releasing
 
@@ -615,14 +606,14 @@ Two things the pin does **not** cover:
 - **It is an annotation-level contract, not a runtime one.** Nothing coerces at
   the `Populations` boundary; the checkers enforce it at author time, and the
   three data sources (`_draw_gaussian`, `load_jet_dataset`, and the
-  sample-construction in `leakage.py` / `cubic_sweep.py`) narrow explicitly.
+  sample-construction in `leakage.py`) narrow explicitly.
 - **`ran.data.download` stays float64 on purpose.** `_get_var` upcasts before
   computing observables, because the ε it uses to protect degenerate jets is
   below the smallest float32 denormal — narrowing there would hand back `NaN`
   for exactly the jets the ε exists to protect. The narrowing happens after, in
   `load_jet_dataset`.
 
-Three gotchas worth knowing:
+Five gotchas worth knowing:
 
 - **Scores are not pinned.** Wasserstein, JS and the triangular discriminator
   are float64 and stay there. What is pinned is the data, not the measurement
@@ -637,11 +628,35 @@ Three gotchas worth knowing:
   divergences themselves, which are reductions over `dim x n_bins` values and so
   cost nothing --- is float64 on the host. Measured against a float64 reference
   this lands JS within 9e-9, where the `np.histogram` path it replaced was
-  5.9e-7 off.
+  5.9e-7 off. That 9e-9 is a statement about *bias*, and on a GPU it is smaller
+  than the run-to-run noise --- see the next bullet.
+- **`metrics.json` is reproducible to ~4e-8 on a GPU, not to the last digit.**
+  `_counts` bins with `empty.at[index].add(...)`, which lowers to a scatter-add;
+  many events land in one bin, so on a GPU that is an *atomic* accumulation and
+  the summation order is whatever the hardware chose that pass. Two
+  `ran evaluate` runs over the same run directory therefore return histogram
+  counts differing in the last float32 ulp, and JS values differing by ~4e-8
+  relative --- measured, not estimated, and non-systematic: it moves up on some
+  dimensions and down on others. On a CPU the scatter is sequential and the
+  numbers repeat exactly, which is why this only ever appears on the cluster.
+  It is a deliberate trade: the alternative is a sorted segment-sum or a
+  one-hot matmul over the full sample for a reduction that is otherwise free.
+  Two consequences. `metrics.json` prints six decimals and the sixth is not
+  stable on a GPU, so a diff of two evaluations of the same run is expected to
+  be non-empty; compare with a tolerance rather than by equality. And a test
+  must never build the same histogram twice and compare the halves at a tight
+  tolerance --- that is a determinism assertion wearing a divergence's clothes,
+  and it is what
+  `tests/test_evaluate_metrics.py::TestDivergencesPerDim::test_js_matches_scipy_on_a_continuous_sample`
+  did until it started failing on the A100 and passing locally. Build the
+  histograms once, hand the same pair to both sides. If bitwise reproducibility
+  is ever actually needed, `XLA_FLAGS=--xla_gpu_deterministic_ops=true` buys it
+  at a throughput cost (the same flag Seeding mentions).
 - **`np.float32` is not JSON-serializable.** `np.float64` subclasses Python
   `float`, so `json` accepted it silently while the pipeline was float64;
-  `np.float32` raises. Anything writing numbers to JSON coerces with `.item()`
-  first — see `cubic_sweep._write_point`.
+  `np.float32` raises. Anything writing numbers to JSON has to coerce first —
+  see `evaluate._metric_entry`, which puts every value through `float()` on the
+  way into `metrics.json` for exactly this reason.
 - **`keras.ops.mean` is not float64-safe.** For float64 input it selects a
   float32 compute dtype internally and returns a float64 result carrying ~1e-8
   relative error. `src/ran/train.py` has since moved to plain `jnp`, so it is no
@@ -651,9 +666,9 @@ Three gotchas worth knowing:
 - **JAX preallocates ~75% of GPU memory on its first device allocation.** With
   TensorFlow gone there is nothing on the card to collide with, so nothing in
   the package pins itself to CPU any more — `_draw_gaussian` used to, and no
-  longer does. It still matters on a shared node: `scripts/submit_sweep.sh`
-  gives each sweep point exactly one visible GPU via `--gpus-per-task=1`, or
-  the first point to start would swallow the whole card.
+  longer does. It still matters on a shared node: `scripts/submit_uncertainty.sh`
+  gives each cell exactly one visible GPU via `srun --gpus-per-task=1`, as does
+  `submit_hparam.sh`, or the first step to start would swallow the whole card.
 
 ## Jet Column Order
 

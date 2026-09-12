@@ -265,8 +265,22 @@ def as_parent(arm: Arm) -> dict[str, object]:
     return report
 
 
+def _worker_status(row: dict[str, object]) -> str:
+    """A row's worker status, narrowed from the JSON it arrived as.
+
+    A blanket `# type: ignore` on a chained `.get()` was what this used to be,
+    and it silenced the checkers without telling either of them what the shape
+    is. A row whose `worker` key is missing or malformed is an error, which is
+    the same thing a crashed worker reports.
+    """
+    worker = row.get("worker")
+    if not isinstance(worker, dict):
+        return "error"
+    return str(cast("dict[str, object]", worker).get("status", "error"))
+
+
 def verdict(row: dict[str, object]) -> tuple[str, str]:
-    status = str(row.get("worker", {}).get("status", "error"))  # type: ignore[union-attr]
+    status = _worker_status(row)
     return {
         "ok": ("[green]PASS[/green]", "worker ran on the GPU"),
         "oom": ("[red]FAIL[/red]", "worker could not get memory"),
@@ -289,7 +303,7 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
             str(row.get("arm")),
             str(row.get("parent_platform")),
             f"{free} / {total}" if free is not None else "-",
-            str(row.get("worker", {}).get("status", "?")),  # type: ignore[union-attr]
+            _worker_status(row),
             mark,
             meaning,
         )

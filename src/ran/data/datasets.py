@@ -73,7 +73,9 @@ def _savez_atomic(path: Path, /, **arrays: NDArray[Any]) -> None:
     """
     tmp: Path = path.with_name(name=f"{path.name}.{uuid.uuid4().hex}.tmp.npz")
     try:
-        np.savez(file=tmp, **arrays)  # pyrefly: ignore[bad-argument-type]
+        # Both checkers read `**arrays` as a candidate for savez's
+        # `allow_pickle: bool` keyword; every value here is an array.
+        np.savez(file=tmp, **arrays)  # pyrefly: ignore[bad-argument-type]  # ty: ignore[invalid-argument-type]
         # `Path.replace` is `os.replace`: one atomic `rename(2)`. The result
         # is the destination path, which nothing here wants.
         _ = tmp.replace(target=path)

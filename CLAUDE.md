@@ -99,7 +99,9 @@ src/ran/                      Python package
 │   └── download.py           One-time Zenodo download
 ├── baselines/
 │   ├── _shared.py            Run config + populations a baseline needs, minus the unfolder
-│   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
+│   ├── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
+│   ├── omnifold.py           OmniFold baseline, host half (see OmniFold)
+│   └── _omnifold_worker.py   PEP 723 script; 3.13 + TensorFlow, never imported
 ├── uncertainty/
 │   ├── design.py             Bootstrap x seed grid: resampling, one cell, loading
 │   ├── variance.py           Two-way ANOVA components, covariances, quantile binning
@@ -123,7 +125,7 @@ scripts/
 ├── submit_hparam.sh          Packed hyperparameter arm sweep (paired on seed)
 └── submit_uncertainty.sh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (547 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (561 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -132,6 +134,7 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 └── artifacts/                Everything else, flat -- see Reporting
     ├── generator.keras, discriminator.keras, params.npz, history.npz
     ├── metrics.json, metrics_ibu.json, ibu_outcomes.json, ibu_weights.npz
+    ├── metrics_omnifold.json, omnifold_weights.npz
     ├── timings.json          Merged across passes (see Timing)
     ├── detector_level.pdf, particle_level.pdf, losses.pdf, selection.pdf
     └── report.tex            The filled-in template, kept for debugging
@@ -154,7 +157,7 @@ completion comes from `ran --install-completion` and needs the script name, so
 it does not work through `python -m`.
 
 One Typer command tree. Flags are kebab-case; subcommands are
-`train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu}`,
+`train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu,omnifold}`,
 `uncertainty {run,collect}`. `--log-level` is global and
 goes before the subcommand.
 
@@ -194,6 +197,7 @@ ran train --load-run runs/2026-03-14T061023Z                  # reload a saved r
 ran evaluate                                                  # compute metrics for all runs
 ran evaluate --run-dir runs/2026-...                          # single run
 ran baseline ibu --run-dir runs/2026-...                      # IBU comparison
+ran baseline omnifold --run-dir runs/2026-...                 # OmniFold (see OmniFold)
 ran report runs/2026-...                                      # PDF dossier (see Reporting)
 ran leakage-check --clean                                     # z_true leakage sanity check
 ran --log-level DEBUG train --config params/1d_default.yaml
@@ -214,10 +218,15 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 547 cases are
+The split is there because the cost is wildly uneven: 37 of the 561 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
+
+Nothing in the suite runs OmniFold. Its worker needs a TensorFlow
+environment that cannot exist here, so `tests/test_omnifold.py`
+substitutes a stub worker over the same `.npz` contract and tests the
+seam instead --- see OmniFold.
 
 The marker goes on a test for a *reason*, not for a measured duration --- a
 stopwatch threshold rots as the hardware and the suite move. A test is `slow`
@@ -338,6 +347,85 @@ must change: `PYPI_TOKEN` has to exist in repository secrets, and the
 distribution has to be renamed -- `ran` is already taken on PyPI by an unrelated
 package, so uploading under that name returns 403 regardless of the token.
 `ranv4` is free.
+
+## OmniFold
+
+`ran baseline omnifold` is the second comparison baseline, and the only part of
+this repository that does not run in this repository's environment. Three facts
+make that necessary: OmniFold needs TensorFlow, TensorFlow publishes no wheels
+for Python 3.14, and Keras binds its backend once per interpreter. All three
+are **intra-interpreter** constraints, so all three dissolve at a process
+boundary.
+
+`src/ran/baselines/_omnifold_worker.py` carries a PEP 723 header pinning
+`requires-python = "==3.13.*"` plus `omnifold` and `tensorflow`, and
+`uv run --no-project` provisions exactly that, in an interpreter that cannot
+import `ran`. The two halves exchange one `.npz` file. `--no-project` is
+load-bearing: without it uv resolves the script against this project, whose
+`>=3.14` floor cannot be reconciled with the worker's pin.
+
+The worker is inside the package but is not part of it. Nothing imports it and
+nothing may: its module-level `KERAS_BACKEND=tensorflow` would race the
+package's `jax` pin. Three mechanisms keep it that way, all enforced rather than
+documented --- `pyproject.toml` pins `[tool.ruff.per-file-target-version]` for
+`**/*_worker.py` to `py313`, pyrefly excludes the same glob, and
+`tests/test_omnifold.py::TestQuarantine` asserts the module is absent from
+`sys.modules` and that TensorFlow is not importable at all.
+
+**The ruff pin is not hygiene.** Ruff infers `py314` from `requires-python`, and
+its formatter rewrites `except (A, B):` into PEP 758's unparenthesized form ---
+a `SyntaxError` on 3.13, which killed the worker at import the first time it was
+formatted. This is the mirror image of the `timing.py` note under Tech Stack,
+where the same syntax is deliberate. A test compiles the worker to catch a
+regression.
+
+**`uv` must be on `PATH` at runtime**, since it is what provisions the worker.
+Its absence is translated into a readable message rather than a
+`FileNotFoundError` from inside `subprocess`, because the fix is an install.
+
+**The worker environment is not in `uv.lock`.** uv resolves the PEP 723 header
+on first use, which needs outbound network, and compute nodes generally have
+none. Warm it on a login node, the way the jet cache is warmed:
+
+```bash
+uv run --no-project src/ran/baselines/_omnifold_worker.py
+```
+
+### It runs on the CPU, silently, without a CUDA 12 toolkit
+
+**On Perlmutter `module load cudatoolkit/12.9` is mandatory.** The default
+environment leads `LD_LIBRARY_PATH` with four CUDA **13.2** trees and the
+`tensorflow` wheel is a CUDA **12** build; exactly one library goes unreachable,
+`libcusolver.so.11`, and one is enough for TF to skip registering every GPU. It
+then runs on the CPU and **raises nothing** --- the weights come back correct,
+tens of times slower, and the baseline looks like it worked.
+
+So the worker reports the device it used and `_warn_if_on_cpu` warns when it was
+not a GPU. That warning is the only signal this failure produces; do not silence
+it. `benchmarks/gpu_coexistence.py` measures the whole thing and its README
+section records the numbers.
+
+What that benchmark also settled: a TensorFlow subprocess gets the GPU **even
+with JAX's default 75% preallocation held by the parent**. The worker peaks at
+1.07GB against the 9.4GB that survives, so no `XLA_PYTHON_CLIENT_*` tuning is
+needed. That was the risk worth checking before any of this was written, and it
+did not bind.
+
+### Not in `submit.sh`
+
+`scripts/submit.sh` does not run OmniFold, deliberately. The job asks for
+`--time=00:15:00`, and OmniFold at the shipped `niter=3`, `--n-epochs 50` over
+1.6M events does not fit in what is left after RAN trains. Run it as a separate
+job against an existing run directory, which is all `evaluate_single` needs:
+
+```bash
+module load cudatoolkit/12.9
+ran baseline omnifold --run-dir runs/<timestamp>Z
+```
+
+`workflow.run` picks up `ibu_weights.npz` for the overlay plots but knows
+nothing about `omnifold_weights.npz`; the OmniFold comparison currently lives in
+`metrics_omnifold.json` and the report tables, not the figures.
 
 ## Uncertainty
 
@@ -704,7 +792,7 @@ Five gotchas worth knowing:
 For `--dataset jets`, the list of observables is an **ordering**, carried as a
 `tuple[str, ...]` and never as a set. `load_jet_dataset` fills column `i` from
 `variables[i]`; `_save_run` records that order in `config.json`; and
-`ran evaluate` and `ran baseline ibu` read the recorded list back **as a list**,
+`ran evaluate` and the baselines read the recorded list back **as a list**,
 in order.
 
 This was a `frozenset`, and it produced silently wrong physics. A frozenset's

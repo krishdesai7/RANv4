@@ -283,23 +283,57 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
     console.print(table)
 
 
+def _dump_dlopen(report: dict[str, object], console: Console) -> None:
+    """Which of TF's CUDA libraries the dynamic loader could actually resolve.
+
+    Failures are listed first and coloured, because a single unresolved soname
+    is enough for TF to skip GPU registration entirely and the rest of the
+    table is then just confirmation.
+    """
+    table = Table(title="dlopen of the sonames TensorFlow needs")
+    table.add_column("library", overflow="fold")
+    table.add_column("loader", overflow="fold")
+    failures = {k: v for k, v in report.items() if str(v) != "ok"}
+    for name, detail in failures.items():
+        table.add_row(f"[red]{name}[/red]", str(detail))
+    for name in report:
+        if name not in failures:
+            table.add_row(name, "[green]ok[/green]")
+    console.print(table)
+    if failures:
+        console.print(
+            f"[red]{len(failures)} of {len(report)} libraries did not "
+            f"load[/red] -- that is why GPU registration was skipped."
+        )
+
+
+def _dump_environment(env: dict[str, object], console: Console) -> None:
+    """The worker's environment, with the dlopen results broken out."""
+    env_map = dict(env)
+    # Pulled out and rendered separately: it is the answer, and folded into a
+    # single cell of the environment table it is unreadable.
+    dlopen = env_map.pop("dlopen", None)
+
+    table = Table(title="worker environment", show_header=False)
+    table.add_column("key", style="cyan", overflow="fold")
+    table.add_column("value", overflow="fold")
+    for key, value in env_map.items():
+        table.add_row(key, str(value))
+    console.print(table)
+
+    if isinstance(dlopen, dict):
+        _dump_dlopen(cast("dict[str, object]", dlopen), console)
+
+
 def _dump_worker_diagnosis(row: dict[str, object], console: Console) -> None:
-    """Print the worker's own account of why it could not find a GPU."""
+    """Print the worker's own account of what it found, and what it did not."""
     worker = row.get("worker")
     if not isinstance(worker, dict):
         return
 
     env = worker.get("environment")
     if isinstance(env, dict):
-        table = Table(title="worker environment", show_header=False)
-        table.add_column("key", style="cyan", overflow="fold")
-        table.add_column("value", overflow="fold")
-        # The worker's report crosses a process boundary as JSON, so its value
-        # types are only recoverable by assertion; everything here is rendered
-        # through `str` regardless.
-        for key, value in cast("dict[str, object]", env).items():
-            table.add_row(key, str(value))
-        console.print(table)
+        _dump_environment(cast("dict[str, object]", env), console)
 
     lines = worker.get("stderr_tail")
     if isinstance(lines, list) and lines:
@@ -350,6 +384,24 @@ def _explain(
         _dump_worker_diagnosis(rows[0], console)
 
 
+def _parent_row(arm: Arm, proc: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    """One table row from a finished parent process, or an account of its death."""
+    out = proc.stdout.strip().splitlines()
+    if out:
+        parent_report: dict[str, object] = json.loads(out[-1])
+        return parent_report | {"env": arm.env}
+    return {
+        "arm": arm.name,
+        "env": arm.env,
+        "parent_platform": "?",
+        "worker": {
+            "status": "error",
+            "detail": f"parent exited {proc.returncode}",
+        },
+        "stderr": proc.stderr[-1500:],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _ = parser.add_argument(
@@ -359,8 +411,19 @@ def main() -> None:
         help="run only these arms (repeatable); default is all five",
     )
     _ = parser.add_argument("--json", type=Path, help="also write the raw results here")
+    _ = parser.add_argument(
+        "--preload-wheels",
+        action="store_true",
+        help="prepend the pip CUDA wheel directories to LD_LIBRARY_PATH in the "
+        "worker, to test whether a system CUDA is shadowing them",
+    )
     _ = parser.add_argument("--as-parent", help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    # Set before any arm runs so it reaches the worker through both
+    # subprocess layers, which inherit the environment.
+    if args.preload_wheels:
+        os.environ["RAN_PROBE_PRELOAD_WHEELS"] = "1"
 
     by_name = {a.name: a for a in ARMS}
 
@@ -389,23 +452,7 @@ def main() -> None:
             env=env,
             timeout=3600,
         )
-        out = proc.stdout.strip().splitlines()
-        if out:
-            parent_report: dict[str, object] = json.loads(out[-1])
-            rows.append(parent_report | {"env": arm.env})
-        else:
-            rows.append(
-                {
-                    "arm": arm.name,
-                    "env": arm.env,
-                    "parent_platform": "?",
-                    "worker": {
-                        "status": "error",
-                        "detail": f"parent exited {proc.returncode}",
-                    },
-                    "stderr": proc.stderr[-1500:],
-                }
-            )
+        rows.append(_parent_row(arm, proc))
 
     render(rows, console)
     if args.json:

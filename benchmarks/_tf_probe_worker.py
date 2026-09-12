@@ -37,6 +37,7 @@ import json
 import os
 import sys
 import traceback
+from pathlib import Path
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
@@ -49,6 +50,11 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 # stderr and this script's protocol is one line of JSON on stdout, so the driver
 # can keep the noise and still parse the result.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "0")
+# `Cannot dlopen some GPU libraries ... mentioned above` is TF's summary; the
+# line naming the library is emitted by dso_loader at VLOG(1), which
+# TF_CPP_MIN_LOG_LEVEL does not reach. Scoped to the one module so stderr stays
+# readable -- a global TF_CPP_MAX_VLOG_LEVEL buries it again.
+os.environ.setdefault("TF_CPP_VMODULE", "dso_loader=1")
 
 # The size is chosen to need real memory (~3 x 512MB of float32) without being
 # a meaningful fraction of a 40GB card on its own: a failure here is a failure
@@ -67,7 +73,66 @@ def _peak_bytes() -> int | None:
         return None
 
 
-def _environment() -> dict[str, object]:
+# The sonames a CUDA 12 build of TensorFlow actually dlopens. Hard-coded rather
+# than discovered, because the question is whether the loader can resolve the
+# exact names TF asks for -- not whether some CUDA exists on the node.
+_TF_CUDA_SONAMES: tuple[str, ...] = (
+    "libcuda.so.1",
+    "libcudart.so.12",
+    "libcublas.so.12",
+    "libcublasLt.so.12",
+    "libcudnn.so.9",
+    "libcufft.so.11",
+    "libcurand.so.10",
+    "libcusolver.so.11",
+    "libcusparse.so.12",
+    "libnccl.so.2",
+    "libnvJitLink.so.12",
+    "libcupti.so.12",
+)
+
+
+def _dlopen_report() -> dict[str, str]:
+    """Try each soname TF needs and record what the loader said.
+
+    This exists because TF's own account of the failure is a summary that
+    refers to lines it may not have printed. Asking the dynamic loader directly
+    is deterministic, needs no log-level coaxing, and names every missing
+    library at once rather than the first one TF happened to give up on.
+    """
+    import ctypes
+
+    report: dict[str, str] = {}
+    for soname in _TF_CUDA_SONAMES:
+        try:
+            _ = ctypes.CDLL(soname)
+        except OSError as exc:
+            report[soname] = f"FAIL: {str(exc)[:160]}"
+        else:
+            report[soname] = "ok"
+    return report
+
+
+def _nvidia_wheel_libs() -> list[str]:
+    """The `.so` files the nvidia pip wheels actually put on disk.
+
+    `nvidia_packages` says the wheels are installed; this says what sonames they
+    provide. The two disagree exactly when the installed CUDA minor version
+    ships a soname TF was not built against, which is invisible from the
+    package list alone.
+    """
+    try:
+        import nvidia
+    except ImportError:
+        return []
+
+    names: set[str] = set()
+    for root in nvidia.__path__:
+        names.update(path.name for path in Path(root).glob("*/lib/*.so*"))
+    return sorted(names)[:60]
+
+
+def _environment(dlopen: dict[str, str]) -> dict[str, object]:
     """Everything that can explain a missing GPU, gathered whether or not one is.
 
     Each entry here is a distinct way the worker can end up on the CPU on a node
@@ -83,6 +148,12 @@ def _environment() -> dict[str, object]:
       that did not request one. Absent entirely is different and usually fine.
     * `ld_library_path` matters because a system CUDA ahead of the pip wheels on
       the path is how TF ends up loading a `libcudart` it was not built against.
+
+    `dlopen` is passed in rather than measured here, and the distinction is not
+    cosmetic: `ctypes.CDLL` on a library TensorFlow has already loaded succeeds
+    because it is resident in the process, so a report taken after the TF import
+    says every library resolved no matter what the loader did on the first
+    attempt. The snapshot must be taken before TF is imported.
     """
     from importlib import metadata
 
@@ -104,10 +175,13 @@ def _environment() -> dict[str, object]:
         },
         "ld_library_path": os.environ.get("LD_LIBRARY_PATH", "<unset>")[:600],
         "nvidia_packages": packages,
+        "wheels_preloaded": os.environ.get("_RAN_PROBE_REEXEC") == "1",
+        "dlopen": dlopen,
+        "nvidia_wheel_libs": _nvidia_wheel_libs(),
     }
 
 
-def probe() -> dict[str, object]:
+def probe(dlopen: dict[str, str]) -> dict[str, object]:
     import numpy as np
     import tensorflow as tf
 
@@ -115,6 +189,10 @@ def probe() -> dict[str, object]:
         "tf_version": tf.__version__,
         "python": sys.version.split()[0],
         "requested_bytes": ALLOCATION_BYTES,
+        # Attached on success as well as failure. A probe that only explains
+        # failures cannot tell anyone which configuration to reproduce, and the
+        # passing configuration is the one that has to reach `submit.sh`.
+        "environment": _environment(dlopen),
     }
 
     gpus = tf.config.list_physical_devices("GPU")
@@ -124,7 +202,6 @@ def probe() -> dict[str, object]:
         # Not an error on a laptop; the driver decides whether it is one here.
         result["status"] = "cpu_fallback"
         result["detail"] = "tf.config.list_physical_devices('GPU') returned nothing"
-        result["environment"] = _environment()
         return result
 
     try:
@@ -147,13 +224,62 @@ def probe() -> dict[str, object]:
         # ResourceExhaustedError, and on a full card it is the common shape.
         result["status"] = "oom"
         result["detail"] = f"{type(exc).__name__}: {str(exc).splitlines()[0][:400]}"
-        result["environment"] = _environment()
     return result
 
 
-def main() -> None:
+def _wheel_lib_dirs() -> list[str]:
+    """The `lib` directory of every installed nvidia pip wheel."""
     try:
-        result = probe()
+        import nvidia
+    except ImportError:
+        return []
+
+    dirs: list[str] = []
+    for root in nvidia.__path__:
+        dirs.extend(
+            str(path) for path in sorted(Path(root).glob("*/lib")) if path.is_dir()
+        )
+    return dirs
+
+
+def _preload_wheels_and_reexec() -> None:
+    """Put the pip CUDA wheels ahead of the system CUDA, then start over.
+
+    The hypothesis this tests: NERSC's default environment puts a CUDA 13 tree
+    on `LD_LIBRARY_PATH`, and a CUDA 12 build of TensorFlow searching that path
+    first finds a `libcublas` and friends it cannot use. The pip `-cu12` wheels
+    are installed and correct; they are simply not what the loader reaches
+    first.
+
+    The re-exec is not avoidable. `LD_LIBRARY_PATH` is read by the dynamic
+    loader when the process starts, so rewriting it inside a running
+    interpreter changes nothing for libraries TF has yet to open -- a detail
+    that makes an in-process "fix" look like it works while measuring the
+    unfixed path. `_RAN_PROBE_REEXEC` guards against looping.
+    """
+    if os.environ.get("RAN_PROBE_PRELOAD_WHEELS") != "1":
+        return
+    if os.environ.get("_RAN_PROBE_REEXEC") == "1":
+        return
+
+    dirs = _wheel_lib_dirs()
+    if not dirs:
+        return
+
+    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = (
+        ":".join([*dirs, existing]) if existing else ":".join(dirs)
+    )
+    os.environ["_RAN_PROBE_REEXEC"] = "1"
+    os.execv(sys.executable, [sys.executable, *sys.argv])  # ruff: ignore[start-process-with-no-shell]
+
+
+def main() -> None:
+    _preload_wheels_and_reexec()
+    # Before any TensorFlow import, for the reason given in `_environment`.
+    dlopen = _dlopen_report()
+    try:
+        result = probe(dlopen)
     # The driver needs a reason on stdout, not a traceback on stderr: an
     # unparseable worker is indistinguishable from a crashed one.
     except BaseException as exc:  # ruff: ignore[blind-except]

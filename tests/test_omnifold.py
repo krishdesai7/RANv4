@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from ran import timing
 from ran.baselines import _shared as shared
 from ran.baselines import omnifold
 from ran.data import ArrayDataset
@@ -371,3 +372,102 @@ class TestTheWorkerDoesNotImportThisPackage:
     def test_the_env_sets_safepath(self) -> None:
         """The mechanism itself, so a removal is not silent."""
         assert omnifold._worker_env()["PYTHONSAFEPATH"] == "1"
+
+
+class TestWorkerTimings:
+    """The worker's breakdown, folded into this run's timing tree.
+
+    OmniFold has no timing of its own, so the worker measures its three stages
+    and wraps `RunStep1`/`RunStep2` for a per-iteration split. Those numbers
+    arrive as `.npz` entries with no block here to wrap, which is what
+    `timing.record` is for.
+    """
+
+    TIMED_WORKER: str = (
+        "import sys\n"
+        "import numpy as np\n"
+        "with np.load(sys.argv[1], allow_pickle=False) as p:\n"
+        "    np.savez(\n"
+        "        sys.argv[2],\n"
+        "        weights=np.ones(len(p['z_target']), dtype=np.single),\n"
+        "        device=np.array('/physical_device:GPU:0'),\n"
+        "        init_seconds=np.array(12.5),\n"
+        "        unfold_seconds=np.array(2400.0),\n"
+        "        reweight_seconds=np.array(3.25),\n"
+        "        step1_seconds=np.array([400.0, 402.0]),\n"
+        "        step2_seconds=np.array([395.0, 401.0]),\n"
+        "    )\n"
+    )
+
+    def _run(self, tmp_path: Path) -> list[timing.Phase]:
+        worker = tmp_path / "timed_worker.py"
+        _ = worker.write_text(self.TIMED_WORKER)
+        timing.enable(True)
+        try:
+            with timing.phase("omnifold"):
+                _ = omnifold.unfold(
+                    x_data=np.zeros((4, 1), dtype=np.single),
+                    x_sim=np.zeros((4, 1), dtype=np.single),
+                    z_gen=np.zeros((4, 1), dtype=np.single),
+                    z_target=np.zeros((4, 1), dtype=np.single),
+                    out_dir=tmp_path / "artifacts",
+                    worker=worker,
+                )
+            return list(timing.phases())
+        finally:
+            timing.enable(False)
+
+    def test_the_three_stages_are_recorded(self, tmp_path: Path) -> None:
+        names = [p.name for p in self._run(tmp_path)]
+
+        assert "init" in names
+        assert "unfold" in names
+        assert "reweight" in names
+
+    def test_the_iteration_split_is_recorded(self, tmp_path: Path) -> None:
+        """Step 1 and step 2 are not symmetric, so a single total hides which
+        half a long run spent its time in."""
+        names = [p.name for p in self._run(tmp_path)]
+
+        assert "iter1_step1" in names
+        assert "iter2_step2" in names
+
+    def test_the_iteration_rows_follow_unfold(self, tmp_path: Path) -> None:
+        """They are `unfold`'s breakdown and the table is read in order."""
+        names = [p.name for p in self._run(tmp_path)]
+
+        assert names.index("unfold") < names.index("iter1_step1")
+        assert names.index("iter2_step2") < names.index("reweight")
+
+    def test_the_worker_phases_nest_under_the_open_phase(self, tmp_path: Path) -> None:
+        """Depth 1, so `total_seconds` -- which sums depth 0 -- is unaffected."""
+        phases = {p.name: p for p in self._run(tmp_path)}
+
+        assert phases["unfold"].depth == 1
+        assert phases["iter1_step1"].depth == 1
+
+    def test_a_worker_reporting_no_timings_is_fine(
+        self, tmp_path: Path, stub_worker: Path
+    ) -> None:
+        """A worker whose OmniFold no longer exposes the steps still works.
+
+        The wrapping is guarded, so a rename inside OmniFold costs the
+        breakdown and not the baseline.
+        """
+        timing.enable(True)
+        try:
+            with timing.phase("omnifold"):
+                _ = omnifold.unfold(
+                    x_data=np.zeros((4, 1), dtype=np.single),
+                    x_sim=np.zeros((4, 1), dtype=np.single),
+                    z_gen=np.zeros((4, 1), dtype=np.single),
+                    z_target=np.zeros((4, 1), dtype=np.single),
+                    out_dir=tmp_path / "artifacts",
+                    worker=stub_worker,
+                )
+            names = [p.name for p in timing.phases()]
+        finally:
+            timing.enable(False)
+
+        assert not [n for n in names if n.startswith("iter")]
+        assert "init" in names  # the stub does report the three totals

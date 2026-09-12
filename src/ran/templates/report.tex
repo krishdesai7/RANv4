@@ -3,9 +3,6 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-% No `includeheadfoot`: with no running head and no folio there is nothing
-% to reserve room for, and the 64.5pt it held back is 10% of the landscape
-% figure width.
 \usepackage[margin=18mm]{geometry}
 \usepackage{microtype}
 \usepackage{booktabs}
@@ -17,19 +14,8 @@
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
 
-% -----------------------------------------------------------------------------
-% Replacement contract
-% -----------------------------------------------------------------------------
-% Replace the six <<...>> tokens before compilation.  CONFIG_ROWS,
-% TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row
-% bodies, including row terminators.  Each metrics body also owns its first
-% \midrule and interleaves full-width group-heading rows with its data rows.
-% Numbers are inserted at full precision in plain decimal notation, never in
-% exponential form: the S columns fix a table-format and cannot absorb an
-% exponent.  All rounding policy lives here, not in the generator.
-% Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and
-% may contain underscores; text VALUES are not, and must be wrapped in
-% \ConfigVal or otherwise escaped by the generator.
+% Replacement contract:
+% Replace the six <<...>> tokens before compilation. CONFIG_ROWS, TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row bodies, including row terminators. Each metrics body also owns its first \midrule and interleaves full-width group-heading rows with its data rows. Numbers are inserted at full precision in plain decimal notation. All rounding policy lives here, not in the generator. Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and may contain underscores; text VALUES are not, and must be wrapped in \ConfigVal or otherwise escaped by the generator.
 
 \newcommand{\RunName}{\detokenize{<<RUN_NAME>>}}
 
@@ -40,10 +26,6 @@
 \setlength{\parskip}{0pt}
 \setlength{\tabcolsep}{5pt}
 \renewcommand{\arraystretch}{1.12}
-
-% No running head and no folio. The title block on page one already names
-% the run, so repeating it down the report bought nothing and cost every page
-% a head, a rule and a footskip -- height the landscape figures want.
 \pagestyle{empty}
 
 \newcommand{\ReportTitle}{
@@ -62,9 +44,7 @@
 
 \newcommand{\FigureLabel}[1]{{\bfseries\normalsize #1\par}\vspace{0.35em}}
 
-% -----------------------------------------------------------------------------
 % Numeric presentation
-% -----------------------------------------------------------------------------
 \sisetup{
   mode                 = match,
   reset-math-version   = false,
@@ -77,13 +57,9 @@
   round-pad            = true
 }
 
-% Use \Count for intrinsically integral quantities and \Raw for continuous
-% quantities. \Percent is useful outside S columns; percentage columns in the
-% metric tables apply the same three-significant-figure policy automatically.
+% Use \Count for intrinsically integral quantities and \Raw for continuous quantities. \Percent is useful outside S columns; percentage columns in the metric tables apply the same three-significant-figure policy automatically.
 \newcommand{\Count}[1]{\num[round-mode=none]{#1}}
-% `exponent-thresholds` keeps the middle of the range in plain decimal and
-% sends only the extremes to scientific notation, so `lr_g` reads
-% 3.000x10^{-5} instead of 0.00003000 while a 58.07-second phase stays 58.07.
+% `exponent-thresholds` keeps the middle of the range in plain decimal and sends extremes to scientific notation
 \newcommand{\Raw}[1]{\num[
   round-mode        = figures,
   round-precision   = 4,
@@ -92,9 +68,7 @@
 ]{#1}}
 \newcommand{\Percent}[1]{\num[round-mode=places,round-precision=1]{#1}\,\%}
 
-% Scaled by 10^3 in the generator, so a real run spans 0.08472..303.0 across
-% the three metrics: three integer digits, five decimals at four significant
-% figures.
+% Scaled by 10^3
 \newcolumntype{D}{S[
   round-mode=figures,
   round-precision=4,

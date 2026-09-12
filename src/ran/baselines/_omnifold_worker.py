@@ -67,6 +67,39 @@ def _device_of(model: object) -> str:
     return gpus[0].name if gpus else "/physical_device:CPU:0"
 
 
+def _timed_steps(unfold: object) -> tuple[list[float], list[float]]:
+    """Wrap `RunStep1`/`RunStep2` so each iteration reports its own duration.
+
+    MultiFold's two steps are the whole of the cost and they are not
+    symmetric --- step 1 reweights at detector level, step 2 at particle level
+    --- so a single `unfold_seconds` hides which half a long run spent its time
+    in, and whether the per-iteration cost is flat or climbing.
+
+    Wrapping rather than reading: OmniFold exposes no timing of its own. The
+    attributes are checked before being replaced, so a future rename degrades
+    to an empty breakdown and the totals still arrive, rather than taking the
+    baseline down over its own instrumentation.
+    """
+    step1: list[float] = []
+    step2: list[float] = []
+
+    for name, into in (("RunStep1", step1), ("RunStep2", step2)):
+        original = getattr(unfold, name, None)
+        if not callable(original):
+            continue
+
+        def timed(iteration: int, _original=original, _into=into) -> object:
+            started = time.perf_counter()
+            try:
+                return _original(iteration)
+            finally:
+                _into.append(time.perf_counter() - started)
+
+        setattr(unfold, name, timed)
+
+    return step1, step2
+
+
 def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
     import keras
     from omnifold import MLP, DataLoader, MultiFold
@@ -102,6 +135,7 @@ def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
     )
     init_seconds = time.perf_counter() - started
 
+    step1_seconds, step2_seconds = _timed_steps(unfold)
     unfold_started = time.perf_counter()
     unfold.Unfold()
     unfold_seconds = time.perf_counter() - unfold_started
@@ -124,6 +158,8 @@ def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
         init_seconds=np.array(init_seconds),
         unfold_seconds=np.array(unfold_seconds),
         reweight_seconds=np.array(reweight_seconds),
+        step1_seconds=np.asarray(step1_seconds, dtype=np.double),
+        step2_seconds=np.asarray(step2_seconds, dtype=np.double),
     )
 
 

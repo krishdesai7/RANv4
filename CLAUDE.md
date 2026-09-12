@@ -127,7 +127,7 @@ scripts/
 ├── submit_precision.zsh       float32 vs float64 paired ensemble
 └── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (589 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (601 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -136,7 +136,7 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 └── artifacts/                Everything else, flat -- see Reporting
     ├── generator.keras, discriminator.keras, params.npz, history.npz
     ├── metrics.json, metrics_ibu.json, ibu_outcomes.json, ibu_weights.npz
-    ├── metrics_omnifold.json, omnifold_weights.npz
+    ├── metrics_omnifold.json, omnifold_weights.npz, timings_omnifold.json
     ├── timings.json          Merged across passes (see Timing)
     ├── detector_level.pdf, particle_level.pdf, losses.pdf, selection.pdf
     └── report.tex            The filled-in template, kept for debugging
@@ -220,7 +220,7 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 589 cases are
+The split is there because the cost is wildly uneven: 37 of the 601 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
@@ -595,6 +595,33 @@ The phases, nested ones indented under their parent:
 | `load` | `_load_artifacts`, on the `--load-run` path instead of `train`/`save` |
 | `plots` | `_draw_figures`; near-zero under `--no-plots` |
 | `evaluate` | `evaluate_run` |
+
+`ran baseline omnifold` writes its own `artifacts/timings_omnifold.json`
+rather than merging into `timings.json`, and that is not tidiness. **`write`
+merges by phase name alone, not by `(pass, name)`** --- which is right for the
+passes of one pipeline over one run, where `load` legitimately replaces
+`train`'s `plots` row, and wrong for a different program over the same
+directory. The baseline has phases called `data` and `evaluate` of its own, so
+writing them into the shared file would silently destroy the training pass's.
+Separate also keeps the baseline's cost separable from the method's, which is
+the comparison the numbers exist for.
+
+Its phases are `parse_config`, `data`, `omnifold` and `evaluate`, with the
+worker's own breakdown nested under `omnifold`: `init`, `unfold`, a
+`iter<n>_step<1|2>` row per MultiFold iteration, then `reweight`. Those come
+back as numbers across the `.npz` rather than as blocks to wrap, so they enter
+through **`timing.record`** --- the one way into the tree for a phase this
+process did not time itself. The per-iteration split is the useful part:
+MultiFold's two steps are not symmetric (step 1 reweights at detector level,
+step 2 at particle level), so a single `unfold` total cannot say which half a
+long run spent its time in. OmniFold exposes no timing of its own, so the
+worker wraps `RunStep1`/`RunStep2`; the wrapping is guarded, and a rename
+inside OmniFold costs the breakdown rather than the baseline.
+
+The iteration rows sit at the same depth as `unfold` rather than under it.
+`_ordered` reconstructs a top-level phase's children by position and does not
+recurse, so a genuine grandchild renders under whichever sibling precedes it
+and its parent row prints after it. One level is what the format supports.
 
 `timings.json` is flat, with a `depth` field rather than nested objects, so a
 sweep can join it against `config.json` without walking a tree. `total_seconds`

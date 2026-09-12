@@ -210,30 +210,75 @@ def unfold(
                 )
                 weights: EventArray = np.asarray(a=result["weights"])
                 device: str = str(result["device"]) if "device" in handle else "unknown"
-                _log_worker_timings(result)
+                _record_worker_timings(result)
 
     _warn_if_on_cpu(device)
     return weights
 
 
-def _log_worker_timings(result: Mapping[str, NDArray[Any]], /) -> None:
-    """Surface the worker's internal breakdown without inventing a timing API.
+# The worker's own phases, in the order it runs them, with what each covers.
+_WORKER_PHASES: tuple[tuple[str, str], ...] = (
+    ("init_seconds", "DataLoaders and the two MLPs"),
+    ("unfold_seconds", "MultiFold.Unfold"),
+    ("reweight_seconds", "evaluating weights on z_target"),
+)
 
-    `ran.timing` records phases around code this process runs; the worker's
-    phases happened in another interpreter and cannot honestly be grafted into
-    that tree. They are logged, and attached as a detail to whichever phase is
-    open, which is enough to see where a long baseline went.
+
+def _record_worker_timings(result: Mapping[str, NDArray[Any]], /) -> None:
+    """Fold the worker's breakdown into this run's timing tree.
+
+    These are measured in another interpreter, under another Python, so there
+    is no block here to wrap and `timing.record` is what puts them in. Called
+    from inside `with timing.phase("omnifold")`, so they nest under it the way
+    a local sub-phase would.
+
+    The per-iteration step rows go a level deeper still. They are the useful
+    part of the breakdown: MultiFold's two steps are not symmetric --- step 1
+    reweights at detector level, step 2 at particle level --- so a single
+    `unfold` total cannot say which half a long run spent its time in, nor
+    whether the cost per iteration is flat or climbing.
     """
-    parts: list[str] = [
+    for key, detail in _WORKER_PHASES:
+        if key not in result:
+            continue
+        timing.record(key.removesuffix("_seconds"), float(result[key]), detail=detail)
+        # Immediately after `unfold`, because they are its breakdown and the
+        # table is read in order.
+        if key == "unfold_seconds":
+            _record_iteration_timings(result)
+
+    logged: list[str] = [
         f"{key.removesuffix('_seconds')}={float(result[key]):.1f}s"
-        for key in ("init_seconds", "unfold_seconds", "reweight_seconds")
+        for key, _ in _WORKER_PHASES
         if key in result
     ]
-    if not parts:
-        return
-    breakdown: str = ", ".join(parts)
-    logger.info("OmniFold worker timings: %s", breakdown)
-    timing.note(f"worker: {breakdown}")
+    if logged:
+        logger.info("OmniFold worker timings: %s", ", ".join(logged))
+
+
+def _record_iteration_timings(result: Mapping[str, NDArray[Any]], /) -> None:
+    """One row per MultiFold iteration per step, beside `unfold` rather than in it.
+
+    They belong *under* `unfold` and are recorded at the same depth anyway,
+    because `timing`'s tree is only one level deep in practice: `_ordered`
+    reconstructs a top-level phase's children by position and does not recurse,
+    so a genuine grandchild renders under whichever sibling happens to precede
+    it, and its own parent row prints after it. Rather than rework that for one
+    baseline, these sit as siblings of `unfold` in the order they happened,
+    which reads correctly and stays honest about the nesting the format
+    supports.
+
+    Absent when the wrapping in the worker found nothing to wrap, which is how
+    a rename inside OmniFold degrades: the totals still arrive.
+    """
+    for key, step, what in (
+        ("step1_seconds", 1, "detector-level reweighting"),
+        ("step2_seconds", 2, "particle-level reweighting"),
+    ):
+        if key not in result:
+            continue
+        for iteration, seconds in enumerate(np.atleast_1d(result[key]), start=1):
+            timing.record(f"iter{iteration}_step{step}", float(seconds), detail=what)
 
 
 def _metrics_for(
@@ -309,6 +354,22 @@ def evaluate_single(
         weights_path,
     )
     render_metrics(f"{run_dir.name} [OmniFold]", metrics, list(config.variable_names))
+
+    # Its own file, not `timings.json`. `timing.write` merges by phase name
+    # alone, and this pass has phases called `data` and `evaluate` too --
+    # writing them into the shared file would silently replace the training
+    # pass's rows, which are the ones anyone wants. Separate also keeps the
+    # baseline's cost separable from the method's, which is the comparison the
+    # numbers exist for.
+    timing.report()
+    # `pass_name` names which invocation produced each row; bandit's
+    # hardcoded-password check matches the "pass" substring, as `pyproject.toml`
+    # already records for `tests/test_timing.py`.
+    timing.write(
+        run_dir,
+        pass_name="omnifold",  # ruff: ignore[hardcoded-password-func-arg]
+        filename="timings_omnifold.json",
+    )
     return metrics
 
 

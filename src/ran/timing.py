@@ -222,6 +222,30 @@ def phase(name: str, /, *, detail: str | None = None) -> Generator[_Open]:
         )
 
 
+def record(name: str, seconds: float, /, *, detail: str | None = None) -> None:
+    """Record a phase this process could not time itself.
+
+    `phase()` covers everything this interpreter runs, which is almost
+    everything. The exception is the OmniFold baseline: its real work happens
+    in a subprocess under a different Python, and the breakdown comes back as
+    numbers in an `.npz` rather than as a block to wrap. Those are still phases
+    of the run and belong in the same table, so this is the way in.
+
+    Depth follows the current nesting, so a call inside `with phase("omnifold")`
+    lands underneath it exactly as a nested `phase()` would. Ordering works out
+    for the same reason `phase()`'s does: `_ordered` reads a top-level phase's
+    children off the records that landed before it closed.
+
+    A no-op when timing is off, like everything else here.
+    """
+    recorder: _Recorder | None = _recorder
+    if recorder is None:
+        return
+    recorder.records.append(
+        Phase(name=name, seconds=seconds, depth=recorder.depth, detail=detail)
+    )
+
+
 def _total_seconds(records: list[Phase], /) -> float:
     """Sum of the top-level phases only; a nested one is already inside its parent."""
     return sum(p.seconds for p in records if p.depth == 0)
@@ -331,8 +355,8 @@ def _merged_phases(
     return kept + fresh
 
 
-def write(run_dir: Path, /, *, pass_name: str) -> None:
-    """Merge this pass's phases into `timings.json`. A no-op when timing is off
+def write(run_dir: Path, /, *, pass_name: str, filename: str = "timings.json") -> None:
+    """Merge this pass's phases into `filename`. A no-op when timing is off
     or nothing was timed.
 
     `scripts/submit.sh` makes three passes over one run directory -- train,
@@ -346,11 +370,21 @@ def write(run_dir: Path, /, *, pass_name: str) -> None:
     it against `config.json` without walking a tree. Every number here comes
     from `perf_counter`, so the `np.float32` JSON hazard `CLAUDE.md` warns about
     cannot arise --- nothing needs coercing on the way out.
+
+    `filename` exists because the merge is **by phase name alone, not by
+    (pass, name)**. That is right for the passes of one pipeline over one run,
+    which is what it was built for: `load` legitimately replaces `train`'s
+    `plots` row. It is wrong for a different program over the same directory.
+    `ran baseline omnifold` also has phases called `data` and `evaluate`, and
+    writing them here would silently destroy the training pass's --- the rows
+    anyone actually wants. So it writes `timings_omnifold.json` instead, and
+    the baseline's cost stays separable from the method's, which is the
+    comparison the numbers are for.
     """
     if _recorder is None or not _recorder.records:
         return
     try:
-        path: Path = artifacts_dir(run_dir) / "timings.json"
+        path: Path = artifacts_dir(run_dir) / filename
     except OSError as error:
         # An unwritable run directory must not take the run down over a
         # report of its own timing -- log and move on.

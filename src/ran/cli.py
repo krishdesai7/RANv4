@@ -7,6 +7,7 @@ import numpy as np
 import typer
 
 from .baselines import evaluate_runs as ibu_evaluate_runs
+from .baselines.omnifold import evaluate_runs as omnifold_evaluate_runs
 from .evaluate import evaluate_runs
 from .leakage import run_leakage_check
 from .logging_config import configure_logging
@@ -171,6 +172,22 @@ def ibu_command(
         n_iterations,
         purity_threshold=np.double(purity_threshold),
     )
+
+
+@baseline_app.command(name="omnifold")
+def omnifold_command(
+    run_dir: Path = RUN_DIR,
+    force: bool = False,
+    n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
+    n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 50,
+    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 512,
+) -> None:
+    """Run the OmniFold baseline in a quarantined Python 3.13 subprocess.
+
+    Needs `uv` on PATH, and on Perlmutter `module load cudatoolkit/12.9` --
+    without it TensorFlow runs on the CPU without raising.
+    """
+    omnifold_evaluate_runs(run_dir, force, n_iterations, n_epochs, batch_size)
 
 
 @uncertainty_app.command(name="run")

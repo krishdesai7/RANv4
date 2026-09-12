@@ -240,6 +240,41 @@ def render(rows: list[dict[str, object]], console: Console) -> None:
     console.print(table)
 
 
+def _explain(
+    rows: list[dict[str, object]],
+    selected: list[Arm],
+    *,
+    has_cuda: bool,
+    console: Console,
+) -> None:
+    """Say what the table means, distinguishing "wrong machine" from "broken".
+
+    A run on a laptop produces five identical `cpu_fallback` rows, which is the
+    correct answer to a question the laptop cannot be asked. Reporting that as
+    a failure of the node or the driver sends the reader debugging a machine
+    that was never a candidate, so the absence of `nvidia-smi` is checked
+    before anything is blamed on it.
+    """
+    if not has_cuda:
+        console.print(
+            "[yellow]No CUDA GPU on this machine[/yellow] -- `nvidia-smi` is "
+            "absent, so every arm falls back to the CPU and the table says "
+            "nothing about coexistence. The plumbing above is verified; run "
+            "this inside a GPU allocation for the actual answer."
+        )
+        return
+    if (
+        rows
+        and selected[0].name == "control"
+        and verdict(rows[0])[0] != "[green]PASS[/green]"
+    ):
+        console.print(
+            "[red]control did not pass[/red] -- the node, the CUDA driver or "
+            "the uv script cache is the problem, not coexistence. Discard the "
+            "other four arms rather than interpreting them."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -301,15 +336,7 @@ def main() -> None:
         args.json.write_text(json.dumps(rows, indent=2))
         console.print(f"wrote {args.json}")
 
-    if (
-        rows
-        and verdict(rows[0])[0] != "[green]PASS[/green]"
-        and selected[0].name == "control"
-    ):
-        console.print(
-            "[yellow]control did not pass -- the node, the driver or the uv "
-            "script cache is the problem. Discard the other arms.[/yellow]"
-        )
+    _explain(rows, selected, has_cuda=nvidia_free_mib() is not None, console=console)
 
 
 if __name__ == "__main__":

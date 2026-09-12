@@ -89,6 +89,12 @@ a CPU device --- watch the log for it.
 The unload is an `EXIT` trap rather than zsh's `{ } always { }`, because
 `always` does not run under `set -e`.
 
+`module` itself has to be initialised first --- it is a shell function only a
+login shell gets, and a batch job otherwise dies with
+`command not found: module`. `scripts/_lmod.zsh` does that and every script
+calling `module` sources it before the first call; `tests/test_scripts.py`
+checks that they do.
+
 **The worker's uv environment must already exist.** It is a PEP 723 script, so it
 is not in `uv.lock`, and first use pulls ~3.5GB of CUDA wheels --- which a compute
 node generally cannot do. Warm it on a login node:

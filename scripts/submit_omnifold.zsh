@@ -62,6 +62,11 @@ export RAN_TIMING=1
 # `set -e`: ERR_EXIT leaves the shell before the `always` block runs, so a
 # failed unfolding would leave the CUDA 12 toolkit loaded. Measured, not
 # assumed. An EXIT trap fires on both paths.
+# `module` is a shell function that only a login shell has; see the comment in
+# `scripts/_lmod.zsh`. Sourced before the first `module` call, not at the top,
+# so the cheap argument checks still fail fast on a machine without Lmod.
+source "${PROJECT_DIR}/scripts/_lmod.zsh"
+
 module load cudatoolkit/12.9
 trap 'module unload cudatoolkit/12.9' EXIT
 

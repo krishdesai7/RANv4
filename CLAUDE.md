@@ -127,7 +127,7 @@ scripts/
 ├── submit_precision.zsh       float32 vs float64 paired ensemble
 └── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (572 cases; `just test`, or `just test-fast`)
+tests/                        pytest tests (587 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -220,7 +220,7 @@ just test-fast  # the same suite minus `slow`, for a check mid-work
 
 **`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
 skips anything.** `just test`, `just validate` and CI all run the whole suite.
-The split is there because the cost is wildly uneven: 37 of the 572 cases are
+The split is there because the cost is wildly uneven: 37 of the 587 cases are
 ~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
 costs a third of the time and gives up a fixed, known list rather than a
 random one.
@@ -432,6 +432,17 @@ not zsh's `{ } always { }`** --- `always` does not run under `set -e`, which
 ERR_EXIT leaves before reaching, so a failed unfolding would have left the CUDA
 12 toolkit loaded over whatever ran next in the allocation. Measured, not
 assumed.
+
+**`module` is not available in a batch script until it is initialised**, which
+is what `scripts/_lmod.zsh` does and every script calling `module` sources
+first. It is a shell function Lmod defines in an init script only a *login*
+shell sources, so a batch job gets `command not found: module` --- and under
+`set -e` that takes the job with it. This did not bite while the scripts were
+bash, which exports functions through the environment; zsh does not import
+those, so the move to zsh is exactly what exposed it. `submit.zsh` had the same
+latent bug in its `module load texlive`, where it cost only the PDF because it
+sits last. `tests/test_scripts.py` asserts the ordering, and `zsh -n` parses
+every script --- a shell script is otherwise covered by nothing here.
 
 ### Getting OmniFold onto the figures
 

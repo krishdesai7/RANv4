@@ -54,7 +54,7 @@ def _peak_bytes() -> int | None:
 
     try:
         return int(tf.config.experimental.get_memory_info("GPU:0")["peak"])
-    except KeyError, ValueError, RuntimeError:
+    except (KeyError, ValueError, RuntimeError):
         return None
 
 

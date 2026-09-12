@@ -162,6 +162,15 @@ ignore = [
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]
 
+# The quarantined OmniFold/TensorFlow workers run under Python 3.13 (TF ships
+# no 3.14 wheels -- that version gap is the whole reason they are separate
+# processes), so ruff must not modernise them to the project's 3.14 floor.
+# Without this the formatter rewrites `except (A, B):` into PEP 758's
+# unparenthesized form, which is a SyntaxError on 3.13 and takes the worker
+# down at import. Caught by `benchmarks/gpu_coexistence.py` refusing to run.
+[tool.ruff.per-file-target-version]
+"**/*_worker.py" = "py313"
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

@@ -643,9 +643,16 @@ Five gotchas worth knowing:
   the mean back through an exact count. Everything downstream of those --- the
   divergences themselves, which are reductions over `dim x n_bins` values and so
   cost nothing --- is float64 on the host. Measured against a float64 reference
-  this lands JS within 9e-9, where the `np.histogram` path it replaced was
-  5.9e-7 off. That 9e-9 is a statement about *bias*, and on a GPU it is smaller
-  than the run-to-run noise --- see the next bullet.
+  this lands JS within 9e-9 on a CPU and ~1.3e-8 on an A100, where the
+  `np.histogram` path it replaced was 5.9e-7 off. **The gap is
+  platform-dependent, so do not pin a measured constant as a tolerance.** The
+  scatter accumulates in float32 and the order is the hardware's choice; the
+  same assertion that holds at 1.26e-8 locally returned 1.288e-8 on the
+  cluster. Bound these against what `metrics.json` prints --- a tenth of the
+  last printed digit --- not against the last measurement, which is what
+  `TestFloat32Histograms` now does. The number is also a statement about
+  *bias*, and on a GPU it is smaller than the run-to-run noise --- see the next
+  bullet.
 - **`metrics.json` is reproducible to ~4e-8 on a GPU, not to the last digit.**
   `_counts` bins with `empty.at[index].add(...)`, which lowers to a scatter-add;
   many events land in one bin, so on a GPU that is an *atomic* accumulation and

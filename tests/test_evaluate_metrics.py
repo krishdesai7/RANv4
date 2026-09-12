@@ -301,7 +301,21 @@ class TestFloat32Histograms:
         what reaches its printed digit, while the triangular discriminator
         carries a x1e3 factor and runs to ~100, where the same statement has to
         be relative. Both come to the same place -- a few times 1e-7 of the
-        value, three digits below anything printed.
+        value, two digits below anything printed.
+
+        **The JS bound is 1e-7 and not the 9e-9 the gap actually measures,
+        because the gap is platform-dependent.** `_counts` accumulates the
+        scatter in float32, and the order it accumulates in is the hardware's
+        choice: on a CPU the float32-to-float64 gap here is ~9e-9, on an A100
+        it is ~1.3e-8. This assertion was originally `atol=1e-8`, which against
+        `assert_allclose`'s default `rtol=1e-7` came to an effective 1.26e-8 --
+        and the A100 returned 1.288e-8, failing by two percent. Pinning a
+        measured constant was the error; what the test is for is the claim in
+        its own name, that float32 binning does not disturb the digit
+        `metrics.json` prints. JS prints at six decimals, so 1e-7 is a tenth of
+        the last printed digit, eight times the largest gap either platform has
+        shown, and still well inside the 5.9e-7 of the `np.histogram` path this
+        replaced -- so a regression to that would still fail here.
         """
         rng = np.random.default_rng(11)
         ref = rng.normal(size=(20000, 3)).astype(np.float32)
@@ -314,7 +328,7 @@ class TestFloat32Histograms:
         np.testing.assert_allclose(
             _js_from_histograms(p, q),
             _js_from_histograms(exact_p, exact_q),
-            atol=1e-8,
+            atol=1e-7,
         )
         np.testing.assert_allclose(
             _triangular_from_histograms(p, q),

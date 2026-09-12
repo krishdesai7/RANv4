@@ -41,6 +41,7 @@ dev = [
     "ipykernel>=7.3.0",
     "pre-commit>=4.6.2",
     "pyrefly>=1.2.0",
+    "pytest-env>=1.7.1",
     "pytest-xdist>=3.8.0",
     "ruff>=0.16.6",
     "rust-just>=1.58.0",
@@ -70,19 +71,16 @@ module-name = "ran"
 pythonpath = ["."]
 testpaths = ["tests"]
 filterwarnings = [
-    # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a
-    # `copy` kwarg, so every `model.save()` trips this from inside Keras's own
-    # `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1. Python's
-    # default filters hide it outside pytest, so this only silences test output.
+    # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a `copy` kwarg, so every `model.save()` trips this from inside Keras's own `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1.
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
-    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`, and an
-    # unwritable one is deliberately a warning rather than a failure -- a
-    # sandboxed or read-only `.cache/` costs the run nothing but a recompile.
-    # JAX emits it per compile from whichever test compiles first, so gating the
-    # ~18 tests that call `train()` on a writable cache would trade real
-    # coverage (`TestFusion` among them) for a cosmetic line. Both spellings:
-    # JAX warns separately on the read and the write path.
-    "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
+    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
+]
+addopts = "-xqn16 --dist loadfile"
+env = [
+    "OMP_NUM_THREADS = 1",
+    "OPENBLAS_NUM_THREADS = 1",
+    "MKL_NUM_THREADS = 1",
+    "XLA_PYTHON_CLIENT_PREALLOCATE = false",
 ]
 
 

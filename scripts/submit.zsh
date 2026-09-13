@@ -78,8 +78,10 @@ uv run ran baseline ibu --run-dir "${RUN_DIR}"
 uv run ran train --load-run "${RUN_DIR}"
 uv run ran evaluate --run-dir "${RUN_DIR}" --force
 
-source "${PROJECT_DIR}/scripts/_lmod.zsh"
-module load texlive
+if (( ! $+commands[pdflatex] )); then
+  source "${PROJECT_DIR}/scripts/_lmod.zsh"
+  module load texlive
+fi
 uv run ran report "${RUN_DIR}"
 
 echo "Artifacts in ${RUN_DIR}:"

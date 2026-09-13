@@ -15,8 +15,8 @@ dependencies = [
     "jax[cuda13]>=0.11.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'",
     "jaxtyping>=0.3.11",
     "keras>=3.15.1",
-    "matplotlib>=3.11.1",
-    "numpy>=2.5.2",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
     "pyyaml>=6.0.3",
     "typer>=0.27.2",
 ]
@@ -37,17 +37,22 @@ email = "krish@desai.ml"
 [dependency-groups]
 dev = [
     {include-group = "test"},
-    "complexipy>=8.0.0",
+    "complexipy>=8.0.1",
     "ipykernel>=7.3.0",
     "pre-commit>=4.6.2",
-    "pyrefly>=1.2.0",
-    "ruff>=0.16.6",
+    "pyrefly>=1.3.0",
+    "pytest-env>=1.7.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.7",
     "rust-just>=1.58.0",
     "types-pyyaml>=6.0.12.20260906",
 ]
+
+# Running tests, benchmarks or legacy code requires this dependency group
 test = [
     "pytest>=9.1.1",
     "scipy>=1.18.1",
+    "scipy-stubs>=1.18.1.0",
 ]
 release = ["rooster>=0.1.1"]
 
@@ -69,19 +74,16 @@ module-name = "ran"
 pythonpath = ["."]
 testpaths = ["tests"]
 filterwarnings = [
-    # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a
-    # `copy` kwarg, so every `model.save()` trips this from inside Keras's own
-    # `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1. Python's
-    # default filters hide it outside pytest, so this only silences test output.
+    # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a `copy` kwarg, so every `model.save()` trips this from inside Keras's own `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1.
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
-    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`, and an
-    # unwritable one is deliberately a warning rather than a failure -- a
-    # sandboxed or read-only `.cache/` costs the run nothing but a recompile.
-    # JAX emits it per compile from whichever test compiles first, so gating the
-    # ~18 tests that call `train()` on a writable cache would trade real
-    # coverage (`TestFusion` among them) for a cosmetic line. Both spellings:
-    # JAX warns separately on the read and the write path.
-    "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
+    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
+]
+addopts = "-xqn8"
+env = [
+    "OMP_NUM_THREADS = 1",
+    "OPENBLAS_NUM_THREADS = 1",
+    "MKL_NUM_THREADS = 1",
+    "XLA_PYTHON_CLIENT_PREALLOCATE = false",
 ]
 
 
@@ -92,8 +94,15 @@ site-package-path = []
 check-unannotated-defs = true
 infer-return-types = "checked"
 preset = "all"
+treat-all-caps-as-final = true
 permissive-ignores = true
-project-excludes = ["legacy"]
+project-excludes = [
+    "legacy",
+    # The quarantined TensorFlow workers import packages that cannot exist
+    # in this project's environment -- that impossibility is the point of
+    # them. Type-checking them here can only ever report missing-import.
+    "**/*_worker.py",
+]
 
 [tool.pyrefly.errors]
 explicit-any = false # npt.NDArray[T] is an alias for np.ndarray[tuple[Any, ...], T]
@@ -154,11 +163,23 @@ ignore = [
 # hardcoded-password check matches on the "pass" substring in the arg name.
 "tests/test_timing.py" = ["hardcoded-password-func-arg", "hardcoded-password-string"]
 # Benchmarks report to a terminal and are read by a human running them by hand;
-# routing that through the logging config would bury the numbers.
-"benchmarks/**.py" = ["T20"]
+# routing that through the logging config would bury the numbers. They also
+# shell out to developer tools by bare name (`uv`, `nvidia-smi`): the absolute
+# path differs per machine and per driver package, and resolving on PATH is the
+# behaviour wanted, not an oversight.
+"benchmarks/**.py" = ["T20", "start-process-with-partial-path"]
 # package __init__ is the backend bootstrap: must set KERAS_BACKEND and
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
 "src/ran/__init__.py" = ["non-empty-init-module"]
+
+# The quarantined OmniFold/TensorFlow workers run under Python 3.13 (TF ships
+# no 3.14 wheels -- that version gap is the whole reason they are separate
+# processes), so ruff must not modernise them to the project's 3.14 floor.
+# Without this the formatter rewrites `except (A, B):` into PEP 758's
+# unparenthesized form, which is a SyntaxError on 3.13 and takes the worker
+# down at import. Caught by `benchmarks/gpu_coexistence.py` refusing to run.
+[tool.ruff.per-file-target-version]
+"**/*_worker.py" = "py313"
 
 [tool.ruff.format]
 quote-style = "double"

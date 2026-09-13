@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy.typing import NDArray
+    from ran.baselines import VariableUnfolding
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -270,13 +271,15 @@ def testunfold_variable_returns_safe_mean_one_weights(
         n_iterations=2,
         purity_threshold=ibu.DEFAULT_PURITY_THRESHOLD,
     )
-    weights = result.weights_for(np.array([0.2, 1.8], dtype=np.single))
+    weights: NDArray[np.single] = result.weights_for(
+        gen=np.array(object=[0.2, 1.8], dtype=np.single)
+    )
 
     assert result.outcome.status == "completed"
     assert result.outcome.n_bins == 2
-    assert np.all(np.isfinite(weights))
-    assert np.all(weights >= 0)
-    assert weights.mean() == pytest.approx(1.0)
+    assert np.all(a=np.isfinite(weights))
+    assert np.all(a=weights >= 0)
+    assert weights.mean() == pytest.approx(expected=1.0)
 
 
 def test_unfolds_in_single_precision_end_to_end() -> None:
@@ -286,13 +289,17 @@ def test_unfolds_in_single_precision_end_to_end() -> None:
     count checks and the mean-one postcondition are exercised against float32
     arithmetic rather than assumed to survive it.
     """
-    rng = np.random.default_rng(0)
+    rng: np.random.Generator = np.random.default_rng(seed=0)
     n = 20_000
-    mc_gen = rng.normal(size=n).astype(np.single)
-    mc_sim = (mc_gen + 0.3 * rng.normal(size=n).astype(np.single)).astype(np.single)
-    observed = (0.5 + rng.normal(size=n).astype(np.single)).astype(np.single)
+    mc_gen: NDArray[np.single] = rng.normal(size=n).astype(dtype=np.single)
+    mc_sim: NDArray[np.single] = (
+        mc_gen + 0.3 * rng.normal(size=n).astype(dtype=np.single)
+    ).astype(np.single)
+    observed: NDArray[np.single] = (
+        0.5 + rng.normal(size=n).astype(dtype=np.single)
+    ).astype(dtype=np.single)
 
-    result = ibu.unfold_variable(
+    result: VariableUnfolding = ibu.unfold_variable(
         variable_name="dim_0",
         mc_gen=mc_gen,
         mc_sim=mc_sim,

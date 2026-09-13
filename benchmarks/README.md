@@ -649,3 +649,77 @@ Paired runs that share a common initial condition are not independent samples. T
 An effect estimated near $p=0.05$ at small $n$ is inflated, so that figure is far too small. A t-test can only ever fail to find a difference, so the affirmative question -- "is the gap small enough?" -- is answered by TOST against a stated margin.
 
 The parameter `margin_pp` is the margin of equivalence, in percentage points, that sets an upper bound on the effect size that is considered to be negligible. It is a physics judgement and has to be stated, so it is an argument, rather than an computed result.
+
+---
+
+## `gpu_coexistence.py`
+
+Whether a TensorFlow subprocess can use the GPU while a JAX parent holds it.
+This stands in front of any decision to bring OmniFold into this repository:
+OmniFold needs TensorFlow, TensorFlow ships no wheels for this project's Python
+floor, and Keras binds its backend once per interpreter. The quarantine that
+answers all three is a PEP 723 script run through `uv run --no-project`, which
+provisions Python 3.13 and TensorFlow in an interpreter that cannot import
+`ran`. What the quarantine does not settle is the GPU, and that is what this
+measures.
+
+```zsh
+module load cudatoolkit/12.9                       # mandatory -- see below
+uv run --no-project benchmarks/_tf_probe_worker.py # warm the env on a login node
+uv run benchmarks/gpu_coexistence.py --json coexistence.json
+```
+
+### The answer is yes, in every configuration
+
+One A100-40GB, Perlmutter, September 2026. All five arms pass:
+
+| Arm | Parent | Free MiB before the worker | Worker |
+| --- | --- | --- | --- |
+| `control` | never touches JAX | 40441 / 40960 | ok |
+| `preallocate-default` | JAX on GPU, shipped defaults | 9675 | ok |
+| `preallocate-false` | `XLA_PYTHON_CLIENT_PREALLOCATE=false` | 39749 | ok |
+| `mem-fraction-0.4` | `XLA_PYTHON_CLIENT_MEM_FRACTION=0.4` | 23829 | ok |
+| `parent-on-cpu` | `JAX_PLATFORMS=cpu` | 40441 | ok |
+
+**No mitigation is needed.** The concern was that JAX preallocates ~75% of the
+card on its first device allocation, leaving a TensorFlow worker nothing --- and
+the preallocation is real and exactly as documented, 30.7GB of 40.96GB, visible
+in the `preallocate-default` row. It simply does not matter here: the worker's
+peak is 1.07GB against the 9.4GB that survives, so the default configuration
+has nearly an order of magnitude of headroom. `XLA_PYTHON_CLIENT_PREALLOCATE`
+and `JAX_PLATFORMS` are recorded above because they were the candidate fixes and
+because a larger OmniFold model could still need them, not because anything is
+currently broken.
+
+### `module load cudatoolkit/12.9` is mandatory, and its absence is silent
+
+Without it every arm returns `cpu_fallback` --- TensorFlow runs, on the CPU,
+reporting nothing a caller would notice. There is no error and no exception; the
+baseline would simply be tens of times slower and its numbers would look fine.
+That is the failure this benchmark exists to catch, and it is why the worker
+pins `tf.device("/GPU:0")` rather than letting TF place the op: soft placement
+turns this into a silent pass.
+
+The cause is a version clash, not coexistence. Perlmutter's default environment
+leads `LD_LIBRARY_PATH` with four CUDA **13.2** trees, and the `tensorflow`
+2.21 wheel is a CUDA **12** build. Exactly one library goes unreachable ---
+`libcusolver.so.11` --- and one is enough for TF to skip registering every GPU.
+
+### Do not read the `dlopen` table as the verdict
+
+The worker tries each soname itself with `ctypes.CDLL`, which searches
+`LD_LIBRARY_PATH` and the ldconfig cache. TensorFlow additionally reaches its
+own pip wheel directories through the RPATH in its extension modules, so the
+two do not measure the same thing: on the failing run the worker called **nine**
+libraries unreachable while TF's log showed it had opened eight of them and
+failed on one. Acting on the worker's column alone fixes the wrong thing.
+
+`missing_libraries`, parsed from TF's own `Could not load dynamic library 'X'`
+lines, is the authoritative field. The `dlopen` table is kept because it
+separates *absent* from *merely off the system path* --- each row is
+cross-referenced against the wheels on disk --- but it is labelled as
+supporting evidence and nothing more. Getting TF to emit those lines needs
+`TF_CPP_VMODULE=dso_loader=1`; `TF_CPP_MIN_LOG_LEVEL` does not reach them, and
+the conventional `TF_CPP_MIN_LOG_LEVEL=3` suppresses the summary too, which is
+how an earlier version of this benchmark reported a failure it could not
+explain.

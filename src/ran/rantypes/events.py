@@ -81,11 +81,14 @@ class Populations:
         data: EventArray,
         truth: EventArray | None = None,
     ) -> Self:
-        if truth is None:
-            truth = np.full(
+        resolved_truth: EventArray = (
+            truth
+            if truth is not None
+            else np.full(
                 (data.shape[0], *mc.z.shape[1:]), TRUTH_SENTINEL, dtype=mc.z.dtype
             )
-        return cls(mc=mc, data=data, truth=truth)
+        )
+        return cls(mc=mc, data=data, truth=resolved_truth)
 
     @property
     def has_truth(self) -> bool:

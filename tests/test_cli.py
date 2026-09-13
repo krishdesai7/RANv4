@@ -30,7 +30,7 @@ def test_registered_command_trees_are_exact() -> None:
         "uncertainty",
         "leakage-check",
     }
-    assert _command_names(baseline_app) == {"ibu"}
+    assert _command_names(baseline_app) == {"ibu", "omnifold"}
     assert _command_names(uncertainty_app) == {"run", "collect"}
 
 
@@ -41,6 +41,7 @@ def test_registered_command_trees_are_exact() -> None:
         ("evaluate",),
         ("report",),
         ("baseline", "ibu"),
+        ("baseline", "omnifold"),
         ("uncertainty", "run"),
         ("uncertainty", "collect"),
         ("leakage-check",),

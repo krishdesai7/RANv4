@@ -81,8 +81,10 @@ from scipy.optimize import root
 if TYPE_CHECKING:
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EventArray, Populations
+    from scipy.optimize._root import OptimizeResult
 
-logger = logging.getLogger("ran.tilt")
+
+logger: logging.Logger = logging.getLogger(name="ran.tilt")
 
 # The solve runs in float64 regardless of EVENT_DTYPE. Second moments of
 # standardized data are O(1) but their *differences* are the residual, and
@@ -201,17 +203,17 @@ def fit_tilt(
     same functional form, so there are exactly as many moment equations as
     parameters.
     """
-    z = np.asarray(z_gen, dtype=_SOLVE_DTYPE)
-    xs = np.asarray(x_sim, dtype=_SOLVE_DTYPE)
-    xd = np.asarray(x_data, dtype=_SOLVE_DTYPE)
+    z: NDArray[np.double] = np.asarray(a=z_gen, dtype=_SOLVE_DTYPE)
+    xs: NDArray[np.double] = np.asarray(a=x_sim, dtype=_SOLVE_DTYPE)
+    xd: NDArray[np.double] = np.asarray(a=x_data, dtype=_SOLVE_DTYPE)
 
     center, scale = _standardize(z)
     x_center, x_scale = _standardize(xs)
-    t_z = _design((z - center) / scale, degree)
-    s_x = _design((xs - x_center) / x_scale, degree)
-    target = _design((xd - x_center) / x_scale, degree).mean(axis=0)
+    t_z: NDArray[np.double] = _design((z - center) / scale, degree)
+    s_x: NDArray[np.double] = _design((xs - x_center) / x_scale, degree)
+    target: NDArray[np.double] = _design((xd - x_center) / x_scale, degree).mean(axis=0)
 
-    beta0 = np.zeros(t_z.shape[1], dtype=_SOLVE_DTYPE)
+    beta0: NDArray[np.double] = np.zeros(t_z.shape[1], dtype=_SOLVE_DTYPE)
     logger.info(
         "   degree %d: %d parameters, %d moment equations, %d MC events",
         degree,
@@ -219,29 +221,31 @@ def fit_tilt(
         target.size,
         len(z),
     )
-    sol = root(
-        _moment_residual,
-        beta0,
+    sol: OptimizeResult[np.double, tuple[int]] = root(
+        fun=_moment_residual,
+        x0=beta0,
         args=(t_z, s_x, target),
         jac=_moment_jacobian,
         method="hybr",
         tol=1e-12,
     )
-    residual = float(np.abs(np.asarray(sol.fun)).max())
+    residual = float(np.abs(np.asarray(a=sol.fun)).max())
     return Tilt(
-        beta=np.asarray(sol.x, dtype=_SOLVE_DTYPE),
+        beta=np.asarray(a=sol.x, dtype=_SOLVE_DTYPE),
         degree=degree,
         center=center,
         scale=scale,
         residual=residual,
-        converged=bool(sol.success),
-        message=str(sol.message),
+        converged=sol.success,
+        message=sol.message,
     )
 
 
 def tilt_weights(tilt: Tilt, z: EventArray, /) -> EventArray:
     """Apply a fitted tilt to any sample of nominal-level events."""
-    scaled = (np.asarray(z, dtype=_SOLVE_DTYPE) - tilt.center) / tilt.scale
+    scaled: NDArray[np.double] = (
+        np.asarray(a=z, dtype=_SOLVE_DTYPE) - tilt.center
+    ) / tilt.scale
     return cast("EventArray", _weights(_design(scaled, tilt.degree), tilt.beta))
 
 
@@ -258,7 +262,7 @@ def _report_first_moments(
     `E_w[T(z)]`. It says nothing about whether the `b` found at *detector*
     level is that one. This block is the difference.
     """
-    logger.info("  first-moment transfer (the assumption, not the theorem)")
+    logger.info(msg="  first-moment transfer (the assumption, not the theorem)")
     logger.info(
         "    %-6s %10s %10s %10s %10s %8s",
         "var",
@@ -268,10 +272,12 @@ def _report_first_moments(
         "gap after",
         "closed",
     )
-    before = truth.mean(axis=0) - z_gen.mean(axis=0)
-    after = truth.mean(axis=0) - (w @ z_gen) / w.sum()
-    for i, var in enumerate(variables):
-        closed = 100.0 * (1.0 - abs(after[i]) / abs(before[i])) if before[i] else np.nan
+    before: NDArray[np.floating] = truth.mean(axis=0) - z_gen.mean(axis=0)
+    after: NDArray[np.floating] = truth.mean(axis=0) - (w @ z_gen) / w.sum()
+    for i, var in enumerate(iterable=variables):
+        closed: float = (
+            100.0 * (1.0 - abs(after[i]) / abs(before[i])) if before[i] else np.nan
+        )
         logger.info(
             "    %-6s %10.5f %10.5f %10.5f %10.2e %7.1f%%",
             var,

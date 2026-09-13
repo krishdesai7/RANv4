@@ -48,6 +48,17 @@ _SCALES: Final[tuple[float, ...]] = (0.5, 2.0**-0.5, 1.0, 2.0**0.5, 2.0)
 # Below this the unbiased estimator's denominator is meaningless.
 _MIN_DENOM: Final[float] = 1e-6
 
+# Every dot in this module is a cancellation: `||a||^2 + ||b||^2 - 2ab^T` and
+# `term_xx + term_yy - 2 v_xy w` both have answers far smaller than the O(1)
+# terms they are assembled from. XLA's *default* for a float32 dot on an A100
+# is TF32 -- a 10-bit mantissa on the inputs -- so the error is relative to the
+# large terms and lands whole on the small answer. Measured by emulating TF32
+# rounding on these exact inputs: squared distances come out ~1e-2 off the
+# broadcast form and MMD^2 ~5e-5 relative, one to two orders past what
+# `tests/test_mmd.py` pins. On CPU this flag is a no-op, which is why a green
+# local suite said nothing and the GPU suite did.
+_PRECISION: Final[jax.lax.Precision] = jax.lax.Precision.HIGHEST
+
 
 class MMDCache(NamedTuple):
     """Everything about a comparison that does not depend on the weights.
@@ -70,7 +81,9 @@ def squared_distances(
 ) -> Float[Array, "n m"]:
     """Pairwise squared distances via expansion, never an (n, m, d) tensor."""
     return (
-        jnp.sum(a**2, axis=1)[:, None] + jnp.sum(b**2, axis=1)[None, :] - 2.0 * a @ b.T
+        jnp.sum(a**2, axis=1)[:, None]
+        + jnp.sum(b**2, axis=1)[None, :]
+        - 2.0 * jnp.matmul(a, b.T, precision=_PRECISION)
     )
 
 
@@ -153,10 +166,13 @@ def weighted_mmd(
     # Double `where`: the guarded branch must not be evaluated at denom = 0,
     # because jnp.where computes both sides and a NaN would propagate.
     safe: Float[Array, ""] = jnp.where(denom > _MIN_DENOM, denom, 1.0)
+    k_w: Float[Array, " m"] = jnp.matmul(cache.k_yy, w, precision=_PRECISION)
     term_yy: Float[Array, ""] = (
-        w @ (cache.k_yy @ w) - jnp.sum(w**2 * cache.diag_yy)
+        jnp.matmul(w, k_w, precision=_PRECISION) - jnp.sum(w**2 * cache.diag_yy)
     ) / safe
-    mmd2: Float[Array, ""] = cache.term_xx + term_yy - 2.0 * (cache.v_xy @ w)
+    mmd2: Float[Array, ""] = (
+        cache.term_xx + term_yy - 2.0 * jnp.matmul(cache.v_xy, w, precision=_PRECISION)
+    )
     return jnp.where(denom > _MIN_DENOM, mmd2, jnp.inf), 1.0 / sum_w_sq
 
 

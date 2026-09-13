@@ -99,9 +99,9 @@ src/ran/                      Python package
 │   └── download.py           One-time Zenodo download
 ├── baselines/
 │   ├── _shared.py            Run config + populations a baseline needs, minus the unfolder
-│   └── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
-├── experiments/
-│   └── cubic_sweep.py        Cubic-response sweep: RAN vs IBU under detector non-linearity
+│   ├── ibu.py                IBU (Iterative Bayesian Unfolding) baseline
+│   ├── omnifold.py           OmniFold baseline, host half (see OmniFold)
+│   └── _omnifold_worker.py   PEP 723 script; 3.13 + TensorFlow, never imported
 ├── uncertainty/
 │   ├── design.py             Bootstrap x seed grid: resampling, one cell, loading
 │   ├── variance.py           Two-way ANOVA components, covariances, quantile binning
@@ -121,11 +121,13 @@ params/                       Gaussian config YAML files
 └── 6d_correlated.yaml
 
 scripts/
-├── submit.sh                 SLURM submission script
-├── submit_hparam.sh          Packed hyperparameter arm sweep (paired on seed)
-└── submit_sweep.sh           Packed cubic-response sweep launcher
+├── submit.zsh                 SLURM submission script
+├── submit_omnifold.zsh        OmniFold against an existing run dir (see OmniFold)
+├── submit_hparam.zsh          Packed hyperparameter arm sweep (paired on seed)
+├── submit_precision.zsh       float32 vs float64 paired ensemble
+└── submit_uncertainty.zsh     Packed bootstrap x seed grid (see Uncertainty)
 
-tests/                        pytest tests (547 cases; `just test`)
+tests/                        pytest tests (601 cases; `just test`, or `just test-fast`)
 Justfile                      Dev recipes: just validate / lint-fix / test / type-check / ci
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
@@ -134,6 +136,7 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 └── artifacts/                Everything else, flat -- see Reporting
     ├── generator.keras, discriminator.keras, params.npz, history.npz
     ├── metrics.json, metrics_ibu.json, ibu_outcomes.json, ibu_weights.npz
+    ├── metrics_omnifold.json, omnifold_weights.npz, timings_omnifold.json
     ├── timings.json          Merged across passes (see Timing)
     ├── detector_level.pdf, particle_level.pdf, losses.pdf, selection.pdf
     └── report.tex            The filled-in template, kept for debugging
@@ -143,8 +146,8 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 └── jax/                      XLA persistent compilation cache
 ```
 
-`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/`, `src/ran/experiments/`
-and `src/ran/uncertainty/` each carry their own `README.md`.
+`src/ran/rantypes/`, `src/ran/data/`, `src/ran/baselines/` and
+`src/ran/uncertainty/` each carry their own `README.md`.
 
 ## Running
 
@@ -156,8 +159,8 @@ completion comes from `ran --install-completion` and needs the script name, so
 it does not work through `python -m`.
 
 One Typer command tree. Flags are kebab-case; subcommands are
-`train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu}`,
-`sweep {ran,collect}`, `uncertainty {run,collect}`. `--log-level` is global and
+`train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu,omnifold}`,
+`uncertainty {run,collect}`. `--log-level` is global and
 goes before the subcommand.
 
 Every knob that changes a run is reachable from `ran train` and recorded in
@@ -196,12 +199,13 @@ ran train --load-run runs/2026-03-14T061023Z                  # reload a saved r
 ran evaluate                                                  # compute metrics for all runs
 ran evaluate --run-dir runs/2026-...                          # single run
 ran baseline ibu --run-dir runs/2026-...                      # IBU comparison
+ran baseline omnifold --run-dir runs/2026-...                 # OmniFold (see OmniFold)
 ran report runs/2026-...                                      # PDF dossier (see Reporting)
 ran leakage-check --clean                                     # z_true leakage sanity check
 ran --log-level DEBUG train --config params/1d_default.yaml
-sbatch scripts/submit.sh                                      # end-to-end 6-var jet run
-sbatch scripts/submit.sh --dataset gaussian --config params/2d_correlated.yaml
-bash scripts/submit_hparam.sh                                 # hyperparameter arms, 3 levels x 8 seeds
+sbatch scripts/submit.zsh                                      # end-to-end 6-var jet run
+sbatch scripts/submit.zsh --dataset gaussian --config params/2d_correlated.yaml
+bash scripts/submit_hparam.zsh                                 # hyperparameter arms, 3 levels x 8 seeds
 uv run benchmarks/hparam_collect.py --arm-dir runs/hp_...     # paired comparison of the arms
 ```
 
@@ -211,9 +215,30 @@ Development recipes go through `just` (`just` alone lists them):
 just validate   # format, lint, type-check, complexity, tests -- all read-only
 just lint-fix   # safe lint fixes, then format
 just test -k train   # extra args forward to pytest
+just test-fast  # the same suite minus `slow`, for a check mid-work
 ```
 
-`scripts/submit.sh` is the full pipeline rather than a bare `ran train`: it
+**`just test-fast` deselects `@pytest.mark.slow` and is the only thing that
+skips anything.** `just test`, `just validate` and CI all run the whole suite.
+The split is there because the cost is wildly uneven: 37 of the 601 cases are
+~55s of a ~76s run, and the other ~500 are ~23s together, so a quick pass
+costs a third of the time and gives up a fixed, known list rather than a
+random one.
+
+Nothing in the suite runs OmniFold. Its worker needs a TensorFlow
+environment that cannot exist here, so `tests/test_omnifold.py`
+substitutes a stub worker over the same `.npz` contract and tests the
+seam instead --- see OmniFold.
+
+The marker goes on a test for a *reason*, not for a measured duration --- a
+stopwatch threshold rots as the hardware and the suite move. A test is `slow`
+if it **runs a training program** (one `train()` call is ~0.5s even with the
+XLA cache warm), **shells out to `pdflatex`**, or **averages many random draws
+to measure a statistical property** (`tests/test_mmd_floor.py`). Write a new
+test against the piece directly and it costs a few milliseconds and needs no
+marker; reach for a full run and it costs a hundred times that and does.
+
+`scripts/submit.zsh` is the full pipeline rather than a bare `ran train`: it
 trains, runs the IBU baseline on the same run directory, reloads once so the
 figures come back out with the baseline overlaid (`workflow.run` picks up
 `ibu_weights.npz` only if it exists when the plots are drawn), recomputes
@@ -227,7 +252,7 @@ anything on the command line still wins.
 That last rule is why the script does **not** name the twelve observables as
 `--var` flags, and instead lets `load_jet_dataset`'s own default stand.
 `--var` is repeatable, so click *appends* rather than replacing: naming all
-twelve would turn `sbatch scripts/submit.sh --var m` into thirteen names with a
+twelve would turn `sbatch scripts/submit.zsh --var m` into thirteen names with a
 duplicate, which `load_jet_dataset` rejects. Left off, a subset stays
 selectable from the command line.
 
@@ -279,18 +304,11 @@ raises if `n_samples` exceeds what is on disk. 1.6M is therefore a request
 against the ceiling rather than a safe round number, which is why the script
 clamps it to what the cache actually holds instead of asserting a figure.
 
-The cubic sweep runs one point per invocation so points can go in parallel, one
-GPU each. Each point trains RAN *and* unfolds the same populations with IBU,
-writing both into one `point_NN.json` — IBU costs seconds next to training, and
-running it in the same pass is what guarantees the two methods saw identical
-inputs. `collect` reads whatever landed, joins on s_index, and reports (rather
-than hides) both failed points and points where IBU's purity binning gave up:
-
-```bash
-ran sweep ran      --s-index 0 --sweep-dir runs/sweep_x
-ran sweep collect  --sweep-dir runs/sweep_x
-bash scripts/submit_sweep.sh                             # full sweep on SLURM
-```
+The cubic-response sweep (`ran sweep`, `src/ran/experiments/`,
+`scripts/submit_sweep.zsh`) has been retired and sits under `legacy/`, which is
+a holding pen and not a supported path: it is not importable as `ran`, not
+covered by `just test`, and slated for deletion. Nothing in the package
+references it.
 
 ## Releasing
 
@@ -332,6 +350,156 @@ distribution has to be renamed -- `ran` is already taken on PyPI by an unrelated
 package, so uploading under that name returns 403 regardless of the token.
 `ranv4` is free.
 
+## OmniFold
+
+`ran baseline omnifold` is the second comparison baseline, and the only part of
+this repository that does not run in this repository's environment. Three facts
+make that necessary: OmniFold needs TensorFlow, TensorFlow publishes no wheels
+for Python 3.14, and Keras binds its backend once per interpreter. All three
+are **intra-interpreter** constraints, so all three dissolve at a process
+boundary.
+
+`src/ran/baselines/_omnifold_worker.py` carries a PEP 723 header pinning
+`requires-python = "==3.13.*"` plus `omnifold` and `tensorflow`, and
+`uv run --no-project` provisions exactly that, in an interpreter that cannot
+import `ran`. The two halves exchange one `.npz` file. `--no-project` is
+load-bearing: without it uv resolves the script against this project, whose
+`>=3.14` floor cannot be reconciled with the worker's pin.
+
+The worker is inside the package but is not part of it. Nothing imports it and
+nothing may: its module-level `KERAS_BACKEND=tensorflow` would race the
+package's `jax` pin. Three mechanisms keep it that way, all enforced rather than
+documented --- `pyproject.toml` pins `[tool.ruff.per-file-target-version]` for
+`**/*_worker.py` to `py313`, pyrefly excludes the same glob, and
+`tests/test_omnifold.py::TestQuarantine` asserts the module is absent from
+`sys.modules` and that TensorFlow is not importable at all.
+
+**The ruff pin is not hygiene.** Ruff infers `py314` from `requires-python`, and
+its formatter rewrites `except (A, B):` into PEP 758's unparenthesized form ---
+a `SyntaxError` on 3.13, which killed the worker at import the first time it was
+formatted. This is the mirror image of the `timing.py` note under Tech Stack,
+where the same syntax is deliberate. A test compiles the worker to catch a
+regression.
+
+**`uv` must be on `PATH` at runtime**, since it is what provisions the worker.
+Its absence is translated into a readable message rather than a
+`FileNotFoundError` from inside `subprocess`, because the fix is an install.
+
+**The worker runs under `PYTHONSAFEPATH=1`, and must.** A script's own directory
+goes on `sys.path[0]`, and the worker's directory is `src/ran/baselines/` ---
+which contains `omnifold.py`. So the worker's
+`from omnifold import MLP, DataLoader, MultiFold` resolved to the *host half*
+rather than to the installed package, and died on its `from .. import timing`
+with "attempted relative import with no known parent package": an error naming
+neither the collision nor the file that caused it. `PYTHONSAFEPATH` stops the
+interpreter prepending that directory, which is exactly the shadowing and
+nothing else --- the worker imports nothing local, so it loses nothing. Renaming
+this module would also have worked, at the cost of `ran.baselines.omnifold` no
+longer being named after the thing it runs.
+`TestTheWorkerDoesNotImportThisPackage` reproduces the collision with a poisoned
+sibling.
+
+**The worker environment is not in `uv.lock`.** uv resolves the PEP 723 header
+on first use, which needs outbound network, and compute nodes generally have
+none. Warm it on a login node, the way the jet cache is warmed:
+
+```bash
+uv run --no-project src/ran/baselines/_omnifold_worker.py
+```
+
+### It runs on the CPU, silently, without a CUDA 12 toolkit
+
+**On Perlmutter `module load cudatoolkit/12.9` is mandatory.** The default
+environment leads `LD_LIBRARY_PATH` with four CUDA **13.2** trees and the
+`tensorflow` wheel is a CUDA **12** build; exactly one library goes unreachable,
+`libcusolver.so.11`, and one is enough for TF to skip registering every GPU. It
+then runs on the CPU and **raises nothing** --- the weights come back correct,
+tens of times slower, and the baseline looks like it worked.
+
+So the worker reports the device it used and `_warn_if_on_cpu` warns when it was
+not a GPU. That warning is the only signal this failure produces; do not silence
+it. `benchmarks/gpu_coexistence.py` measures the whole thing and its README
+section records the numbers.
+
+What that benchmark also settled: a TensorFlow subprocess gets the GPU **even
+with JAX's default 75% preallocation held by the parent**. The worker peaks at
+1.07GB against the 9.4GB that survives, so no `XLA_PYTHON_CLIENT_*` tuning is
+needed. That was the risk worth checking before any of this was written, and it
+did not bind.
+
+### Its own job, not a step in `submit.zsh`
+
+`scripts/submit.zsh` does not run OmniFold. That job asks for
+`--time=00:15:00`, and OmniFold alone measured **~41 minutes** on the shipped
+configuration --- 1.6M samples, twelve observables, `niter=3`, 50 epochs --- so
+it would not fit in what is left after RAN trains. It gets
+`scripts/submit_omnifold.zsh` instead, which takes an existing run directory and
+asks for 75 minutes:
+
+```zsh
+sbatch scripts/submit_omnifold.zsh runs/<timestamp>Z
+```
+
+That script loads `cudatoolkit/12.9`, runs the baseline, unloads it, redraws the
+figures, re-scores and rebuilds the report. **The module unload is an EXIT trap,
+not zsh's `{ } always { }`** --- `always` does not run under `set -e`, which
+ERR_EXIT leaves before reaching, so a failed unfolding would have left the CUDA
+12 toolkit loaded over whatever ran next in the allocation. Measured, not
+assumed.
+
+**`module` is not available in a batch script until it is initialised**, which
+is what `scripts/_lmod.zsh` does and every script calling `module` sources
+first. It is a shell function Lmod defines in a startup file that only an
+interactive or login shell reads; a batch script is neither, so it reads
+`/etc/zshenv` and `~/.zshenv` and nothing else, and the first `module load`
+dies with `command not found: module` --- under `set -e`, taking the job with
+it. The asymmetry is confusing precisely because `whence module` at a login
+prompt finds it; `zsh -c 'whence module'` is what the job actually sees.
+`submit.zsh` had the same latent bug in its `module load texlive`, where it cost
+only the PDF because it sits last. `tests/test_scripts.py` asserts the ordering,
+and `zsh -n` parses every script --- a shell script is otherwise covered by
+nothing here.
+
+### Getting OmniFold onto the figures
+
+Presence is the mechanism, and it is the same one IBU has always used.
+`_load_baseline_weights` returns one `BaselineOverlay` per `*_weights.npz` that
+exists in `artifacts/` when the figures are drawn, so:
+
+```zsh
+ran baseline omnifold --run-dir runs/<timestamp>Z   # writes omnifold_weights.npz
+ran train --load-run runs/<timestamp>Z              # reloads, redraws with it
+```
+
+`--load-run` reloads the saved generator rather than training, so the redraw is
+cheap and the run is untouched. There is no separate "add OmniFold to the plots"
+command because there is nothing for it to do that `--load-run` does not.
+
+`plotting.BaselineOverlay` is what made a second baseline cheap. The overlay
+used to be a bare `ibu_weights: list[EventArray] | None` threaded through six
+functions; with two baselines that would have become two parameters in six
+signatures. It carries one weight vector **per dimension**, because IBU unfolds
+each observable separately and its weights genuinely differ between them;
+`from_shared` repeats a single vector across the dimensions, which is what
+OmniFold needs --- it reweights events, not observables. OmniFold draws crimson
+dash-dot with triangles against IBU's green dotted squares, distinguished by
+linestyle as well as colour so the panels survive greyscale printing.
+
+The report's tables carry the third arm too: `render` reads
+`metrics_omnifold.json` when it exists, and fills the two OmniFold columns with
+dashes when it does not, because the template fixes the column count. Columns
+run Sim, IBU, OmniFold, RAN --- the method under test last, where the eye lands,
+behind what it is being compared against.
+
+Eight columns do not fit at the default column padding. The six tables overran
+the text block by ~24pt, which `pdflatex` reports as an overfull hbox and
+*still compiles* --- so nothing failed and the numbers simply ran off the page.
+They now set `\tabcolsep` to 4pt and drop the method name from each improvement
+heading (`impr. (\%)`, unambiguous because it sits beside its method's column).
+`_TABLE_COLUMNS` is the one place the count lives, and a test asserts it against
+the template's own `tabular` specification --- the two have no other connection,
+and had already drifted once.
+
 ## Uncertainty
 
 `src/ran/uncertainty/` measures the variance budget: a `B x S` grid of
@@ -340,7 +508,7 @@ bootstrap datasets crossed with initialization seeds, one cell per invocation.
 ```bash
 ran uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
 ran uncertainty collect --design-dir runs/unc_x -B 8 -S 8
-bash scripts/submit_uncertainty.sh                       # packed 8x8 on SLURM
+bash scripts/submit_uncertainty.zsh                       # packed 8x8 on SLURM
 ```
 
 Three things are decided there rather than left to the caller, and the package
@@ -403,7 +571,7 @@ the phase that raised is recorded, marked `failed`, with the time it burned
 before it did.
 
 **Phases merge by name across passes, and each carries a `pass` field.**
-`scripts/submit.sh` invokes the package three times over one run directory,
+`scripts/submit.zsh` invokes the package three times over one run directory,
 and each write used to truncate the file: the final `ran evaluate` pass left a
 `timings.json` holding `evaluate` alone, with the training block --- the only
 part anyone wants --- gone. A pass now replaces its own same-named phases and
@@ -427,6 +595,33 @@ The phases, nested ones indented under their parent:
 | `load` | `_load_artifacts`, on the `--load-run` path instead of `train`/`save` |
 | `plots` | `_draw_figures`; near-zero under `--no-plots` |
 | `evaluate` | `evaluate_run` |
+
+`ran baseline omnifold` writes its own `artifacts/timings_omnifold.json`
+rather than merging into `timings.json`, and that is not tidiness. **`write`
+merges by phase name alone, not by `(pass, name)`** --- which is right for the
+passes of one pipeline over one run, where `load` legitimately replaces
+`train`'s `plots` row, and wrong for a different program over the same
+directory. The baseline has phases called `data` and `evaluate` of its own, so
+writing them into the shared file would silently destroy the training pass's.
+Separate also keeps the baseline's cost separable from the method's, which is
+the comparison the numbers exist for.
+
+Its phases are `parse_config`, `data`, `omnifold` and `evaluate`, with the
+worker's own breakdown nested under `omnifold`: `init`, `unfold`, a
+`iter<n>_step<1|2>` row per MultiFold iteration, then `reweight`. Those come
+back as numbers across the `.npz` rather than as blocks to wrap, so they enter
+through **`timing.record`** --- the one way into the tree for a phase this
+process did not time itself. The per-iteration split is the useful part:
+MultiFold's two steps are not symmetric (step 1 reweights at detector level,
+step 2 at particle level), so a single `unfold` total cannot say which half a
+long run spent its time in. OmniFold exposes no timing of its own, so the
+worker wraps `RunStep1`/`RunStep2`; the wrapping is guarded, and a rename
+inside OmniFold costs the breakdown rather than the baseline.
+
+The iteration rows sit at the same depth as `unfold` rather than under it.
+`_ordered` reconstructs a top-level phase's children by position and does not
+recurse, so a genuine grandchild renders under whichever sibling precedes it
+and its parent row prints after it. One level is what the format supports.
 
 `timings.json` is flat, with a `depth` field rather than nested objects, so a
 sweep can join it against `config.json` without walking a tree. `total_seconds`
@@ -493,7 +688,7 @@ Column Order).
 `report.py` emits that many `\includegraphics[page=k]` blocks without opening
 the file. A run whose figures were drawn before pagination has a one-page PDF
 and `pdflatex` fails with "required page does not exist" --- redraw with
-`ran train --load-run <run_dir>` first. `submit.sh` keeps them in step.
+`ran train --load-run <run_dir>` first. `submit.zsh` keeps them in step.
 
 The figure pages are landscape with their own `\newgeometry{margin=8mm}`,
 and two independent knobs set how they read. A panel's width on the page is
@@ -615,14 +810,14 @@ Two things the pin does **not** cover:
 - **It is an annotation-level contract, not a runtime one.** Nothing coerces at
   the `Populations` boundary; the checkers enforce it at author time, and the
   three data sources (`_draw_gaussian`, `load_jet_dataset`, and the
-  sample-construction in `leakage.py` / `cubic_sweep.py`) narrow explicitly.
+  sample-construction in `leakage.py`) narrow explicitly.
 - **`ran.data.download` stays float64 on purpose.** `_get_var` upcasts before
   computing observables, because the ε it uses to protect degenerate jets is
   below the smallest float32 denormal — narrowing there would hand back `NaN`
   for exactly the jets the ε exists to protect. The narrowing happens after, in
   `load_jet_dataset`.
 
-Three gotchas worth knowing:
+Five gotchas worth knowing:
 
 - **Scores are not pinned.** Wasserstein, JS and the triangular discriminator
   are float64 and stay there. What is pinned is the data, not the measurement
@@ -636,12 +831,49 @@ Three gotchas worth knowing:
   the mean back through an exact count. Everything downstream of those --- the
   divergences themselves, which are reductions over `dim x n_bins` values and so
   cost nothing --- is float64 on the host. Measured against a float64 reference
-  this lands JS within 9e-9, where the `np.histogram` path it replaced was
-  5.9e-7 off.
+  this lands JS within 9e-9 on a CPU and ~1.3e-8 on an A100, where the
+  `np.histogram` path it replaced was 5.9e-7 off. **The gap is
+  platform-dependent, so do not pin a measured constant as a tolerance.** The
+  scatter accumulates in float32 and the order is the hardware's choice; the
+  same assertion that holds at 1.26e-8 locally returned 1.288e-8 on the
+  cluster. Bound these against what `metrics.json` prints --- a tenth of the
+  last printed digit --- not against the last measurement, which is what
+  `TestFloat32Histograms` now does. The number is also a statement about
+  *bias*, and on a GPU it is smaller than the run-to-run noise --- see the next
+  bullet.
+- **`metrics.json` is reproducible to ~4e-8 on a GPU, not to the last digit.**
+  `_counts` bins with `empty.at[index].add(...)`, which lowers to a scatter-add;
+  many events land in one bin, so on a GPU that is an *atomic* accumulation and
+  the summation order is whatever the hardware chose that pass. Two
+  `ran evaluate` runs over the same run directory therefore return histogram
+  counts differing in the last float32 ulp, and JS values differing by ~4e-8
+  relative --- measured, not estimated, and non-systematic: it moves up on some
+  dimensions and down on others. On a CPU the scatter is sequential and the
+  numbers repeat exactly, which is why this only ever appears on the cluster.
+  It is a deliberate trade: the alternative is a sorted segment-sum or a
+  one-hot matmul over the full sample for a reduction that is otherwise free.
+  Two consequences. `metrics.json` prints six decimals and the sixth is not
+  stable on a GPU, so a diff of two evaluations of the same run is expected to
+  be non-empty; compare with a tolerance rather than by equality. And a test
+  must never build the same histogram twice and compare the halves at a tight
+  tolerance --- that is a determinism assertion wearing a divergence's clothes,
+  and it is what
+  `tests/test_evaluate_metrics.py::TestDivergencesPerDim::test_js_matches_scipy_on_a_continuous_sample`
+  did until it started failing on the A100 and passing locally. Build the
+  histograms once, hand the same pair to both sides. Where that is impossible
+  because the double binning *is* the claim --- `TestFusedMetrics` asks whether
+  the fused and unfused paths agree, and sharing a histogram would delete the
+  question --- widen the tolerance instead and say why: those compare at
+  `rtol=1e-6`, since the noise has been measured at 1.05e-7 relative and
+  `assert_allclose`'s default `rtol` is 1e-7, which put them right on the line
+  (a coin flip on the cluster, a certainty on a CPU). If bitwise reproducibility
+  is ever actually needed, `XLA_FLAGS=--xla_gpu_deterministic_ops=true` buys it
+  at a throughput cost (the same flag Seeding mentions).
 - **`np.float32` is not JSON-serializable.** `np.float64` subclasses Python
   `float`, so `json` accepted it silently while the pipeline was float64;
-  `np.float32` raises. Anything writing numbers to JSON coerces with `.item()`
-  first — see `cubic_sweep._write_point`.
+  `np.float32` raises. Anything writing numbers to JSON has to coerce first —
+  see `evaluate._metric_entry`, which puts every value through `float()` on the
+  way into `metrics.json` for exactly this reason.
 - **`keras.ops.mean` is not float64-safe.** For float64 input it selects a
   float32 compute dtype internally and returns a float64 result carrying ~1e-8
   relative error. `src/ran/train.py` has since moved to plain `jnp`, so it is no
@@ -651,16 +883,16 @@ Three gotchas worth knowing:
 - **JAX preallocates ~75% of GPU memory on its first device allocation.** With
   TensorFlow gone there is nothing on the card to collide with, so nothing in
   the package pins itself to CPU any more — `_draw_gaussian` used to, and no
-  longer does. It still matters on a shared node: `scripts/submit_sweep.sh`
-  gives each sweep point exactly one visible GPU via `--gpus-per-task=1`, or
-  the first point to start would swallow the whole card.
+  longer does. It still matters on a shared node: `scripts/submit_uncertainty.zsh`
+  gives each cell exactly one visible GPU via `srun --gpus-per-task=1`, as does
+  `submit_hparam.zsh`, or the first step to start would swallow the whole card.
 
 ## Jet Column Order
 
 For `--dataset jets`, the list of observables is an **ordering**, carried as a
 `tuple[str, ...]` and never as a set. `load_jet_dataset` fills column `i` from
 `variables[i]`; `_save_run` records that order in `config.json`; and
-`ran evaluate` and `ran baseline ibu` read the recorded list back **as a list**,
+`ran evaluate` and the baselines read the recorded list back **as a list**,
 in order.
 
 This was a `frozenset`, and it produced silently wrong physics. A frozenset's

@@ -370,6 +370,7 @@ class TestParticleCurve:
 
         assert workflow._particle_curve(splits, result=stub) is None
 
+    @pytest.mark.slow
     def test_returns_a_curve_with_truth(self) -> None:
         """The companion case: with truth present, a real curve comes back.
 
@@ -403,6 +404,7 @@ class TestParticleCurve:
         assert all(np.isfinite(v) for v in values)
 
 
+@pytest.mark.slow
 def test_run_omits_val_mmd_particle_without_truth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -517,7 +519,7 @@ class TestDrawFiguresSelection:
             "detector_path": tmp_path / "artifacts" / "detector_level.pdf",
             "particle_path": tmp_path / "artifacts" / "particle_level.pdf",
             "var_info": None,
-            "ibu_weights": None,
+            "baselines": [],
             "variables": None,
         }
         assert calls["plot_losses"]
@@ -758,3 +760,54 @@ def test_no_timings_file_when_timing_is_off(
     _reload(run_dir)
 
     assert not (run_dir / "artifacts" / "timings.json").exists()
+
+
+class TestBaselineDiscovery:
+    """Which baselines reach the figures, and on what evidence.
+
+    Presence of `artifacts/*_weights.npz` is the entire mechanism: no baseline
+    runs on the `ran train` path, so a fresh run's figures carry no overlay and
+    `ran train --load-run` after a baseline has run is what puts one there.
+    That makes "does the file exist" the thing worth testing.
+    """
+
+    @staticmethod
+    def _artifacts(tmp_path: Path) -> Path:
+        artifacts = tmp_path / "artifacts"
+        artifacts.mkdir(parents=True, exist_ok=True)
+        return artifacts
+
+    def test_no_weights_means_no_overlays(self, tmp_path: Path) -> None:
+        assert workflow._load_baseline_weights(tmp_path, dim=2) == []
+
+    def test_omnifold_weights_alone_are_picked_up(self, tmp_path: Path) -> None:
+        """OmniFold without IBU must work; the two are independent."""
+        np.savez(
+            self._artifacts(tmp_path) / "omnifold_weights.npz",
+            weights=np.asarray([1.0, 2.0, 3.0], dtype=np.single),
+        )
+
+        overlays = workflow._load_baseline_weights(tmp_path, dim=2)
+
+        assert [o.label for o in overlays] == ["OmniFold"]
+        # One vector, repeated: OmniFold reweights events, not observables.
+        assert len(overlays[0].weights) == 2
+        assert np.array_equal(overlays[0].weights[0], overlays[0].weights[1])
+
+    def test_both_baselines_are_picked_up_in_draw_order(self, tmp_path: Path) -> None:
+        artifacts = self._artifacts(tmp_path)
+        np.savez(
+            artifacts / "ibu_weights.npz",
+            weights_0=np.asarray([1.0, 1.0], dtype=np.single),
+            weights_1=np.asarray([2.0, 2.0], dtype=np.single),
+        )
+        np.savez(
+            artifacts / "omnifold_weights.npz",
+            weights=np.asarray([3.0, 3.0], dtype=np.single),
+        )
+
+        overlays = workflow._load_baseline_weights(tmp_path, dim=2)
+
+        assert [o.label for o in overlays] == ["IBU", "OmniFold"]
+        # IBU's per-observable vectors must stay distinct, not be collapsed.
+        assert not np.array_equal(overlays[0].weights[0], overlays[0].weights[1])

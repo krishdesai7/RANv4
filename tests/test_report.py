@@ -80,11 +80,18 @@ def test_a_non_finite_improvement_leaves_the_rest_of_the_row_intact() -> None:
     entry: dict[str, float] = _entry(1.0, 0.1)
     entry["wasserstein_improvement_pct"] = math.inf
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("m",), {"detector_m": entry}, None, frozenset()
+        "detector",
+        "wasserstein",
+        ("m",),
+        {"detector_m": entry},
+        None,
+        None,
+        frozenset(),
     )
 
-    # Two absent-IBU cells plus the non-finite RAN improvement.
-    assert body.count(r"\multicolumn{1}{c}{---}") == 3
+    # Two absent-IBU cells, two absent-OmniFold cells, and the non-finite
+    # RAN improvement.
+    assert body.count(r"\multicolumn{1}{c}{---}") == 5
     # The scaled `after` still lands: 0.1 x 10^3.
     assert "100" in body
 
@@ -122,7 +129,12 @@ def test_the_variable_list_uses_physics_symbols_in_display_order() -> None:
 
 def test_the_variable_list_spans_the_row() -> None:
     rows: str = report.config_rows({"variables": ["m", "f_ch"]}, None)
-    assert r"\ConfigWide{variables}{$m$ [GeV], $f_{ch}$}" in rows
+    assert r"\ConfigWide{variables}{" in rows
+    assert r"\textbf{Mass and hard scale (IRC-safe kinematics):} $m$ [GeV]" in rows
+    assert (
+        r"\textbf{Hadronization, multiplicity and fragmentation (IRC-unsafe):} $f_{ch}$"
+        in rows
+    )
 
 
 def test_the_mmd_sigmas_collapse_to_a_median_and_a_bracket() -> None:
@@ -218,29 +230,26 @@ def _entry(before: float, after: float) -> dict[str, float]:
     }
 
 
-def test_rows_are_grouped_and_in_display_order() -> None:
+def test_rows_are_in_display_order() -> None:
     ran = {f"detector_{v}": _entry(1.0, 0.1) for v in SUBSTRUCTURE_VARIABLES}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, None, frozenset()
+        "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, None, None, frozenset()
     )
 
-    assert "Mass and hard scale" in body
-    assert body.index("Mass and hard scale") < body.index("Continuous angularities")
+    # Group headings live in the configuration table, not the metric tables
+    assert "Mass and hard scale" not in body
     assert body.index(r"$\ln\rho$") < body.index(r"$\lambda^{1}_{0.5}$")
-    assert body.count(r"\midrule") == 4  # one per group
+    assert body.count(r"\midrule") == 1  # single header rule
+    assert body.count(r"\\") == len(SUBSTRUCTURE_VARIABLES)
 
 
-def test_a_group_with_no_variables_is_omitted() -> None:
+def test_a_group_with_no_variables_is_omitted_from_config_variables() -> None:
     """`--var m --var w` has nothing in the splitting group."""
-    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in ("m", "w")}
-
-    body: str = report.metrics_table(
-        "detector", "wasserstein", ("m", "w"), ran, None, frozenset()
-    )
-
-    assert "Splitting" not in body
-    assert body.count(r"\midrule") == 2
+    rows: str = report.config_rows({"variables": ["m", "w"]}, None)
+    assert "Splitting" not in rows
+    assert "Mass and hard scale" in rows
+    assert "Continuous angularities" in rows
 
 
 def test_a_missing_baseline_renders_dashes() -> None:
@@ -248,10 +257,11 @@ def test_a_missing_baseline_renders_dashes() -> None:
     ran = {"detector_m": _entry(1.0, 0.1)}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("m",), ran, None, frozenset()
+        "detector", "wasserstein", ("m",), ran, None, None, frozenset()
     )
 
-    assert body.count(r"\multicolumn{1}{c}{---}") == 2  # the IBU value and its %
+    # Two cells per absent baseline, and both baselines are absent here.
+    assert body.count(r"\multicolumn{1}{c}{---}") == 4
 
 
 def test_a_skipped_variable_is_daggered_rather_than_shown_as_zero() -> None:
@@ -260,7 +270,7 @@ def test_a_skipped_variable_is_daggered_rather_than_shown_as_zero() -> None:
     ibu = {"detector_zg": _entry(1.0, 1.0)}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("zg",), ran, ibu, frozenset({"zg"})
+        "detector", "wasserstein", ("zg",), ran, ibu, None, frozenset({"zg"})
     )
 
     assert r"\dag" in body
@@ -271,7 +281,7 @@ def test_a_completed_variable_is_not_daggered() -> None:
     ibu = {"detector_m": _entry(1.0, 0.5)}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("m",), ran, ibu, frozenset()
+        "detector", "wasserstein", ("m",), ran, ibu, None, frozenset()
     )
 
     assert r"\dag" not in body
@@ -281,7 +291,7 @@ def test_a_gaussian_run_has_rows_but_no_groups() -> None:
     ran = {f"detector_dim_{i}": _entry(1.0, 0.1) for i in range(2)}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("dim_0", "dim_1"), ran, None, frozenset()
+        "detector", "wasserstein", ("dim_0", "dim_1"), ran, None, None, frozenset()
     )
 
     assert "Mass and hard scale" not in body
@@ -294,7 +304,7 @@ def test_a_daggered_table_ends_with_a_legend_explaining_the_mark() -> None:
     ibu = {"detector_zg": _entry(1.0, 1.0)}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", ("zg",), ran, ibu, frozenset({"zg"})
+        "detector", "wasserstein", ("zg",), ran, ibu, None, frozenset({"zg"})
     )
 
     assert body.splitlines()[-1] == report._DAGGER_LEGEND
@@ -309,11 +319,26 @@ def test_a_table_with_nothing_skipped_carries_no_legend() -> None:
     ibu = {f"detector_{v}": _entry(1.0, 0.5) for v in SUBSTRUCTURE_VARIABLES}
 
     body: str = report.metrics_table(
-        "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, ibu, frozenset()
+        "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, ibu, None, frozenset()
     )
 
     assert report._DAGGER_LEGEND not in body
     assert "failed to unfold" not in body
+
+
+def test_dagger_legend_appears_only_once_in_rendered_report(
+    reference_run: Path,
+) -> None:
+    import json
+
+    outcomes: list[dict[str, int | str]] = [
+        {"variable_name": "m", "status": "skipped", "n_bins": 1}
+    ]
+    _ = (reference_run / "artifacts" / "ibu_outcomes.json").write_text(
+        data=json.dumps(obj=outcomes)
+    )
+    source: str = report.render(reference_run)
+    assert source.count("failed to unfold") == 1
 
 
 def test_reading_the_skip_set_creates_nothing(tmp_path: Path) -> None:
@@ -386,7 +411,7 @@ def test_missing_metrics_degrade_to_a_row_rather_than_raising(
     source: str = report.render(reference_run)
 
     assert source.count("metrics.json not found") == 6  # 3 metrics x 2 levels
-    assert r"\multicolumn{6}" in source
+    assert rf"\multicolumn{{{report._TABLE_COLUMNS}}}" in source
 
 
 def test_missing_timings_leave_an_empty_body(reference_run: Path) -> None:
@@ -519,6 +544,7 @@ def test_the_compile_invocation_is_absolute_and_non_interactive(
 _NO_TEX = shutil.which("pdflatex") is None
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_the_report_compiles(reference_run: Path) -> None:
     produced: Path = report.build_report(reference_run)
@@ -534,6 +560,7 @@ def test_the_report_compiles(reference_run: Path) -> None:
     ]
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_run_directory_with_an_underscore_compiles(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
@@ -542,6 +569,7 @@ def test_a_run_directory_with_an_underscore_compiles(
     assert report.build_report(run_dir).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_gaussian_run_compiles(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
@@ -565,12 +593,14 @@ def test_a_gaussian_run_compiles(
     assert report.build_report(run_dir).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_run_without_a_baseline_still_compiles(reference_run: Path) -> None:
     (reference_run / "artifacts" / "metrics_ibu.json").unlink()
     assert report.build_report(reference_run, force=True).stat().st_size > 0
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(_NO_TEX, reason="no TeX installation")
 def test_a_missing_figure_becomes_a_placeholder_rather_than_a_failure(
     reference_run: Path,
@@ -581,3 +611,122 @@ def test_a_missing_figure_becomes_a_placeholder_rather_than_a_failure(
     produced: Path = report.build_report(reference_run)
 
     assert produced.stat().st_size > 0
+
+
+class TestOmniFoldColumns:
+    """The third arm's columns, and the agreement they depend on."""
+
+    def test_the_template_column_count_matches_the_spans(self) -> None:
+        r"""`_TABLE_COLUMNS` and the template's `tabular` spec must agree.
+
+        `report.py` emits `\multicolumn{N}` spans for the group headings, the
+        dagger legend and the no-metrics row; the template fixes the real
+        column count. Nothing connects them but this assertion, and they had
+        already drifted once -- two comments in `report.py` said "sixteen
+        columns" while the spans said six.
+        """
+        spec = re.search(
+            r"\\begin\{tabular\}\{@\{\}([^}]*?)@\{\}\}", report.load_template()
+        )
+        assert spec is not None
+        columns = [
+            token for token in str(spec.group(1)).split() if token in {"l", "D", "P"}
+        ]
+        assert len(columns) == report._TABLE_COLUMNS
+
+    def test_an_omnifold_metrics_file_reaches_the_tables(self) -> None:
+        """Presence of `metrics_omnifold.json` is the whole mechanism."""
+        entry = _entry(1.0, 0.25)
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": entry},
+            None,
+            {"detector_m": _entry(1.0, 0.5)},
+            frozenset(),
+        )
+
+        # IBU absent: two dashes. OmniFold present: its scaled after (0.5e3)
+        # and its improvement (50%).
+        assert body.count(r"\multicolumn{1}{c}{---}") == 2
+        assert "500" in body
+        assert "50" in body
+
+    def test_the_methods_are_ordered_ibu_omnifold_ran(self) -> None:
+        """RAN sits last, where the eye lands, behind what it is compared to.
+
+        Ordering is positional in the row -- nothing labels the cells -- so a
+        swapped pair would silently attribute each method's numbers to another.
+        """
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": _entry(1.0, 0.001)},  # RAN: 1.0
+            {"detector_m": _entry(1.0, 0.002)},  # IBU: 2.0
+            {"detector_m": _entry(1.0, 0.003)},  # OmniFold: 3.0
+            frozenset(),
+        )
+
+        cells = [c.strip() for c in body.splitlines()[-1].split("&")]
+        # label, Sim, IBU, IBU%, OmniFold, OmniFold%, RAN, RAN%
+        assert len(cells) == report._TABLE_COLUMNS
+        assert cells[2].removeprefix(r"\bfseries ").startswith("2")
+        assert cells[4].removeprefix(r"\bfseries ").startswith("3")
+        assert cells[6].removeprefix(r"\bfseries ").startswith("1")
+        # RAN performed best (1.0 vs 2.0 and 3.0), so its cells are bolded
+        assert cells[6].startswith(r"\bfseries")
+        assert cells[7].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[4].startswith(r"\bfseries")
+
+    def test_best_performing_method_is_bolded(self) -> None:
+        r"""The method achieving lowest distance is highlighted with \bfseries."""
+        # OmniFold (0.001) wins over RAN (0.002) and IBU (0.003)
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": _entry(1.0, 0.002)},
+            {"detector_m": _entry(1.0, 0.003)},
+            {"detector_m": _entry(1.0, 0.001)},
+            frozenset(),
+        )
+        cells = [c.strip() for c in body.splitlines()[-1].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert cells[5].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[6].startswith(r"\bfseries")
+
+    def test_skipped_ibu_is_not_eligible_for_best_method(self) -> None:
+        """A daggered IBU did not unfold, so it cannot win even with a lower value."""
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("zg",),
+            {"detector_zg": _entry(1.0, 0.5)},
+            {"detector_zg": _entry(1.0, 0.1)},
+            {"detector_zg": _entry(1.0, 0.4)},
+            frozenset({"zg"}),
+        )
+        # Last line is the legend, second to last is data row
+        cells = [c.strip() for c in body.splitlines()[-2].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+
+    def test_a_render_without_omnifold_still_fills_the_columns(self) -> None:
+        """The template fixes the column count, so absent means dashes."""
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": _entry(1.0, 0.1)},
+            {"detector_m": _entry(1.0, 0.5)},
+            None,
+            frozenset(),
+        )
+
+        row = body.splitlines()[-1]
+        assert len(row.split("&")) == report._TABLE_COLUMNS
+        assert row.count(r"\multicolumn{1}{c}{---}") == 2

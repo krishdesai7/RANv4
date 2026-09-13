@@ -21,6 +21,9 @@ from .data import (
 from .evaluate import evaluate_run
 from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
 from .plotting import (
+    BaselineOverlay,
+    ibu_overlay,
+    omnifold_overlay,
     plot_levels,
     plot_losses,
     plot_selection,
@@ -298,9 +301,9 @@ def _draw_figures(
     bootstrapping, etc. The artifacts are already on disk by then, so
     `--load-run` on the same directory draws them later.
 
-    The guard lives here rather than at the call site because the IBU overlay is
-    part of the same decision: `_load_baseline_weights` exists only to feed
-    these three calls.
+    The guard lives here rather than at the call site because the baseline
+    overlays are part of the same decision: `_load_baseline_weights` exists
+    only to feed these three calls.
 
     `plot_selection` is skipped -- rather than left to raise `KeyError` -- when
     `val_mmd` is absent from `history`: a run saved before this branch has no
@@ -310,7 +313,7 @@ def _draw_figures(
     """
     if not plots:
         return
-    ibu_weights: list[EventArray] | None = _load_baseline_weights(run_dir, dim)
+    baselines: list[BaselineOverlay] = _load_baseline_weights(run_dir, dim)
     artifacts: Path = artifacts_dir(run_dir)
     plot_levels(
         splits.test,
@@ -318,7 +321,7 @@ def _draw_figures(
         detector_path=artifacts / "detector_level.pdf",
         particle_path=artifacts / "particle_level.pdf",
         var_info=var_info,
-        ibu_weights=ibu_weights,
+        baselines=baselines,
         variables=variables,
     )
     plot_losses(history, save_path=artifacts / "losses.pdf")
@@ -331,15 +334,38 @@ def _draw_figures(
 def _load_baseline_weights(
     run_dir: Path,
     dim: int,
-) -> list[EventArray] | None:
-    """Pick up IBU weights from the run dir, if that baseline has run."""
-    ibu_weights: list[EventArray] | None = None
-    ibu_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
+) -> list[BaselineOverlay]:
+    """Every baseline that has left weights in this run directory.
+
+    Presence is the whole mechanism, and it is deliberate: neither baseline
+    runs on the `ran train` path, so the figures a fresh run draws have no
+    overlay, and re-drawing them after a baseline has run is what puts one
+    there. `ran train --load-run <run_dir>` is that re-draw --- it reloads the
+    saved generator instead of training, and picks up whatever `*_weights.npz`
+    files exist by then.
+
+    The order is the drawing order, so the overlays are stacked
+    least-to-most-recent rather than by which is expected to win.
+    """
+    artifacts: Path = artifacts_dir(run_dir)
+    baselines: list[BaselineOverlay] = []
+
+    ibu_path: Path = artifacts / "ibu_weights.npz"
     if ibu_path.exists():
         ibu_data: dict[str, Any] = np.load(ibu_path)
-        ibu_weights = [ibu_data[f"weights_{i}"] for i in range(dim)]
+        # One vector per observable: IBU unfolds each separately.
+        baselines.append(ibu_overlay([ibu_data[f"weights_{i}"] for i in range(dim)]))
         logger.info("Loaded IBU weights from %s", ibu_path)
-    return ibu_weights
+
+    omnifold_path: Path = artifacts / "omnifold_weights.npz"
+    if omnifold_path.exists():
+        omnifold_data: dict[str, Any] = np.load(omnifold_path)
+        # One vector for all observables: OmniFold reweights events, not
+        # observables, so `omnifold_overlay` repeats it across the dimensions.
+        baselines.append(omnifold_overlay(omnifold_data["weights"], dim))
+        logger.info("Loaded OmniFold weights from %s", omnifold_path)
+
+    return baselines
 
 
 def _particle_curve(
@@ -414,6 +440,7 @@ def run(
     lr_g: float = 3e-5,
     lr_d: float = 1e-4,
     lambda_dispersion: float = 0.015,
+    log_every: int = 1,
     plots: bool = True,
     run_dir: Path | None = None,
 ) -> None:
@@ -448,6 +475,7 @@ def run(
             lr_g=lr_g,
             lr_d=lr_d,
             lambda_dispersion=lambda_dispersion,
+            log_every=log_every,
             plots=plots,
             run_dir=run_dir,
         )
@@ -474,6 +502,7 @@ def _pipeline(
     lr_g: float,
     lr_d: float,
     lambda_dispersion: float,
+    log_every: int,
     plots: bool,
     run_dir: Path | None,
 ) -> Path:
@@ -551,6 +580,7 @@ def _pipeline(
                 lr_g=lr_g,
                 lr_d=lr_d,
                 lambda_dispersion=lambda_dispersion,
+                log_every=log_every,
             )
         g = result.g
         best_epoch = result.best_epoch

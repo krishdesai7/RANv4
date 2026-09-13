@@ -230,6 +230,16 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
     The mean is itself a float32 reduction and carries its own error, which
     does not matter: it multiplies every bin of the column by the same factor,
     and `_normalize` divides it straight back out.
+
+    **The scatter is not deterministic on a GPU.** Many events share a bin, so
+    `.at[].add` accumulates atomically and the summation order varies between
+    passes: two calls of this function on identical input return counts
+    differing in the last float32 ulp, worth ~4e-8 relative on a JS divergence
+    downstream. That is accepted rather than fixed --- the alternatives are a
+    sorted segment-sum or a one-hot matmul over the full sample, which is real
+    cost for a reduction that is currently free --- but it means nothing may
+    assume two histograms of the same data are bit-identical. See the Precision
+    section of CLAUDE.md.
     """
     n_bins: int = edges.shape[1] - 1
     mean_weight: JaxArray = jnp.mean(weights)

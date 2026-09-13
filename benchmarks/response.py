@@ -135,11 +135,13 @@ class PseudoDomainRule:
             raise ValueError("z must contain at least two row-wise events")
         if strength <= 0:
             raise ValueError("strength must be positive")
-        projection = np.random.default_rng(seed).normal(size=z.shape[1])
+        projection: NDArray[np.floating] = np.random.default_rng(seed).normal(
+            size=z.shape[1]
+        )
         pivot = int(np.argmax(np.abs(projection)))
         if projection[pivot] < 0:
             projection = -projection
-        score = np.asarray(z @ projection, dtype=np.double)
+        score: NDArray[np.double] = np.asarray(a=z @ projection, dtype=np.double)
         scale = float(score.std())
         if not np.isfinite(scale) or scale == 0:
             raise ValueError("pseudo-domain projection has zero variance")
@@ -152,8 +154,10 @@ class PseudoDomainRule:
 
     def partition(self, pairs: Pairs, /, *, seed: int) -> Domains:
         """Sample pseudo-labels from P(S=1|z) without looking at x."""
-        score = (pairs.z @ self.projection - self.center) / self.scale
-        probability = expit(self.strength * score)
+        score: NDArray[np.double] = (
+            pairs.z @ self.projection - self.center
+        ) / self.scale
+        probability: NDArray[np.double] = expit(self.strength * score)
         positive: NDArray[np.bool_] = (
             np.random.default_rng(seed).random(len(pairs.z)) < probability
         )
@@ -188,18 +192,22 @@ def response_statistic(
         raise ValueError("probabilities must be finite and lie in [0, 1]")
 
     def losses(probability: NDArray[np.floating]) -> NDArray[np.floating]:
-        probability = np.clip(probability, _P_CLIP, 1.0 - _P_CLIP)
+        probability = np.clip(a=probability, a_min=_P_CLIP, a_max=1.0 - _P_CLIP)
         return cast(
-            "NDArray[np.floating]",
-            -(labels * np.log(probability) + (1.0 - labels) * np.log1p(-probability)),
+            typ="NDArray[np.floating]",
+            val=-(
+                labels * np.log(probability) + (1.0 - labels) * np.log1p(-probability)
+            ),
         )
 
-    loss_z = losses(p_z)
-    loss_zx = losses(p_zx)
-    improvement = loss_z - loss_zx
+    loss_z: NDArray[np.floating] = losses(p_z)
+    loss_zx: NDArray[np.floating] = losses(p_zx)
+    improvement: NDArray[np.floating] = loss_z - loss_zx
     delta = float(improvement.mean())
-    by_class = tuple(improvement[labels == label] for label in (0.0, 1.0))
-    standard_error = 0.5 * math.sqrt(
+    by_class: tuple[NDArray[np.floating], NDArray[np.floating]] = tuple(
+        improvement[labels == label] for label in (0.0, 1.0)
+    )
+    standard_error: float = 0.5 * math.sqrt(
         sum(float(values.var(ddof=1)) / len(values) for values in by_class)
     )
     return ResponseStatistic(

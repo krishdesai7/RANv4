@@ -331,8 +331,12 @@ def test_dagger_legend_appears_only_once_in_rendered_report(
 ) -> None:
     import json
 
-    outcomes = [{"variable_name": "m", "status": "skipped", "n_bins": 1}]
-    (reference_run / "artifacts" / "ibu_outcomes.json").write_text(json.dumps(outcomes))
+    outcomes: list[dict[str, int | str]] = [
+        {"variable_name": "m", "status": "skipped", "n_bins": 1}
+    ]
+    _ = (reference_run / "artifacts" / "ibu_outcomes.json").write_text(
+        data=json.dumps(obj=outcomes)
+    )
     source: str = report.render(reference_run)
     assert source.count("failed to unfold") == 1
 

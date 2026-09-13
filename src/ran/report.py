@@ -17,6 +17,7 @@ import shutil
 # One fixed argv, no shell, and the only interpolated element is a path
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from importlib import resources
+from itertools import starmap
 from typing import TYPE_CHECKING, cast
 
 from .rantypes import (
@@ -146,6 +147,31 @@ def _populated_groups(present: frozenset[str], /) -> list[tuple[str, Sequence[st
     ]
 
 
+def _symbol(name: str, /) -> str:
+    """A variable's LaTeX symbol: the jet observable's if known, else its raw name."""
+    return JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
+
+
+def _group_line(label: str, members: Sequence[str], /) -> str:
+    r"""One `\textbf{<label>:} <symbols>` line for a populated group."""
+    symbols: str = ", ".join(_symbol(name) for name in members)
+    return rf"\textbf{{{label}:}} {symbols}"
+
+
+def _grouped_variables_cell(
+    names: Sequence[str], groups: Sequence[tuple[str, Sequence[str]]], /
+) -> str:
+    r"""The multiline `\textbf{<label>:} <symbols>` cell for a jet run's groups."""
+    formatted: list[str] = list(starmap(_group_line, groups))
+    grouped_names: frozenset[str] = frozenset(
+        v for _, members in groups for v in members
+    )
+    other: list[str] = [v for v in names if v not in grouped_names]
+    if other:
+        formatted.append(_group_line("Other observables", other))
+    return r" \newline\vspace{2pt} ".join(formatted)
+
+
 def _variables_cell(names: Sequence[str], /) -> str:
     r"""The observable list formatted by physics group, or flat if non-jet.
 
@@ -153,28 +179,10 @@ def _variables_cell(names: Sequence[str], /) -> str:
     """
     groups: list[tuple[str, Sequence[str]]] = _populated_groups(frozenset(names))
     if groups:
-        formatted: list[str] = []
-        for label, members in groups:
-            symbols: str = ", ".join(
-                JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
-                for name in members
-            )
-            formatted.append(rf"\textbf{{{label}:}} {symbols}")
-        grouped_names: frozenset[str] = frozenset(v for _, m in groups for v in m)
-        other: list[str] = [v for v in names if v not in grouped_names]
-        if other:
-            other_symbols: str = ", ".join(
-                JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
-                for name in other
-            )
-            formatted.append(rf"\textbf{{Other observables:}} {other_symbols}")
-        return r" \newline\vspace{2pt} ".join(formatted)
+        return _grouped_variables_cell(names, groups)
 
     ordered: tuple[int, ...] = display_order(names)
-    return ", ".join(
-        JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
-        for name in (names[i] for i in ordered)
-    )
+    return ", ".join(_symbol(names[i]) for i in ordered)
 
 
 def _gaussian_params_cell(params: Mapping[str, Any], /) -> str:

@@ -3,9 +3,6 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-% No `includeheadfoot`: with no running head and no folio there is nothing
-% to reserve room for, and the 64.5pt it held back is 10% of the landscape
-% figure width.
 \usepackage[margin=18mm]{geometry}
 \usepackage{microtype}
 \usepackage{booktabs}
@@ -16,20 +13,11 @@
 \usepackage{pdflscape}
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
+\usepackage{etoolbox}
+\robustify\bfseries
 
-% -----------------------------------------------------------------------------
-% Replacement contract
-% -----------------------------------------------------------------------------
-% Replace the six <<...>> tokens before compilation.  CONFIG_ROWS,
-% TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row
-% bodies, including row terminators.  Each metrics body also owns its first
-% \midrule and interleaves full-width group-heading rows with its data rows.
-% Numbers are inserted at full precision in plain decimal notation, never in
-% exponential form: the S columns fix a table-format and cannot absorb an
-% exponent.  All rounding policy lives here, not in the generator.
-% Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and
-% may contain underscores; text VALUES are not, and must be wrapped in
-% \ConfigVal or otherwise escaped by the generator.
+% Replacement contract:
+% Replace the six <<...>> tokens before compilation. CONFIG_ROWS, TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row bodies, including row terminators. Each metrics body also owns its first \midrule and provides data rows in physics display order. Numbers are inserted at full precision in plain decimal notation. All rounding policy lives here, not in the generator. Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and may contain underscores; text VALUES are not, and must be wrapped in \ConfigVal or otherwise escaped by the generator.
 
 \newcommand{\RunName}{\detokenize{<<RUN_NAME>>}}
 
@@ -39,11 +27,7 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0pt}
 \setlength{\tabcolsep}{5pt}
-\renewcommand{\arraystretch}{1.12}
-
-% No running head and no folio. The title block on page one already names
-% the run, so repeating it down the report bought nothing and cost every page
-% a head, a rule and a footskip -- height the landscape figures want.
+\renewcommand{\arraystretch}{1.10}
 \pagestyle{empty}
 
 \newcommand{\ReportTitle}{
@@ -62,12 +46,12 @@
 
 \newcommand{\FigureLabel}[1]{{\bfseries\normalsize #1\par}\vspace{0.35em}}
 
-% -----------------------------------------------------------------------------
 % Numeric presentation
-% -----------------------------------------------------------------------------
 \sisetup{
   mode                 = match,
   reset-math-version   = false,
+  reset-text-series    = false,
+  text-series-to-math  = true,
   group-separator      = {,},
   group-digits         = integer,
   group-minimum-digits = 4,
@@ -77,13 +61,9 @@
   round-pad            = true
 }
 
-% Use \Count for intrinsically integral quantities and \Raw for continuous
-% quantities. \Percent is useful outside S columns; percentage columns in the
-% metric tables apply the same three-significant-figure policy automatically.
+% Use \Count for intrinsically integral quantities and \Raw for continuous quantities. \Percent is useful outside S columns; percentage columns in the metric tables apply the same three-significant-figure policy automatically.
 \newcommand{\Count}[1]{\num[round-mode=none]{#1}}
-% `exponent-thresholds` keeps the middle of the range in plain decimal and
-% sends only the extremes to scientific notation, so `lr_g` reads
-% 3.000x10^{-5} instead of 0.00003000 while a 58.07-second phase stays 58.07.
+% `exponent-thresholds` keeps the middle of the range in plain decimal and sends extremes to scientific notation
 \newcommand{\Raw}[1]{\num[
   round-mode        = figures,
   round-precision   = 4,
@@ -92,9 +72,7 @@
 ]{#1}}
 \newcommand{\Percent}[1]{\num[round-mode=places,round-precision=1]{#1}\,\%}
 
-% Scaled by 10^3 in the generator, so a real run spans 0.08472..303.0 across
-% the three metrics: three integer digits, five decimals at four significant
-% figures.
+% Scaled by 10^3
 \newcolumntype{D}{S[
   round-mode=figures,
   round-precision=4,
@@ -113,27 +91,13 @@
 \newcommand{\ConfigPair}[4]{\ConfigKey{#1} & #2 & \ConfigKey{#3} & #4 \\}
 \newcommand{\ConfigWide}[2]{
   \ConfigKey{#1} &
-  \multicolumn{3}{>{\raggedright\arraybackslash}p{0.69\linewidth}}{#2} \\
+  \multicolumn{3}{>{\raggedright\arraybackslash}p{\dimexpr\linewidth-0.20\linewidth-2\tabcolsep\relax}@{}}{#2} \\
 }
 \newcommand{\TimingSubphase}[1]{\hspace*{1.15em}#1}
 
-% One page of a multi-page figure. `\ReportGraphic`'s two-argument form is
-% still what the single-page diagnostics use; this one adds `page=` and drops
-% the height cap, because a level figure page is square and fits the text
-% width -- capping its height is what made the panels unreadable.
+% One page of a multi-page figure.
 \newcommand{\ReportPage}[2]{\IfFileExists{#1}{
-    % A six-panel page is square, so it is width-limited and leaves roughly a
-    % third of the page height spare; the fills centre it rather than letting
-    % it ride the top margin.
-    % No \vspace{\fill} and no `center` ENVIRONMENT, both of which cost a
-    % page here. The graphic clears the block by ~6pt, so the environment's
-    % \topsep alone is enough to force a break; and a leading \fill on a
-    % fresh page yields a page of nothing but fill. A figure sized to 99% of
-    % the block does not need centring.
-    %
-    % Measured inside a `pdflscape` landscape block under the \newgeometry
-    % below: \linewidth is 749.4pt and \textheight is 568.8pt -- the package
-    % swaps them, so \linewidth really is the wide dimension here.
+    % Measured inside a `pdflscape` block under \newgeometry: \linewidth is 749.4pt and \textheight is 568.8pt.
     \null\vfill
     {\centering\includegraphics[width=\linewidth,page=#2]{#1}\par}
     \vfill
@@ -194,12 +158,11 @@
 
 \begingroup
 \small
+\rowcolors{2}{ReportLightGray}{white}
 \begin{tabularx}{\linewidth}{
   @{}
   >{\raggedright\arraybackslash}p{0.24\linewidth}
-  % Fixed decimal places, not significant figures: a phase that took
-  % 0.005268s and one that took 58.07s should line up on the decimal point,
-  % and four significant figures on the former is noise.
+  % Fixed decimal places, not significant figures.
   S[round-mode=places,round-precision=3,table-format=4.3]
   S[round-mode=places,round-precision=1,table-format=3.1]
   >{\raggedright\arraybackslash}X
@@ -223,51 +186,64 @@
 {Distance to Data. Improvements are relative to Simulation.\par}
 \vspace{0.45em}
 
-\FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
+\FigureLabel{Wasserstein Distance \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+% Eight columns. At the default 6pt inter-column padding the table overruns the text block by ~24pt.
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_WASSERSTEIN>>
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_JS>>
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Sim.}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<DETECTOR_VLC>>
 \bottomrule
 \end{tabular}
@@ -283,48 +259,60 @@
 \FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_WASSERSTEIN>>
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_JS>>
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
 \small
-\begin{tabular}{@{}l D D P D P@{}}
+\setlength{\tabcolsep}{4pt}
+\rowcolors{2}{ReportLightGray}{white}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
 {\bfseries Observable}
 & \multicolumn{1}{c}{\bfseries Gen}
 & \multicolumn{1}{c}{\bfseries IBU}
-& \multicolumn{1}{c}{\bfseries IBU impr. (\%)}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
 & \multicolumn{1}{c}{\bfseries RAN}
-& \multicolumn{1}{c}{\bfseries RAN impr. (\%)} \\
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 <<PARTICLE_VLC>>
 \bottomrule
 \end{tabular}
@@ -334,18 +322,10 @@
 \clearpage
 
 
-% Landscape, because these figures are wide. A page of six panels is 21x12
-% inches, an aspect of 1.75 against this block's 1.32 -- so it is
-% width-limited and spans the full width. On a portrait page the same figure
-% is limited by the narrower dimension instead and renders at 58% scale,
-% which is what made the panel text unreadable.
-% No \ReportSection here: the figure fills 98% of the page, and a
-% heading on top of it forces a break onto a near-empty next page.
+% Landscape, because these figures are wide. A page of six panels is 21x12 inches.
+% No \ReportSection here: the figure fills 98% of the page, and a heading on top of it forces a break onto a near-empty next page.
 % Each page carries its own `<Level> Level (n of m)' suptitle.
-% Tighter margins here than the rest of the report: these pages carry a
-% single figure and no running text, so an 18mm block is a margin around a
-% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
-% \textwidth and \textheight when the environment opens.
+% Tighter margins here than the rest of the report: these pages carry a single figure and no running text, so an 18mm block is a margin around a margin.
 \newgeometry{margin=8mm}
 \begin{landscape}
 \thispagestyle{empty}
@@ -353,14 +333,6 @@
 \end{landscape}
 \restoregeometry
 
-
-% No \ReportSection here: the figure fills 98% of the page, and a
-% heading on top of it forces a break onto a near-empty next page.
-% Each page carries its own `<Level> Level (n of m)' suptitle.
-% Tighter margins here than the rest of the report: these pages carry a
-% single figure and no running text, so an 18mm block is a margin around a
-% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
-% \textwidth and \textheight when the environment opens.
 \newgeometry{margin=8mm}
 \begin{landscape}
 \thispagestyle{empty}

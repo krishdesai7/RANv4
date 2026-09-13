@@ -240,6 +240,20 @@ class TestDivergencesPerDim:
         assert np.isnan(_js_from_histograms(p, q)).all()
 
     def test_js_matches_scipy_on_a_continuous_sample(self) -> None:
+        """Our JS and scipy's must agree on *one* pair of histograms.
+
+        The histograms are built once and handed to both sides rather than
+        rebuilt for each. `_counts` scatters into its bins with `.at[].add`,
+        which on a GPU is an atomic scatter-add: the summation order varies
+        between two invocations of the same kernel on the same input, so a
+        second call returns counts differing in the last float32 ulp. Calling
+        `_js_per_dim` here for the actual and `_normalized_histograms` for the
+        expected therefore compared two slightly different distributions and
+        failed at 4e-8 relative on GPU while passing on CPU, where the scatter
+        is sequential. What is being asserted is the divergence, not the
+        determinism of the binning; `_js_per_dim`'s own wiring is covered by
+        `test_js_reduces_over_histogram_bins`.
+        """
         rng = np.random.default_rng(6)
         ref = rng.normal(size=(4000, 3)).astype(np.float32)
         comp = (rng.normal(size=(4000, 3)) * 1.4).astype(np.float32)
@@ -248,9 +262,7 @@ class TestDivergencesPerDim:
         p, q = _normalized_histograms(ref, comp, weights=weights, n_bins=100)
         expected = np.array([jensenshannon(p[i], q[i]) ** 2 for i in range(3)])
 
-        np.testing.assert_allclose(
-            _js_per_dim(ref, comp, weights=weights, n_bins=100), expected, rtol=1e-9
-        )
+        np.testing.assert_allclose(_js_from_histograms(p, q), expected, rtol=1e-9)
 
 
 class TestFloat32Histograms:
@@ -289,7 +301,21 @@ class TestFloat32Histograms:
         what reaches its printed digit, while the triangular discriminator
         carries a x1e3 factor and runs to ~100, where the same statement has to
         be relative. Both come to the same place -- a few times 1e-7 of the
-        value, three digits below anything printed.
+        value, two digits below anything printed.
+
+        **The JS bound is 1e-7 and not the 9e-9 the gap actually measures,
+        because the gap is platform-dependent.** `_counts` accumulates the
+        scatter in float32, and the order it accumulates in is the hardware's
+        choice: on a CPU the float32-to-float64 gap here is ~9e-9, on an A100
+        it is ~1.3e-8. This assertion was originally `atol=1e-8`, which against
+        `assert_allclose`'s default `rtol=1e-7` came to an effective 1.26e-8 --
+        and the A100 returned 1.288e-8, failing by two percent. Pinning a
+        measured constant was the error; what the test is for is the claim in
+        its own name, that float32 binning does not disturb the digit
+        `metrics.json` prints. JS prints at six decimals, so 1e-7 is a tenth of
+        the last printed digit, eight times the largest gap either platform has
+        shown, and still well inside the 5.9e-7 of the `np.histogram` path this
+        replaced -- so a regression to that would still fail here.
         """
         rng = np.random.default_rng(11)
         ref = rng.normal(size=(20000, 3)).astype(np.float32)
@@ -302,7 +328,7 @@ class TestFloat32Histograms:
         np.testing.assert_allclose(
             _js_from_histograms(p, q),
             _js_from_histograms(exact_p, exact_q),
-            atol=1e-8,
+            atol=1e-7,
         )
         np.testing.assert_allclose(
             _triangular_from_histograms(p, q),
@@ -342,6 +368,22 @@ class TestFusedMetrics:
 
     It shares one histogram between the two divergences instead of building it
     twice, so what has to hold is that sharing changed no number.
+
+    Unlike `test_js_matches_scipy_on_a_continuous_sample`, these cannot build
+    the histogram once and hand it to both sides: that the fused and unfused
+    paths each bin the sample for themselves **is** the claim. So the two
+    divergences are compared at `rtol=1e-6` rather than `assert_allclose`'s
+    default `1e-7`. `_counts` scatters with `.at[].add`, which on a GPU is an
+    atomic accumulation whose summation order varies between calls, and the
+    resulting last-ulp disagreement is worth ~4e-8 relative on a divergence
+    and has been measured at 1.05e-7 --- i.e. straddling the default, which
+    made these two a coin flip on the cluster and a certainty on a CPU. 1e-6
+    clears the noise and stays three orders inside anything a real fusion bug
+    could produce, since sharing a histogram either changes the algebra
+    outright or changes nothing.
+
+    Wasserstein stays at the default. Its scan is an ordered reduction with no
+    atomics, so the agreement there is exact and worth continuing to pin.
     """
 
     def test_agrees_with_the_individual_helpers(self) -> None:
@@ -352,8 +394,12 @@ class TestFusedMetrics:
         fused = _metrics_per_dim(ref, comp)
 
         np.testing.assert_allclose(fused.wasserstein, _wd_per_dim(ref=ref, comp=comp))
-        np.testing.assert_allclose(fused.jensenshannon, _js_per_dim(ref, comp))
-        np.testing.assert_allclose(fused.triangular, _triangular_per_dim(ref, comp))
+        np.testing.assert_allclose(
+            fused.jensenshannon, _js_per_dim(ref, comp), rtol=1e-6
+        )
+        np.testing.assert_allclose(
+            fused.triangular, _triangular_per_dim(ref, comp), rtol=1e-6
+        )
 
     def test_agrees_with_the_individual_helpers_when_weighted(self) -> None:
         rng = np.random.default_rng(8)
@@ -367,10 +413,10 @@ class TestFusedMetrics:
             fused.wasserstein, _wd_per_dim(ref=ref, comp=comp, weights=w)
         )
         np.testing.assert_allclose(
-            fused.jensenshannon, _js_per_dim(ref, comp, weights=w)
+            fused.jensenshannon, _js_per_dim(ref, comp, weights=w), rtol=1e-6
         )
         np.testing.assert_allclose(
-            fused.triangular, _triangular_per_dim(ref, comp, weights=w)
+            fused.triangular, _triangular_per_dim(ref, comp, weights=w), rtol=1e-6
         )
 
     def test_accepts_weights_already_on_device(self) -> None:

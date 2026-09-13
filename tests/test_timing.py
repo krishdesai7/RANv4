@@ -412,6 +412,7 @@ class TestEnvironment:
         assert not timing._enabled_from_env({})
 
 
+@pytest.mark.slow
 class TestTrainIntegration:
     """The nested phases inside `train`, and the risk that (ahead-of-time)
     compilation introduced to expose them changes the numbers.
@@ -472,3 +473,99 @@ class TestTrainIntegration:
             "epochs",
             "select",
         }
+
+
+class TestRecord:
+    """`record()`: a phase measured in another process.
+
+    `phase()` covers what this interpreter runs. The OmniFold baseline's real
+    work happens under a different Python and reports its breakdown back as
+    numbers, with no block here to wrap.
+    """
+
+    def test_a_recorded_phase_nests_under_the_open_one(self) -> None:
+        timing.enable(True)
+
+        with timing.phase("omnifold"):
+            timing.record("unfold", 2400.0, detail="MultiFold.Unfold")
+
+        by_name = {p.name: p for p in timing.phases()}
+        assert by_name["unfold"].depth == by_name["omnifold"].depth + 1
+        # Stored verbatim, not measured, so the value round-trips exactly;
+        # compared loosely anyway because nothing here depends on the bits.
+        assert by_name["unfold"].seconds == pytest.approx(2400.0)
+        assert by_name["unfold"].detail == "MultiFold.Unfold"
+
+    def test_a_recorded_phase_at_top_level_is_top_level(self) -> None:
+        timing.enable(True)
+
+        timing.record("standalone", 1.0)
+
+        assert timing.phases()[-1].depth == 0
+
+    def test_recording_is_a_no_op_when_timing_is_off(self) -> None:
+        """The layer must cost nothing at all when disabled."""
+        timing.enable(False)
+
+        timing.record("ignored", 1.0)
+
+        assert timing.phases() == ()
+
+    def test_a_recorded_phase_does_not_inflate_the_total(self) -> None:
+        """`total_seconds` sums top-level phases; a child is already inside one."""
+        timing.enable(True)
+
+        with timing.phase("omnifold"):
+            timing.record("unfold", 2400.0)
+
+        top = [p for p in timing.phases() if p.depth == 0]
+        assert len(top) == 1
+        assert top[0].seconds < 1.0
+
+
+class TestWriteFilename:
+    """A second program over the same run directory needs its own file."""
+
+    def test_it_writes_the_named_file(self, tmp_path: Path) -> None:
+        timing.enable(True)
+        with timing.phase("omnifold"):
+            pass
+
+        timing.write(tmp_path, pass_name="omnifold", filename="timings_omnifold.json")
+
+        payload = json.loads(
+            (tmp_path / "artifacts" / "timings_omnifold.json").read_text()
+        )
+        assert [p["name"] for p in payload["phases"]] == ["omnifold"]
+        assert payload["phases"][0]["pass"] == "omnifold"
+
+    def test_it_does_not_touch_the_shared_timings_file(self, tmp_path: Path) -> None:
+        """The reason the parameter exists.
+
+        `write` merges by phase *name* alone, not by (pass, name). The baseline
+        has phases called `data` and `evaluate` of its own, so writing them into
+        `timings.json` would replace the training pass's rows -- the ones anyone
+        actually wants -- rather than sit beside them.
+        """
+        timing.enable(True)
+        with timing.phase("data"):
+            pass
+        timing.write(tmp_path, pass_name="train")
+        timing.reset()
+
+        timing.enable(True)
+        with timing.phase("data"):
+            pass
+        timing.write(tmp_path, pass_name="omnifold", filename="timings_omnifold.json")
+
+        shared = json.loads((tmp_path / "artifacts" / "timings.json").read_text())
+        assert [p["pass"] for p in shared["phases"]] == ["train"]
+
+    def test_the_default_is_still_the_shared_file(self, tmp_path: Path) -> None:
+        timing.enable(True)
+        with timing.phase("train"):
+            pass
+
+        timing.write(tmp_path, pass_name="train")
+
+        assert (tmp_path / "artifacts" / "timings.json").is_file()

@@ -1,16 +1,16 @@
 # Slurm scripts
 
-## submit.sh
+## submit.zsh
 
 End-to-end unfolding run: train -> IBU baseline -> replot with the baseline overlaid -> metrics. Defaults to all six jet observables, which is the full-fledged case; every stage runs in one sequential job on one GPU.
 
 ### Examples
 
 ```zsh
-    sbatch scripts/submit.sh                       # all 6 jet observables
-    sbatch scripts/submit.sh --seed 7              # extra flags reach `ran train`
-    sbatch scripts/submit.sh --var m --var w       # a subset
-    sbatch scripts/submit.sh --dataset gaussian --config params/2d_correlated.yaml
+    sbatch scripts/submit.zsh                       # all 6 jet observables
+    sbatch scripts/submit.zsh --seed 7              # extra flags reach `ran train`
+    sbatch scripts/submit.zsh --var m --var w       # a subset
+    sbatch scripts/submit.zsh --dataset gaussian --config params/2d_correlated.yaml
 ```
 
 ### Queue and resource allocation
@@ -54,16 +54,65 @@ The default `TRAIN_ARGS` is _prepended_ to the command line arguments. Since cli
 - `|| true` ensures a run that crashes does not abort the batch under `set -e`. It just leaves no `SUMMARY` line in its log, and the collection step tolerates the gap.
 - Once the batch is complete, the script pulls the `SUMMARY` line out of each per-run log, in seed order, and appends to f64.log/f32.log. A run that crashed leaves no `SUMMARY` line and is silently skipped here; check its own log file under `RUN_DIR` to diagnose.
 
-## submit_hparam.sh
+## submit_omnifold.zsh
 
-One hyperparameter arm sweep, packed into a single multi-node job: three levels of one knob x eight initialization seeds = 24 runs, one A100 each, a single wave on 6 nodes. Run it on a login node with `zsh scripts/submit_hparam.sh`. Do NOT sbatch this file itself; it computes the arm directory and submits the job. The collect step runs inline at the end of the same job.
+The OmniFold baseline against an **existing** run directory: unfold -> redraw the
+figures with the OmniFold curve on them -> re-score -> rebuild the report. The
+RAN training in that directory is read, never repeated.
+
+### Examples
+
+```zsh
+    sbatch scripts/submit_omnifold.zsh runs/2026-09-06T203848Z
+    sbatch scripts/submit_omnifold.zsh runs/2026-09-06T203848Z --niter 5
+```
+
+Extra flags after the run directory reach `ran baseline omnifold`.
+
+### Why it is a separate job
+
+OmniFold measured ~41 minutes on the shipped configuration (1.6M samples, twelve
+observables, 3 iterations, 50 epochs), against `submit.zsh`'s entire 10-minute
+wall clock. Folding it in would have meant sizing that job for the baseline
+rather than for the method. This one asks for 75 minutes, ~1.5x the whole
+pipeline.
+
+### Two things that fail quietly without help
+
+**`module load cudatoolkit/12.9`**, which the script does and then unloads. The
+default Perlmutter environment leads `LD_LIBRARY_PATH` with CUDA 13.2 trees and
+the `tensorflow` wheel is a CUDA 12 build; one library goes unreachable
+(`libcusolver.so.11`) and TensorFlow silently registers no GPU, running on the
+CPU with correct results and no error. The package warns when the worker reports
+a CPU device --- watch the log for it.
+
+The unload is an `EXIT` trap rather than zsh's `{ } always { }`, because
+`always` does not run under `set -e`.
+
+`module` itself has to be initialised first --- it is a shell function only a
+login shell gets, and a batch job otherwise dies with
+`command not found: module`. `scripts/_lmod.zsh` does that and every script
+calling `module` sources it before the first call; `tests/test_scripts.py`
+checks that they do.
+
+**The worker's uv environment must already exist.** It is a PEP 723 script, so it
+is not in `uv.lock`, and first use pulls ~3.5GB of CUDA wheels --- which a compute
+node generally cannot do. Warm it on a login node:
+
+```zsh
+    uv run --no-project src/ran/baselines/_omnifold_worker.py
+```
+
+## submit_hparam.zsh
+
+One hyperparameter arm sweep, packed into a single multi-node job: three levels of one knob x eight initialization seeds = 24 runs, one A100 each, a single wave on 6 nodes. Run it on a login node with `zsh scripts/submit_hparam.zsh`. Do NOT sbatch this file itself; it computes the arm directory and submits the job. The collect step runs inline at the end of the same job.
 
 Run on the login node:
 
 ```zsh
-    zsh scripts/submit_hparam.sh                                  # lr_g at 3e-5 / 1e-4 / 3e-4
-    FLAG=--lr-d LEVELS="1e-4 3e-4 1e-3" zsh scripts/submit_hparam.sh
-    NODES=3 zsh scripts/submit_hparam.sh                          # half the GPUs, two waves
+    zsh scripts/submit_hparam.zsh                                  # lr_g at 3e-5 / 1e-4 / 3e-4
+    FLAG=--lr-d LEVELS="1e-4 3e-4 1e-3" zsh scripts/submit_hparam.zsh
+    NODES=3 zsh scripts/submit_hparam.zsh                          # half the GPUs, two waves
 ```
 
 ### Why every arm runs the same seeds
@@ -99,7 +148,7 @@ If the jet cache has not been populated, a cold cache pulls 3.3GB from Zenodo in
 - `JOB`: The job ID. `--time` is set for the wall clock of each run is ~15s of training (benchmarks/boundary.py, A100) plus npz loading and the scipy metrics. The margin is for the load, because 24 processes read the 1M-event jet cache at once.
 - `SLURM_JOB_ID`: The SLURM job ID.
 
-## submit_uncertainty.sh
+## submit_uncertainty.zsh
 
 The bootstrap x seed variance design: `B` bootstrap datasets crossed with `S` initialization seeds, one `ran uncertainty run` per cell, then one `ran uncertainty collect` over the grid. The statistics — why a grid rather than two one-dimensional sweeps, why `data_seed` is held fixed, what the correction and the closure floor are for — are argued in `src/ran/uncertainty/README.md`; this section is only about the allocation.
 
@@ -109,7 +158,7 @@ Written out rather than guessed at, since the last two launchers here were sized
 
 ### Warm up
 
-Same as `submit_hparam.sh`, and it matters more here: a cold cache would pull 3.3GB from Zenodo `B*S` times over. `uv run python -c "from ran.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"` on a login node first.
+Same as `submit_hparam.zsh`, and it matters more here: a cold cache would pull 3.3GB from Zenodo `B*S` times over. `uv run python -c "from ran.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"` on a login node first.
 
 ### Which grid to run
 
@@ -122,4 +171,4 @@ Same as `submit_hparam.sh`, and it matters more here: a cold cache would pull 3.
 - `N_EVAL`: Size of the common evaluation set held out before resampling. Every cell is read on exactly these events; the default 100k costs 400KB per cell on disk.
 - `N_BINS`: Bins for the covariance, passed to `collect`. Equal-occupancy, so a discrete observable can come back with fewer.
 - `RUN_ARGS`: Training arguments. Defaults to the paper's configuration on purpose — a design run at cheaper settings is a variance budget for a model nobody is publishing.
-- `NODES`, `GPUS_PER_NODE`, `GPUS_TOTAL`, `PROJECT_DIR`, `DESIGN_DIR`, `JOB`: as in `submit_hparam.sh`.
+- `NODES`, `GPUS_PER_NODE`, `GPUS_TOTAL`, `PROJECT_DIR`, `DESIGN_DIR`, `JOB`: as in `submit_hparam.zsh`.

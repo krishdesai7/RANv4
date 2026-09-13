@@ -22,6 +22,7 @@ def _one_population(n: int, dim: int = 3, seed: int = 0) -> np.ndarray:
 
 
 class TestNullFloor:
+    @pytest.mark.slow
     def test_the_null_estimate_is_consistent_with_zero(self) -> None:
         """Both halves come from one population, so the true MMD^2 is exactly 0.
 
@@ -32,6 +33,7 @@ class TestNullFloor:
 
         assert abs(estimate.mean) < 3.0 * estimate.standard_error
 
+    @pytest.mark.slow
     def test_the_estimator_takes_both_signs(self) -> None:
         """The unbiased U-statistic is not a distance and goes negative.
 
@@ -43,6 +45,7 @@ class TestNullFloor:
 
         assert min(estimate.values) < 0.0 < max(estimate.values)
 
+    @pytest.mark.slow
     def test_the_spread_shrinks_as_the_subsample_grows(self) -> None:
         """The 1/m scaling the old extrapolation assumed, actually checked."""
         small = null_floor(_one_population(8192), m=256, repeats=24, seed=1)

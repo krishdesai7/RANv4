@@ -41,6 +41,18 @@ _CACHE_WRITABLE = _default_cache_is_writable()
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    # Marked by *cause*, not by stopwatch, so the set stays meaningful as the
+    # hardware and the suite move: a test is slow here if it runs a training
+    # program, shells out to `pdflatex`, or averages many random draws to
+    # measure a statistical property. Those ~37 tests are ~55s of a ~76s
+    # suite; the remaining ~500 cost about 20s together, which is what
+    # `just test-fast` buys. Nothing is excluded by default -- `just test`,
+    # `just validate` and CI all still run everything.
+    config.addinivalue_line(
+        "markers",
+        "slow: trains a network, compiles a document, or averages many draws "
+        "(deselect for a quick pass with `-m 'not slow'`, or `just test-fast`)",
+    )
     config.addinivalue_line(
         "markers",
         "writes_default_cache: needs a writable RAN default cache dir "

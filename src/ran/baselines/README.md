@@ -2,17 +2,26 @@
 
 This directory contains the comparison baselines for the RAN project.
 
-Comparison baseline: **IBU**
+Comparison baselines: **IBU** and **OmniFold**
 
 ```python
-    from ran.baselines import evaluate_runs
+from ran.baselines import evaluate_runs  # IBU
+from ran.baselines.omnifold import evaluate_runs  # OmniFold
 ```
+
+IBU runs in this process. OmniFold cannot: it needs TensorFlow, which has no
+wheels for this project's Python floor and could not share a Keras backend
+with JAX even if it did. `omnifold.py` is the host half and
+`_omnifold_worker.py` --- a PEP 723 script, never imported --- is the other, with
+one `.npz` file between them. The OmniFold section of `CLAUDE.md` carries the
+whole argument, including the `module load cudatoolkit/12.9` that Perlmutter
+needs and the silent CPU fallback it prevents.
 
 ## Shared
 
 Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics RAN is scored by.
 
-A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. IBU is currently the only caller; the split is what makes adding a second one a matter of writing an unfolder.
+A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. Both baselines are callers, which is what the split was for: adding OmniFold was a matter of writing an unfolder and a subprocess, and neither arm's scoring moved.
 
 ### `_shared::parse_run_config`
 

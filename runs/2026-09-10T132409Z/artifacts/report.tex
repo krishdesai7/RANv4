@@ -3,7 +3,10 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-\usepackage[margin=18mm,includeheadfoot]{geometry}
+% No `includeheadfoot`: with no running head and no folio there is nothing
+% to reserve room for, and the 64.5pt it held back is 10% of the landscape
+% figure width.
+\usepackage[margin=18mm]{geometry}
 \usepackage{microtype}
 \usepackage{booktabs}
 \usepackage{siunitx}
@@ -13,7 +16,6 @@
 \usepackage{pdflscape}
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
-\usepackage{fancyhdr}
 
 % -----------------------------------------------------------------------------
 % Replacement contract
@@ -39,29 +41,26 @@
 \setlength{\tabcolsep}{5pt}
 \renewcommand{\arraystretch}{1.12}
 
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small\sffamily Run report}
-\fancyhead[R]{\small\sffamily \RunName}
-\fancyfoot[C]{\small\thepage}
-\renewcommand{\headrulewidth}{0.35pt}
-\renewcommand{\footrulewidth}{0pt}
+% No running head and no folio. The title block on page one already names
+% the run, so repeating it down the report bought nothing and cost every page
+% a head, a rule and a footskip -- height the landscape figures want.
+\pagestyle{empty}
 
 \newcommand{\ReportTitle}{
-  {\sffamily\bfseries\LARGE Run report\par}
+  {\bfseries\LARGE Run report\par}
   \vspace{2pt}
-  {\sffamily\large\color{ReportGray}\RunName\par}
+  {\large\color{ReportGray}\RunName\par}
   \vspace{5pt}
   {\color{ReportGray}\rule{\linewidth}{0.6pt}}
 }
 
 \newcommand{\ReportSection}[1]{
   \par\vspace{1.05em}
-  {\sffamily\bfseries\large #1\par}
+  {\bfseries\large #1\par}
   \vspace{0.35em}
 }
 
-\newcommand{\FigureLabel}[1]{{\sffamily\bfseries\normalsize #1\par}\vspace{0.35em}}
+\newcommand{\FigureLabel}[1]{{\bfseries\normalsize #1\par}\vspace{0.35em}}
 
 % -----------------------------------------------------------------------------
 % Numeric presentation
@@ -82,13 +81,24 @@
 % quantities. \Percent is useful outside S columns; percentage columns in the
 % metric tables apply the same three-significant-figure policy automatically.
 \newcommand{\Count}[1]{\num[round-mode=none]{#1}}
-\newcommand{\Raw}[1]{\num[round-mode=figures,round-precision=4]{#1}}
+% `exponent-thresholds` keeps the middle of the range in plain decimal and
+% sends only the extremes to scientific notation, so `lr_g` reads
+% 3.000x10^{-5} instead of 0.00003000 while a 58.07-second phase stays 58.07.
+\newcommand{\Raw}[1]{\num[
+  round-mode        = figures,
+  round-precision   = 4,
+  exponent-mode     = threshold,
+  exponent-thresholds = -3:5
+]{#1}}
 \newcommand{\Percent}[1]{\num[round-mode=places,round-precision=1]{#1}\,\%}
 
+% Scaled by 10^3 in the generator, so a real run spans 0.08472..303.0 across
+% the three metrics: three integer digits, five decimals at four significant
+% figures.
 \newcolumntype{D}{S[
   round-mode=figures,
   round-precision=4,
-  table-format=2.8
+  table-format=3.5
 ]}
 \newcolumntype{P}{S[
   round-mode=places,
@@ -107,18 +117,46 @@
 }
 \newcommand{\TimingSubphase}[1]{\hspace*{1.15em}#1}
 
+% One page of a multi-page figure. `\ReportGraphic`'s two-argument form is
+% still what the single-page diagnostics use; this one adds `page=` and drops
+% the height cap, because a level figure page is square and fits the text
+% width -- capping its height is what made the panels unreadable.
+\newcommand{\ReportPage}[2]{\IfFileExists{#1}{
+    % A six-panel page is square, so it is width-limited and leaves roughly a
+    % third of the page height spare; the fills centre it rather than letting
+    % it ride the top margin.
+    % No \vspace{\fill} and no `center` ENVIRONMENT, both of which cost a
+    % page here. The graphic clears the block by ~6pt, so the environment's
+    % \topsep alone is enough to force a break; and a leading \fill on a
+    % fresh page yields a page of nothing but fill. A figure sized to 99% of
+    % the block does not need centring.
+    %
+    % Measured inside a `pdflscape` landscape block under the \newgeometry
+    % below: \linewidth is 749.4pt and \textheight is 568.8pt -- the package
+    % swaps them, so \linewidth really is the wide dimension here.
+    \null\vfill
+    {\centering\includegraphics[width=\linewidth,page=#2]{#1}\par}
+    \vfill
+}{
+    \fbox{\parbox[c][0.4\textheight][c]{0.94\linewidth}{
+        \centering\color{ReportGray}
+        Missing figure\par\medskip
+        \ttfamily\detokenize{#1}}}
+  }
+}
+
 \newcommand{\ReportGraphic}[2]{\IfFileExists{#1}{
     \includegraphics[width=\linewidth,height=#2,keepaspectratio]{#1}
 }{
     \fbox{\parbox[c][#2][c]{0.94\linewidth}{
-        \centering\sffamily\color{ReportGray}
+        \centering\color{ReportGray}
         Missing figure\par\medskip
         \ttfamily\detokenize{#1}}}
   }
 }
 
 \begin{document}
-\thispagestyle{plain}
+\thispagestyle{empty}
 
 \ReportTitle
 
@@ -137,10 +175,10 @@
   @{}
 }
 \toprule
-\multicolumn{1}{@{}l}{\sffamily\bfseries Parameter} &
-\multicolumn{1}{l}{\sffamily\bfseries Value} &
-\multicolumn{1}{l}{\sffamily\bfseries Parameter} &
-\multicolumn{1}{l@{}}{\sffamily\bfseries Value} \\
+\multicolumn{1}{@{}l}{\bfseries Parameter} &
+\multicolumn{1}{l}{\bfseries Value} &
+\multicolumn{1}{l}{\bfseries Parameter} &
+\multicolumn{1}{l@{}}{\bfseries Value} \\
 \midrule
 % Example scalar row:
 % \ConfigPair{batch_size}{\Count{1024}}{n_samples}{\Count{1600000}}
@@ -155,9 +193,9 @@
 \ConfigPair{lambda_dispersion}{\Raw{0.015}}{mmd_subsample}{\Count{16384}}
 \ConfigPair{mmd_test}{\Raw{0.0003705025}}{best_epoch}{\Count{38}}
 \ConfigPair{compile_cache_warm}{True}{}{}
-\ConfigWide{variables}{\ConfigVal{m, M, w, tau21, zg, sdm, q, f_ch, lha, ang2, ptd, n_ch}}
-\ConfigWide{mmd_sigmas_detector}{\Raw{3.1074700356} $\times\ (1/2,\ 1/\sqrt2,\ 1,\ \sqrt2,\ 2)$}
-\ConfigWide{mmd_sigmas_particle}{\Raw{3.0271127224} $\times\ (1/2,\ 1/\sqrt2,\ 1,\ \sqrt2,\ 2)$}
+\ConfigWide{variables}{$m$ [GeV], $\ln\rho$, $\lambda^{1}_{0.5}$, $w$, $\lambda^{1}_{2}$, $z_g$, $\tau_{21}^{(\beta=1)}$, $M$, $n_{ch}$, $f_{ch}$, $p_T^D$, $q$}
+\ConfigWide{mmd_sigmas_detector}{\Raw{3.1074700356} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
+\ConfigWide{mmd_sigmas_particle}{\Raw{3.0271127224} \(    \times\ (\frac12,\ \frac1{\sqrt2},\ 1,\ \sqrt2,\ 2)\)}
 \bottomrule
 \end{tabularx}
 \endgroup
@@ -170,182 +208,354 @@
 \begin{tabularx}{\linewidth}{
   @{}
   >{\raggedright\arraybackslash}p{0.24\linewidth}
-  S[round-mode=figures,round-precision=4,table-format=4.4]
-  S[round-mode=figures,round-precision=3,table-format=3.3]
+  % Fixed decimal places, not significant figures: a phase that took
+  % 0.005268s and one that took 58.07s should line up on the decimal point,
+  % and four significant figures on the former is noise.
+  S[round-mode=places,round-precision=3,table-format=4.3]
+  S[round-mode=places,round-precision=1,table-format=3.1]
   >{\raggedright\arraybackslash}X
   @{}
 }
 \toprule
-{\sffamily\bfseries Phase} &
-{\sffamily\bfseries Seconds} &
-{\sffamily\bfseries Share (\%)} &
-{\sffamily\bfseries Detail} \\
+{\bfseries Phase} &
+{\bfseries Seconds} &
+{\bfseries Share (\%)} &
+{\bfseries Detail} \\
 \midrule
 % A nested phase can be written as \TimingSubphase{transfer}.
 % Insert \midrule before the total row when generating TIMINGS_ROWS.
-train & 58.074187664 & 79.6256944876 & train \\
+train & 58.074187664 & 81.1045586173 & train \\
 \TimingSubphase{transfer} & 1.448896604 &  & train \\
 \TimingSubphase{compile} & 6.796236316 &  & train \\
 \TimingSubphase{epochs} & 48.0587524341 &  & train \\
 \TimingSubphase{select} & 1.500353443 &  & train \\
-particle\_mmd & 0.556231163 & 0.7626502312 & train \\
-save & 0.070854773 & 0.0971491938 & train \\
-data & 3.007580315 & 4.1237024734 & cache hit -- load \\
-load & 1.810637815 & 2.4825709887 & load \\
-plots & 9.4130477719 & 12.9062582919 & load \\
-evaluate & 0.00143996 & 0.0019743335 & load \\
+particle\_mmd & 0.556231163 & 0.7768147051 & train \\
+save & 0.070854773 & 0.0989535166 & train \\
+data & 1.587460474 & 2.2169966769 & cache hit -- load \\
+load & 1.526011577 & 2.1311791069 & load \\
+plots & 9.781196362 & 13.6601069356 & load \\
+evaluate & 0.008156023 & 0.0113904416 & load \\
 \midrule
-\textbf{total} & 72.9339794619 & 100 & \\
+\textbf{total} & 71.604098036 & 100 & \\
 \bottomrule
 \end{tabularx}
 \endgroup
 \clearpage
 
-\begin{landscape}
-\thispagestyle{empty}
-
-
 \ReportSection{Detector-level metrics}
 {Distance to Data. Improvements are relative to Simulation.\par}
 \vspace{0.45em}
 
+\FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
-\fontsize{7.25}{8.35}\selectfont
-\setlength{\tabcolsep}{2.7pt}
-\renewcommand{\arraystretch}{1.04}
-\begin{adjustbox}{max width=\linewidth}
-\begin{tabular}{@{}l *{3}{D D P D P}@{}}
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
-& \multicolumn{5}{c}{\sffamily\bfseries Wasserstein}
-& \multicolumn{5}{c}{\sffamily\bfseries JS divergence}
-& \multicolumn{5}{c}{\sffamily\bfseries VLC divergence $[\times 10^{3}]$} \\
-\cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(l){12-16}
-{\sffamily\bfseries Observable}
-& \multicolumn{1}{c}{\sffamily\bfseries Sim.}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries Sim.}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries Sim.}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}} \\
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Sim.}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 0.2089450359 & 0.1387795806 & 33.5808194856 & 0.0115695624 & 94.4628680378 & 0.006761803 & 0.0036660941 & 45.78229909 & 0.0000951211 & 98.5932584984 & 26.9314510519 & 14.6161036726 & 45.7284954885 & 0.3598544432 & 98.6638133885 \\
-$\ln\rho$ & 0.2279170454 & 0.0207117833 & 90.9125781762 & 0.0132219605 & 94.1987838188 & 0.0083825885 & 0.0004017258 & 95.20761679 & 0.0001516212 & 98.1912364042 & 33.3110062513 & 1.5759149625 & 95.2690862875 & 0.5863583901 & 98.2397457894 \\
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 208.9450359344 & 138.7795805931 & 33.5808194856 & 6.7289667204 & 96.7795517657 & 11.5695353597 & 94.4628809639 \\
+$\ln\rho$ & 227.9170453548 & 20.7117833197 & 90.9125781762 & 12.6123335212 & 94.4662613972 & 13.2219288498 & 94.198797712 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 0.2625747323 & 0.0128423022 & 95.1090879222 & 0.0116137424 & 95.576976373 & 0.009359252 & 0.000471357 & 94.9637320882 & 0.0001209396 & 98.7078071449 & 37.1871030507 & 1.8772200247 & 94.9519594949 & 0.4776779674 & 98.7154741075 \\
-$w$ & 0.2655844688 & 0.0099775232 & 96.2431827128 & 0.0114132212 & 95.7026021524 & 0.0091394844 & 0.0004526596 & 95.0472084977 & 0.0001261055 & 98.6202119943 & 36.3196910709 & 1.8003918726 & 95.0429317555 & 0.4964738652 & 98.6330449115 \\
-$\lambda^{1}_{2}$ & 0.255446136 & 0.0092154117 & 96.3924242701 & 0.0130957598 & 94.8733772247 & 0.0077760265 & 0.0001728244 & 97.7774712439 & 0.0001293662 & 98.3363459972 & 30.9027188537 & 0.6583075943 & 97.8697421499 & 0.4797583092 & 98.4475207133 \\
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 262.5747323036 & 12.8423022106 & 95.1090879222 & 8.7757436559 & 96.6578114418 & 11.613663286 & 95.5770065215 \\
+$w$ & 265.5844688416 & 9.9775232375 & 96.2431827128 & 7.8448560089 & 97.0461917283 & 11.4131141454 & 95.7026424794 \\
+$\lambda^{1}_{2}$ & 255.4461359978 & 9.2154117301 & 96.3924242701 & 8.6373919621 & 96.6187032235 & 13.0955660716 & 94.8734530587 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Splitting and 2-prong substructure} \\
-$z_g$$^\dag$ & 0.0604495928 & 0.0604495965 & 0 & 0.0136794057 & 77.3705577694 & 0.0006722559 & 0.0006722559 & 0 & 0.0001035194 & 84.6011973931 & 2.6826718417 & 2.6826718417 & 0 & 0.4140311524 & 84.5664629596 \\
-$\tau_{21}^{(\beta=1)}$ & 0.1218080223 & 0.0701043755 & 42.4468321704 & 0.0176783316 & 85.486726362 & 0.0033724719 & 0.0019335023 & 42.66809677 & 0.0001638377 & 95.1419107237 & 13.4434227393 & 7.7124525275 & 42.6302908338 & 0.6503891613 & 95.1620270083 \\
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 60.4495927691 & 60.4495964944 & 0 & 13.6041063815 & 77.4951245824 & 13.6793619022 & 77.3706301804 \\
+$\tau_{21}^{(\beta=1)}$ & 121.8080222607 & 70.1043754816 & 42.4468321704 & 30.6377746165 & 74.8474902984 & 17.6784172654 & 85.4866560204 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 0.2242059559 & 0.1773438752 & 20.9013593325 & 0.0216805991 & 90.3300521188 & 0.0096403818 & 0.0076325001 & 20.8278236211 & 0.0001829819 & 98.1019223765 & 38.2530744988 & 30.3072240657 & 20.7717955673 & 0.7003857726 & 98.1690732529 \\
-$n_{ch}$ & 0.2208139598 & 0.1723359972 & 21.9542004452 & 0.0228748117 & 89.6406859054 & 0.0075121533 & 0.0063135194 & 15.9559297945 & 0.0001431093 & 98.0949634783 & 29.8064597933 & 25.0663792681 & 15.9028631985 & 0.5458803618 & 98.1685837042 \\
-$f_{ch}$ & 0.0528638437 & 0.0409425572 & 22.5509265686 & 0.007416605 & 85.9703636862 & 0.001032771 & 0.000796034 & 22.9225017975 & 0.0000990394 & 90.4103262418 & 4.1247778948 & 3.1769820356 & 22.9781065397 & 0.3960887822 & 90.3973306622 \\
-$p_T^D$ & 0.2567871213 & 0.0307952873 & 88.007464243 & 0.0185725614 & 92.7673314187 & 0.0082226736 & 0.0013110416 & 84.0557752811 & 0.0001520376 & 98.150995077 & 32.6459784083 & 5.210731733 & 84.0386718762 & 0.6035441533 & 98.1512450149 \\
-$q$ & 0.0796653181 & 0.0175051391 & 78.0266500868 & 0.0074962098 & 90.5903723339 & 0.001576324 & 0.0002512138 & 84.0633166834 & 0.0000847185 & 94.6255647784 & 6.2611611131 & 0.9939508393 & 84.1251355557 & 0.3291716789 & 94.7426416131 \\
-\multicolumn{16}{@{}l}{\footnotesize $^\dag$ IBU's purity binning produced fewer than two bins for this observable, so IBU declined to unfold it and returned its input unchanged. The improvement shown for it is not a measurement.} \\
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 224.205955863 & 177.3438751698 & 20.9013593325 & 6.0871765018 & 97.2850067794 & 21.6804780066 & 90.3301061191 \\
+$n_{ch}$ & 220.813959837 & 172.3359972239 & 21.9542004452 & 6.4426842146 & 97.0823019278 & 22.8746943176 & 89.6407390482 \\
+$f_{ch}$ & 52.863843739 & 40.9425571561 & 22.5509265686 & 4.406388849 & 91.6646453656 & 7.4166338891 & 85.9703090723 \\
+$p_T^D$ & 256.7871212959 & 30.7952873409 & 88.007464243 & 3.2742067706 & 98.724933418 & 18.5725465417 & 92.7673372216 \\
+$q$ & 79.6653181314 & 17.5051391125 & 78.0266500868 & 3.8286380004 & 95.1940968916 & 7.4963700026 & 90.5901712584 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
-\end{adjustbox}
 \endgroup
-\vspace{0.75em}
+\vspace{1.1em}
 
+\FigureLabel{JS divergence \([ \times \num{e3} ]\)}
+\begingroup
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
+\toprule
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Sim.}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 6.761803014 & 3.6660941343 & 45.78229909 & 0.0768191876 & 98.8639244972 & 0.0951188459 & 98.5932916757 \\
+$\ln\rho$ & 8.3825885079 & 0.4017257642 & 95.20761679 & 0.1643611501 & 98.0392554165 & 0.151622056 & 98.1912263038 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 9.3592519873 & 0.4713570046 & 94.9637320882 & 0.1298921524 & 98.6121524182 & 0.1209411835 & 98.707790071 \\
+$w$ & 9.1394844375 & 0.4526596086 & 95.0472084977 & 0.1223395796 & 98.6614170586 & 0.1261054656 & 98.6202124803 \\
+$\lambda^{1}_{2}$ & 7.7760265218 & 0.1728244255 & 97.7774712439 & 0.1306618884 & 98.3196830921 & 0.1293666616 & 98.3363397582 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 0.6722558597 & 0.6722558597 & 0 & 0.0999287658 & 85.1353075786 & 0.1035193151 & 84.6012030069 \\
+$\tau_{21}^{(\beta=1)}$ & 3.372471878 & 1.9335023135 & 42.66809677 & 0.2791606356 & 91.7223732105 & 0.1638381852 & 95.1418961771 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 9.6403818342 & 7.6325001094 & 20.8278236211 & 0.120244132 & 98.7527036374 & 0.1829837413 & 98.1019035926 \\
+$n_{ch}$ & 7.5121532815 & 6.3135193779 & 15.9559297945 & 0.1042329003 & 98.612476391 & 0.1431090427 & 98.0949664182 \\
+$f_{ch}$ & 1.0327709892 & 0.7960340406 & 22.9225017975 & 0.0879555654 & 91.483536399 & 0.0990395969 & 90.4103041293 \\
+$p_T^D$ & 8.2226736295 & 1.3110415614 & 84.0557752811 & 0.0740775608 & 99.0991061525 & 0.1520380189 & 98.1509904715 \\
+$q$ & 1.5763239582 & 0.2512137573 & 84.0633166834 & 0.0733139304 & 95.3490568953 & 0.0847186928 & 94.6255531821 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{1.1em}
+
+\FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
+\begingroup
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
+\toprule
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Sim.}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 26.9314510519 & 14.6161036726 & 45.7284954885 & 0.2829046525 & 98.9495380253 & 0.3598454485 & 98.6638467871 \\
+$\ln\rho$ & 33.3110062513 & 1.5759149625 & 95.2690862875 & 0.6368252405 & 98.0882437604 & 0.5863617787 & 98.2397356169 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 37.1871030507 & 1.8772200247 & 94.9519594949 & 0.5138462852 & 98.6182137271 & 0.477684356 & 98.7154569276 \\
+$w$ & 36.3196910709 & 1.8003918726 & 95.0429317555 & 0.4812786993 & 98.674882178 & 0.4964736872 & 98.6330454017 \\
+$\lambda^{1}_{2}$ & 30.9027188537 & 0.6583075943 & 97.8697421499 & 0.4817277559 & 98.4411476602 & 0.4797602496 & 98.4475144342 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 2.6826718417 & 2.6826718417 & 0 & 0.3996730143 & 85.1016807898 & 0.4140310015 & 84.5664685847 \\
+$\tau_{21}^{(\beta=1)}$ & 13.4434227393 & 7.7124525275 & 42.6302908338 & 1.1119824265 & 91.7284277374 & 0.6503911242 & 95.1620124069 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 38.2530744988 & 30.3072240657 & 20.7717955673 & 0.4464584011 & 98.8328823056 & 0.7003930126 & 98.1690543262 \\
+$n_{ch}$ & 29.8064597933 & 25.0663792681 & 15.9028631985 & 0.3874273838 & 98.7001898698 & 0.5458794784 & 98.1685866682 \\
+$f_{ch}$ & 4.1247778948 & 3.1769820356 & 22.9781065397 & 0.351773836 & 91.4716902339 & 0.3960896953 & 90.3973085231 \\
+$p_T^D$ & 32.6459784083 & 5.210731733 & 84.0386718762 & 0.2920975772 & 99.1052570902 & 0.60354567 & 98.151240369 \\
+$q$ & 6.2611611131 & 0.9939508393 & 84.1251355557 & 0.2829577263 & 95.4807467623 & 0.3291724096 & 94.7426299428 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{1.1em}
+
+\clearpage
 
 \ReportSection{Particle-level metrics}
 {Distance to Truth. Improvements are relative to Generation.\par}
 \vspace{0.45em}
 
+\FigureLabel{Wasserstein \([ \times \num{e3} ]\)}
 \begingroup
-\fontsize{7.25}{8.35}\selectfont
-\setlength{\tabcolsep}{2.7pt}
-\renewcommand{\arraystretch}{1.04}
-\begin{adjustbox}{max width=\linewidth}
-\begin{tabular}{@{}l *{3}{D D P D P}@{}}
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
 \toprule
-& \multicolumn{5}{c}{\sffamily\bfseries Wasserstein}
-& \multicolumn{5}{c}{\sffamily\bfseries JS divergence}
-& \multicolumn{5}{c}{\sffamily\bfseries VLC divergence $[\times 10^{3}]$} \\
-\cmidrule(lr){2-6}\cmidrule(lr){7-11}\cmidrule(l){12-16}
-{\sffamily\bfseries Observable}
-& \multicolumn{1}{c}{\sffamily\bfseries Gen}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries Gen}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries Gen}
-& \multicolumn{1}{c}{\sffamily\bfseries IBU}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{IBU impr.\\(\%)}}
-& \multicolumn{1}{c}{\sffamily\bfseries RAN}
-& \multicolumn{1}{c}{\sffamily\bfseries\shortstack{RAN impr.\\(\%)}} \\
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Gen}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Mass and hard scale (IRC-safe kinematics)} \\
-$m$ [GeV] & 0.1117496192 & 0.0940755829 & 15.8157463474 & 0.0897991657 & 19.6425309258 & 0.0019631892 & 0.0118625854 & -504.2507590415 & 0.0014237952 & 27.4753927416 & 7.8090980373 & 45.934521504 & -488.2180155032 & 5.6522348015 & 27.6198765275 \\
-$\ln\rho$ & 0.2530850172 & 0.0325681791 & 87.1315262236 & 0.0142450416 & 94.3714401574 & 0.0098779271 & 0.0017308084 & 82.47802055 & 0.0001730016 & 98.2486037339 & 39.2748792187 & 6.8889291666 & 82.4597062966 & 0.6778620386 & 98.2740569747 \\
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 111.7496192455 & 94.0755829215 & 15.8157463474 & 104.1111424565 & 6.8353492751 & 89.7995308042 & 19.6422042326 \\
+$\ln\rho$ & 253.0850172043 & 32.5681790709 & 87.1315262236 & 12.8098931164 & 94.9385019873 & 14.245073311 & 94.3714276458 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Continuous angularities (IRC-safe jet shapes)} \\
-$\lambda^{1}_{0.5}$ & 0.3029640913 & 0.0187075287 & 93.8251663324 & 0.0084001571 & 97.2273423369 & 0.0123385315 & 0.002008636 & 83.7206232777 & 0.0001849725 & 98.5008551515 & 48.9794217337 & 8.0138940422 & 83.6382428406 & 0.7336575351 & 98.5021106638 \\
-$w$ & 0.2840740681 & 0.0122874109 & 95.6745749477 & 0.0065544229 & 97.6927063619 & 0.0113879424 & 0.001465136 & 87.1343221488 & 0.0001998819 & 98.2447932408 & 45.2302572908 & 5.8371176865 & 87.0946617681 & 0.7825185721 & 98.2699223508 \\
-$\lambda^{1}_{2}$ & 0.2538002133 & 0.011126874 & 95.6158925682 & 0.0062268702 & 97.5465464944 & 0.0088244133 & 0.0008334801 & 90.5548380948 & 0.0001384421 & 98.4311468348 & 35.0773740147 & 3.3152624103 & 90.5487155084 & 0.5364911215 & 98.4705493597 \\
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 302.964091301 & 18.7075287104 & 93.8251663324 & 14.4016947597 & 95.2464020743 & 8.4001487121 & 97.2273451035 \\
+$w$ & 284.0740680695 & 12.2874109074 & 95.6745749477 & 15.1004120708 & 94.6843398367 & 6.5544247627 & 97.6927057062 \\
+$\lambda^{1}_{2}$ & 253.8002133369 & 11.1268740147 & 95.6158925682 & 18.5080841184 & 92.7076168002 & 6.2268190086 & 97.5465666767 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Splitting and 2-prong substructure} \\
-$z_g$$^\dag$ & 0.1134187728 & 0.1134187728 & 0 & 0.0151159083 & 86.6724811319 & 0.0020414275 & 0.0020414275 & 0 & 0.000131653 & 93.550932317 & 8.0863218607 & 8.0863218607 & 0 & 0.5261713437 & 93.4930694978 \\
-$\tau_{21}^{(\beta=1)}$ & 0.2591708004 & 0.1504660547 & 41.9432843445 & 0.0104156826 & 95.9811512133 & 0.0105038527 & 0.0065773588 & 37.3814640665 & 0.0001376822 & 98.6892214981 & 41.7543509502 & 26.170508436 & 37.3226793367 & 0.543264466 & 98.6989033392 \\
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 113.4187728167 & 113.4187728167 & 0 & 23.9504240453 & 78.8831923935 & 15.1158720255 & 86.6725131562 \\
+$\tau_{21}^{(\beta=1)}$ & 259.1708004475 & 150.466054678 & 41.9432843445 & 34.7668081522 & 86.5853683779 & 10.4156546295 & 95.9811619938 \\
 \midrule
-\multicolumn{16}{@{}l}{\itshape Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
-$M$ & 0.2567945123 & 0.2048458755 & 20.2296429691 & 0.0206850655 & 91.9448958022 & 0.0078416884 & 0.0128331096 & -63.6523776955 & 0.0002267325 & 97.1086268396 & 31.1005297084 & 49.8465730636 & -60.2756400969 & 0.8651363637 & 97.2182584289 \\
-$n_{ch}$ & 0.2345819026 & 0.1885895431 & 19.6060936607 & 0.0226868074 & 90.3288330493 & 0.0064474188 & 0.0097730276 & -51.5804681989 & 0.0001706994 & 97.3524377141 & 25.5759196819 & 38.3823403546 & -50.0721805199 & 0.6458183355 & 97.4748969206 \\
-$f_{ch}$ & 0.0457827449 & 0.0453262404 & 0.9971184844 & 0.0094422456 & 79.3759731717 & 0.0010249946 & 0.0009435224 & 7.9485466471 & 0.0001304743 & 87.2707313076 & 4.0949352109 & 3.7658117007 & 8.0373313194 & 0.5209410251 & 87.2784061719 \\
-$p_T^D$ & 0.2362553179 & 0.0553592891 & 76.5680241461 & 0.0168546792 & 92.8659048355 & 0.0083423632 & 0.0040291265 & 51.7028164384 & 0.0002556058 & 96.9360506803 & 33.0496107562 & 16.0458430227 & 51.4492223793 & 1.0105724728 & 96.9422560519 \\
-$q$ & 0.0793719366 & 0.0181521997 & 77.1302065254 & 0.0078968182 & 90.0508686609 & 0.002027364 & 0.000995789 & 50.8825724663 & 0.000101956 & 94.9710059741 & 7.9823972057 & 3.9212181766 & 50.8766843397 & 0.3605346056 & 95.4833792873 \\
-\multicolumn{16}{@{}l}{\footnotesize $^\dag$ IBU's purity binning produced fewer than two bins for this observable, so IBU declined to unfold it and returned its input unchanged. The improvement shown for it is not a measurement.} \\
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 256.7945122719 & 204.8458755016 & 20.2296429691 & 43.58895123 & 83.0257446302 & 20.684948191 & 91.9449414989 \\
+$n_{ch}$ & 234.5819026232 & 188.5895431042 & 19.6060936607 & 43.3887802064 & 81.5037819537 & 22.6867888123 & 90.3288409896 \\
+$f_{ch}$ & 45.7827448845 & 45.3262403607 & 0.9971184844 & 4.7070188448 & 89.7187936773 & 9.4422744587 & 79.3759101108 \\
+$p_T^D$ & 236.2553179264 & 55.3592890501 & 76.5680241461 & 25.3164470196 & 89.2842847976 & 16.8547742069 & 92.865864627 \\
+$q$ & 79.3719366193 & 18.1521996856 & 77.1302065254 & 5.3447275423 & 93.2662251044 & 7.8970007598 & 90.0506386814 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
 \bottomrule
 \end{tabular}
-\end{adjustbox}
 \endgroup
+\vspace{1.1em}
 
-\vfill
-\begin{center}
-\small\thepage
-\end{center}
+\FigureLabel{JS divergence \([ \times \num{e3} ]\)}
+\begingroup
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
+\toprule
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Gen}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 1.9631891539 & 11.8625853639 & -504.2507590415 & 2.0448054443 & -4.157331975 & 1.4238053249 & 27.4748782045 \\
+$\ln\rho$ & 9.8779270646 & 1.7308083503 & 82.47802055 & 0.2625125468 & 97.342432829 & 0.173003009 & 98.2485899328 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 12.3385315391 & 2.0086360313 & 83.7206232777 & 0.1864672616 & 98.488740244 & 0.1849733406 & 98.5008480144 \\
+$w$ & 11.3879423623 & 1.4651359782 & 87.1343221488 & 0.2036708336 & 98.2115220897 & 0.1998848877 & 98.2447673043 \\
+$\lambda^{1}_{2}$ & 8.8244132939 & 0.8334801228 & 90.5548380948 & 0.1872086642 & 97.8785143224 & 0.1384420305 & 98.4311474784 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 2.0414274746 & 2.0414274746 & 0 & 0.2142556285 & 89.5046171768 & 0.1316531093 & 93.5509288985 \\
+$\tau_{21}^{(\beta=1)}$ & 10.5038527129 & 6.5773587854 & 37.3814640665 & 0.4798020822 & 95.4321324248 & 0.1376832163 & 98.689212234 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 7.8416884444 & 12.8331095908 & -63.6523776955 & 0.374188619 & 95.2282136474 & 0.2267346327 & 97.1085993233 \\
+$n_{ch}$ & 6.4474187732 & 9.7730275632 & -51.5804681989 & 0.3045751116 & 95.2760147543 & 0.170702476 & 97.352390437 \\
+$f_{ch}$ & 1.024994599 & 0.9435224251 & 7.9485466471 & 0.0983642095 & 90.4034411848 & 0.130474272 & 87.2707356529 \\
+$p_T^D$ & 8.342363183 & 4.0291264599 & 51.7028164384 & 0.4204788835 & 94.95971496 & 0.2556055052 & 96.9360539744 \\
+$q$ & 2.0273640089 & 0.9957890479 & 50.8825724663 & 0.1057529803 & 94.7837201503 & 0.1019562695 & 94.9709934178 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{1.1em}
 
+\FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
+\begingroup
+\small
+% Eight columns rather than six. At the default 6pt inter-column padding the
+% table overruns the text block by ~24pt -- which `pdflatex` reports as an
+% overfull hbox and still compiles, so nothing fails and the numbers simply
+% run off the page. 14 gaps x 2pt saved is 28pt, which clears it with room.
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l D D P D P D P@{}}
+\toprule
+{\bfseries Observable}
+& \multicolumn{1}{c}{\bfseries Gen}
+& \multicolumn{1}{c}{\bfseries IBU}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries OmniFold}
+& \multicolumn{1}{c}{\bfseries impr. (\%)}
+& \multicolumn{1}{c}{\bfseries RAN}
+& \multicolumn{1}{c}{\bfseries impr. (\%)} \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Mass and hard scale (IRC-safe kinematics)} \\
+$m$ [GeV] & 7.8090980373 & 45.934521504 & -488.2180155032 & 8.1282656341 & -4.0871249823 & 5.6522751924 & 27.6193592995 \\
+$\ln\rho$ & 39.2748792187 & 6.8889291666 & 82.4597062966 & 1.0327979798 & 97.3703344216 & 0.6778674865 & 98.2740431035 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Continuous angularities (IRC-safe jet shapes)} \\
+$\lambda^{1}_{0.5}$ & 48.9794217337 & 8.0138940422 & 83.6382428406 & 0.7393956714 & 98.4903952614 & 0.7336610567 & 98.5021034738 \\
+$w$ & 45.2302572908 & 5.8371176865 & 87.0946617681 & 0.7934392409 & 98.2457777417 & 0.7825303873 & 98.2698962283 \\
+$\lambda^{1}_{2}$ & 35.0773740147 & 3.3152624103 & 90.5487155084 & 0.7283247439 & 97.9236622912 & 0.5364908884 & 98.4705500241 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Splitting and 2-prong substructure} \\
+$z_g$\(^\dag\) & 8.0863218607 & 8.0863218607 & 0 & 0.8547851866 & 89.4292460616 & 0.5261716213 & 93.4930660639 \\
+$\tau_{21}^{(\beta=1)}$ & 41.7543509502 & 26.170508436 & 37.3226793367 & 1.9115938887 & 95.4218091164 & 0.5432683587 & 98.6988940161 \\
+\midrule
+\multicolumn{8}{@{}l}{\bfseries Hadronization, multiplicity and fragmentation (IRC-unsafe)} \\
+$M$ & 31.1005297084 & 49.8465730636 & -60.2756400969 & 1.4483721006 & 95.342934303 & 0.865144993 & 97.2182306824 \\
+$n_{ch}$ & 25.5759196819 & 38.3823403546 & -50.0721805199 & 1.1788811484 & 95.3906597961 & 0.6458305265 & 97.4748492547 \\
+$f_{ch}$ & 4.0949352109 & 3.7658117007 & 8.0373313194 & 0.3930402864 & 90.4017947502 & 0.5209408449 & 87.2784105706 \\
+$p_T^D$ & 33.0496107562 & 16.0458430227 & 51.4492223793 & 1.6649980403 & 94.9621251136 & 1.0105713727 & 96.9422593805 \\
+$q$ & 7.9823972057 & 3.9212181766 & 50.8766843397 & 0.3750792807 & 95.301169924 & 0.3605356233 & 95.4833665373 \\
+\multicolumn{8}{@{}l}{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, so IBU failed to unfold.} \\
+\bottomrule
+\end{tabular}
+\endgroup
+\vspace{1.1em}
+
+\clearpage
+
+
+% Landscape, because these figures are wide. A page of six panels is 21x12
+% inches, an aspect of 1.75 against this block's 1.32 -- so it is
+% width-limited and spans the full width. On a portrait page the same figure
+% is limited by the narrower dimension instead and renders at 58% scale,
+% which is what made the panel text unreadable.
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
+% Tighter margins here than the rest of the report: these pages carry a
+% single figure and no running text, so an 18mm block is a margin around a
+% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
+% \textwidth and \textheight when the environment opens.
+\newgeometry{margin=8mm}
+\begin{landscape}
+\thispagestyle{empty}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/detector_level.pdf}{1}
+\clearpage
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/detector_level.pdf}{2}
 \end{landscape}
+\restoregeometry
+
+
+% No \ReportSection here: the figure fills 98% of the page, and a
+% heading on top of it forces a break onto a near-empty next page.
+% Each page carries its own `<Level> Level (n of m)' suptitle.
+% Tighter margins here than the rest of the report: these pages carry a
+% single figure and no running text, so an 18mm block is a margin around a
+% margin. `\newgeometry` must come before `\begin{landscape}`, which reads
+% \textwidth and \textheight when the environment opens.
+\newgeometry{margin=8mm}
+\begin{landscape}
+\thispagestyle{empty}
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/particle_level.pdf}{1}
 \clearpage
-
-
-\ReportSection{Detector-level distributions}
-\vfill
-\begin{center}
-\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/detector_level.pdf}{0.78\textheight}
-\end{center}
-\vfill
-\clearpage
-
-
-\ReportSection{Particle-level distributions}
-\vfill
-\begin{center}
-\ReportGraphic{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/particle_level.pdf}{0.78\textheight}
-\end{center}
-\vfill
-\clearpage
+\ReportPage{/global/u1/k/kdesai/RANv4/runs/2026-09-10T132409Z/artifacts/particle_level.pdf}{2}
+\end{landscape}
+\restoregeometry
 
 
 \ReportSection{Training diagnostics}

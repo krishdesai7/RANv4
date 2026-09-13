@@ -159,7 +159,8 @@ def _stored_var(
             return data[f"{ptype}_lhas"].astype(dtype=np.double)
         case "ang2":
             return data[f"{ptype}_ang2s"].astype(dtype=np.double)
-    raise ValueError(f"Unknown variable '{var}'")
+        case _:
+            raise ValueError(f"Unknown variable '{var}'")
 
 
 def _constituent_var(
@@ -187,8 +188,8 @@ def _constituent_var(
             # sqrt(sum pt^2) / sum pt: 1 for a one-particle jet, 1/sqrt(n) for
             # n equal ones. Padding contributes zero to both sums.
             return _safe_ratio(np.sqrt(np.square(pt).sum(axis=1)), pt.sum(axis=1))
-
-    raise ValueError(f"Unknown variable '{var}'")
+        case _:
+            raise ValueError(f"Unknown variable '{var}'")
 
 
 def _get_var(

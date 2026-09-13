@@ -97,6 +97,14 @@ def train_command(
             help="Penalty on the variance of g's weights. 0 disables it.",
         ),
     ] = 0.015,
+    log_every: Annotated[
+        int,
+        typer.Option(
+            "--log-every",
+            min=1,
+            help="Log training progress every N epochs.",
+        ),
+    ] = 1,
     plots: Annotated[
         bool,
         typer.Option(
@@ -131,6 +139,7 @@ def train_command(
         lr_g=lr_g,
         lr_d=lr_d,
         lambda_dispersion=lambda_dispersion,
+        log_every=log_every,
         plots=plots,
         run_dir=run_dir,
     )

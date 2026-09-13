@@ -440,6 +440,7 @@ def run(
     lr_g: float = 3e-5,
     lr_d: float = 1e-4,
     lambda_dispersion: float = 0.015,
+    log_every: int = 1,
     plots: bool = True,
     run_dir: Path | None = None,
 ) -> None:
@@ -474,6 +475,7 @@ def run(
             lr_g=lr_g,
             lr_d=lr_d,
             lambda_dispersion=lambda_dispersion,
+            log_every=log_every,
             plots=plots,
             run_dir=run_dir,
         )
@@ -500,6 +502,7 @@ def _pipeline(
     lr_g: float,
     lr_d: float,
     lambda_dispersion: float,
+    log_every: int,
     plots: bool,
     run_dir: Path | None,
 ) -> Path:
@@ -577,6 +580,7 @@ def _pipeline(
                 lr_g=lr_g,
                 lr_d=lr_d,
                 lambda_dispersion=lambda_dispersion,
+                log_every=log_every,
             )
         g = result.g
         best_epoch = result.best_epoch

@@ -50,6 +50,7 @@ if TYPE_CHECKING:
         TrainStep,
     )
 
+
 logger: Logger = logging.getLogger(name=__name__)
 
 if keras.backend.backend() != "jax":
@@ -171,10 +172,7 @@ def load_params(run_dir: Path, /) -> EpochParams:
                     jnp.asarray(a=f[k])  # pyrefly: ignore[unknown-argument-type]
                     for k in sorted(
                         (k for k in keys if k.split(sep=":")[0] == field),
-                        # `NpzFile.keys()` is untyped, so `k` reads as
-                        # unknown however `keys` is annotated; the suppression
-                        # has to sit on each use rather than at the source.
-                        key=lambda k: int(k.split(sep=":")[1]),  # pyrefly: ignore[unknown-argument-type]
+                        key=lambda k: int(k.split(sep=":")[1]),
                     )
                 ]
                 for field in EpochParams._fields
@@ -513,6 +511,7 @@ def _make_epoch(
     evaluate: Callable[[TrainState, EvalSplit], Float[Array, ""]],
     *,
     n_epochs: int,
+    log_every: int,
 ) -> Callable[
     [RunCarry, Int[Array, ""]],
     tuple[RunCarry, tuple[Float[Array, " metrics"], EpochParams]],
@@ -530,15 +529,14 @@ def _make_epoch(
         train_g: Float[Array, ""],
         val_d: Float[Array, ""],
     ) -> None:
-        if not epoch % 10:
-            logger.info(
-                "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f",
-                int(epoch) + 1,
-                n_epochs,
-                float(train_d),
-                float(train_g),
-                float(val_d),
-            )
+        logger.info(
+            "Epoch %3d/%d  D: %.4f  G: %.4f  | Val: %.4f",
+            int(epoch) + 1,
+            n_epochs,
+            float(train_d),
+            float(train_g),
+            float(val_d),
+        )
 
     def epoch(
         carry: RunCarry, epoch_idx: Int[Array, ""]
@@ -546,7 +544,13 @@ def _make_epoch(
         key, subkey = jax.random.split(carry.key)
         state, train_d, train_g = one_pass(carry.state, subkey)
         val_d: Float[Array, ""] = evaluate(state, data.val)
-        jax.debug.callback(_log, epoch_idx, train_d, train_g, val_d, ordered=True)
+        lax.cond(
+            (epoch_idx % log_every) == 0,
+            lambda: jax.debug.callback(
+                _log, epoch_idx, train_d, train_g, val_d, ordered=True
+            ),
+            lambda: None,
+        )
         row: Float[Array, " metrics"] = jnp.stack(arrays=[train_d, train_g, val_d])
         params = EpochParams(
             g_trainable=state.g_trainable,
@@ -768,6 +772,7 @@ def train(
     lr_g: float = 3e-5,
     lr_d: float = 1e-4,
     lambda_dispersion: float = 0.015,
+    log_every: int = 1,
     *,
     fused: bool = True,
 ) -> TrainResult:
@@ -811,7 +816,7 @@ def train(
     epoch: Callable[
         [RunCarry, Int[Array, ""]],
         tuple[RunCarry, tuple[Float[Array, " metrics"], EpochParams]],
-    ] = _make_epoch(data, one_pass, evaluate, n_epochs=n_epochs)
+    ] = _make_epoch(data, one_pass, evaluate, n_epochs=n_epochs, log_every=log_every)
 
     # Batch order follows `data_seed`, not the init seed: an ensemble loop over
     # `--seed` must see identical data on every arm.

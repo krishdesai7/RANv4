@@ -230,7 +230,7 @@ environment that cannot exist here, so `tests/test_omnifold.py`
 substitutes a stub worker over the same `.npz` contract and tests the
 seam instead --- see OmniFold.
 
-The marker goes on a test for a *reason*, not for a measured duration --- a
+The marker goes on a test for a _reason_, not for a measured duration --- a
 stopwatch threshold rots as the hardware and the suite move. A test is `slow`
 if it **runs a training program** (one `train()` call is ~0.5s even with the
 XLA cache warm), **shells out to `pdflatex`**, or **averages many random draws
@@ -251,7 +251,7 @@ anything on the command line still wins.
 
 That last rule is why the script does **not** name the twelve observables as
 `--var` flags, and instead lets `load_jet_dataset`'s own default stand.
-`--var` is repeatable, so click *appends* rather than replacing: naming all
+`--var` is repeatable, so click _appends_ rather than replacing: naming all
 twelve would turn `sbatch scripts/submit.zsh --var m` into thirteen names with a
 duplicate, which `load_jet_dataset` rejects. Left off, a subset stays
 selectable from the command line.
@@ -388,7 +388,7 @@ Its absence is translated into a readable message rather than a
 **The worker runs under `PYTHONSAFEPATH=1`, and must.** A script's own directory
 goes on `sys.path[0]`, and the worker's directory is `src/ran/baselines/` ---
 which contains `omnifold.py`. So the worker's
-`from omnifold import MLP, DataLoader, MultiFold` resolved to the *host half*
+`from omnifold import MLP, DataLoader, MultiFold` resolved to the _host half_
 rather than to the installed package, and died on its `from .. import timing`
 with "attempted relative import with no known parent package": an error naming
 neither the collision nor the file that caused it. `PYTHONSAFEPATH` stops the
@@ -493,7 +493,7 @@ behind what it is being compared against.
 
 Eight columns do not fit at the default column padding. The six tables overran
 the text block by ~24pt, which `pdflatex` reports as an overfull hbox and
-*still compiles* --- so nothing failed and the numbers simply ran off the page.
+_still compiles_ --- so nothing failed and the numbers simply ran off the page.
 They now set `\tabcolsep` to 4pt and drop the method name from each improvement
 heading (`impr. (\%)`, unambiguous because it sits beside its method's column).
 `_TABLE_COLUMNS` is the one place the count lives, and a test asserts it against
@@ -582,19 +582,19 @@ until `_save_run` exists, and the table on stderr is then all there is.
 
 The phases, nested ones indented under their parent:
 
-| Phase | Covers |
-| --- | --- |
-| `data` | Building or loading the splits. The `Detail` column says which branch it took --- `cache hit`, `generated`, `downloaded from Zenodo` --- filled in by the loaders, which know, via `timing.note(..., to="data")` |
-| `train` | The whole of `train()` |
-| ` transfer` | `DeviceSplits.from_splits`, the one host->device copy of a run |
-| ` compile` | XLA compiling the fused whole-run program |
-| ` epochs` | Executing it |
-| ` select` | `_select_by_mmd`, host-side, after the loop |
-| `particle_mmd` | The particle-level diagnostic curve in `_finish_run` |
-| `save` | `_save_run`: two `.keras` files plus `EpochParams` |
-| `load` | `_load_artifacts`, on the `--load-run` path instead of `train`/`save` |
-| `plots` | `_draw_figures`; near-zero under `--no-plots` |
-| `evaluate` | `evaluate_run` |
+| Phase          | Covers                                                                                                                                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`         | Building or loading the splits. The `Detail` column says which branch it took --- `cache hit`, `generated`, `downloaded from Zenodo` --- filled in by the loaders, which know, via `timing.note(..., to="data")` |
+| `train`        | The whole of `train()`                                                                                                                                                                                           |
+| ` transfer`    | `DeviceSplits.from_splits`, the one host->device copy of a run                                                                                                                                                   |
+| ` compile`     | XLA compiling the fused whole-run program                                                                                                                                                                        |
+| ` epochs`      | Executing it                                                                                                                                                                                                     |
+| ` select`      | `_select_by_mmd`, host-side, after the loop                                                                                                                                                                      |
+| `particle_mmd` | The particle-level diagnostic curve in `_finish_run`                                                                                                                                                             |
+| `save`         | `_save_run`: two `.keras` files plus `EpochParams`                                                                                                                                                               |
+| `load`         | `_load_artifacts`, on the `--load-run` path instead of `train`/`save`                                                                                                                                            |
+| `plots`        | `_draw_figures`; near-zero under `--no-plots`                                                                                                                                                                    |
+| `evaluate`     | `evaluate_run`                                                                                                                                                                                                   |
 
 `ran baseline omnifold` writes its own `artifacts/timings_omnifold.json`
 rather than merging into `timings.json`, and that is not tidiness. **`write`
@@ -664,7 +664,7 @@ without a TeX installation.
 weights, histories, metric JSON and component figures are inputs to the
 report, and burying them is what made the directory readable at a glance.
 `artifacts_dir(run_dir)` is the single accessor and it creates the directory,
-so anything that only *reads* must use `run_dir / ARTIFACTS_DIR` instead ---
+so anything that only _reads_ must use `run_dir / ARTIFACTS_DIR` instead ---
 rendering a report must not mkdir into a directory it was handed.
 
 `src/ran/templates/report.tex` is the document; `src/ran/report.py` only fills
@@ -848,9 +848,9 @@ Five gotchas worth knowing:
   reductions over the full sample --- the sort-and-scan behind Wasserstein, the
   histogram scatter behind the other two --- are necessarily float32, so each is
   arranged so its error is relative to the answer rather than to the largest
-  intermediate: the Wasserstein scan accumulates the *signed* weights, whose
+  intermediate: the Wasserstein scan accumulates the _signed_ weights, whose
   running total is the CDF gap being measured, instead of two CDFs that both
-  climb to 1 and then cancel; the histogram scatters *centered* weights and adds
+  climb to 1 and then cancel; the histogram scatters _centered_ weights and adds
   the mean back through an exact count. Everything downstream of those --- the
   divergences themselves, which are reductions over `dim x n_bins` values and so
   cost nothing --- is float64 on the host. Measured against a float64 reference
@@ -862,11 +862,11 @@ Five gotchas worth knowing:
   cluster. Bound these against what `metrics.json` prints --- a tenth of the
   last printed digit --- not against the last measurement, which is what
   `TestFloat32Histograms` now does. The number is also a statement about
-  *bias*, and on a GPU it is smaller than the run-to-run noise --- see the next
+  _bias_, and on a GPU it is smaller than the run-to-run noise --- see the next
   bullet.
 - **`metrics.json` is reproducible to ~4e-8 on a GPU, not to the last digit.**
   `_counts` bins with `empty.at[index].add(...)`, which lowers to a scatter-add;
-  many events land in one bin, so on a GPU that is an *atomic* accumulation and
+  many events land in one bin, so on a GPU that is an _atomic_ accumulation and
   the summation order is whatever the hardware chose that pass. Two
   `ran evaluate` runs over the same run directory therefore return histogram
   counts differing in the last float32 ulp, and JS values differing by ~4e-8
@@ -884,7 +884,7 @@ Five gotchas worth knowing:
   `tests/test_evaluate_metrics.py::TestDivergencesPerDim::test_js_matches_scipy_on_a_continuous_sample`
   did until it started failing on the A100 and passing locally. Build the
   histograms once, hand the same pair to both sides. Where that is impossible
-  because the double binning *is* the claim --- `TestFusedMetrics` asks whether
+  because the double binning _is_ the claim --- `TestFusedMetrics` asks whether
   the fused and unfused paths agree, and sharing a histogram would delete the
   question --- widen the tolerance instead and say why: those compare at
   `rtol=1e-6`, since the noise has been measured at 1.05e-7 relative and
@@ -921,7 +921,7 @@ in order.
 This was a `frozenset`, and it produced silently wrong physics. A frozenset's
 iteration order depends on the per-process randomized hashes of the strings in
 it, so `ran train` built its columns in one order and recorded it, then each
-later process rebuilt the same dataset in a *different* order and labelled it
+later process rebuilt the same dataset in a _different_ order and labelled it
 with the recorded one. Every jet metric came back under the wrong observable
 name, and — because the generator was trained on one column order and evaluated
 against another — the reload and `ran evaluate` passes fed it permuted features
@@ -937,10 +937,10 @@ describe the same run — same columns, same cache key, same `config.json`.
 
 Two independent randomness axes, deliberately kept separate:
 
-| Seed        | Set by                            | Controls                                               |
-| ----------- | --------------------------------- | ------------------------------------------------------ |
+| Seed        | Set by                            | Controls                                                         |
+| ----------- | --------------------------------- | ---------------------------------------------------------------- |
 | `data_seed` | `RANDataset` / `load_jet_dataset` | generation, shuffle, train/val/test split, per-epoch batch order |
-| `seed`      | `train`                           | weight initialization only                             |
+| `seed`      | `train`                           | weight initialization only                                       |
 
 `train(seed=None)` draws one from system entropy and **returns the value used**,
 so a run stays reproducible after the fact without deciding up front that it is
@@ -1041,7 +1041,7 @@ Selection is **detector level** (`x_sim` reweighted vs `x_data`), so it needs
 no truth and the method stays deployable. The particle-level MMD is computed
 too, but on the host in `workflow`, never in the trace -- which is what keeps
 `z_true` out of the traced program while still producing the curve. The
-number reported for the restored checkpoint comes from a *test* subsample,
+number reported for the restored checkpoint comes from a _test_ subsample,
 not the val one selection minimized.
 
 The estimator has a resolution floor around 5e-4 in MMD^2 at m=8192, scaling

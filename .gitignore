@@ -13,8 +13,7 @@ wheels/
 .cache/
 
 # Generated outputs
-plots/
-weights/
+runs/*/artifacts/omnifold_checkpoints/
 #runs/
 
 # Logs

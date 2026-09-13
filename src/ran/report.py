@@ -375,6 +375,8 @@ def metrics_table(
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
+    *,
+    include_legend: bool = True,
 ) -> str:
     """One level's row bodies for one metric.
 
@@ -388,7 +390,7 @@ def metrics_table(
     ]
     lines: list[str] = [r"\midrule", *rows]
 
-    if any(v in skipped for v in ordered_vars):
+    if include_legend and any(v in skipped for v in ordered_vars):
         lines.append(_DAGGER_LEGEND)
     return "\n".join(lines)
 
@@ -448,11 +450,22 @@ def _table(
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
     /,
+    *,
+    include_legend: bool = False,
 ) -> str:
     """A metrics body, or the not-found row when there are no metrics."""
     if not ran:
         return _NO_METRICS
-    return metrics_table(level, metric, variables, ran, ibu, omnifold, skipped)
+    return metrics_table(
+        level,
+        metric,
+        variables,
+        ran,
+        ibu,
+        omnifold,
+        skipped,
+        include_legend=include_legend,
+    )
 
 
 def _figure_pages(artifacts: Path, stem: str, dim: int, /) -> str:
@@ -486,6 +499,8 @@ def render(run_dir: Path, /) -> str:
     timings: dict[str, Any] | None = _read(artifacts / "timings.json")
     skipped: frozenset[str] = skipped_variables(run_dir, ibu)
     variables: tuple[str, ...] = _variables(config)
+    has_particle: bool = bool(ran and any(k.startswith("particle_") for k in ran))
+    legend_level: str = "particle" if has_particle else "detector"
 
     source: str = load_template()
     for token, value in (
@@ -494,11 +509,20 @@ def render(run_dir: Path, /) -> str:
         ("<<TIMINGS_ROWS>>", timing_rows(timings) if timings else ""),
         *(
             (
-                f"<<{level.upper()}_{token}>>",
-                _table(level, metric, variables, ran, ibu, omnifold, skipped),
+                f"<<{level.upper()}_{metric_tag}>>",
+                _table(
+                    level,
+                    metric,
+                    variables,
+                    ran,
+                    ibu,
+                    omnifold,
+                    skipped,
+                    include_legend=(level == legend_level and metric_tag == "VLC"),
+                ),
             )
             for level in ("detector", "particle")
-            for token, metric in _METRICS
+            for metric_tag, metric in _METRICS
         ),
         (
             "<<DETECTOR_FIGURES>>",

@@ -326,6 +326,17 @@ def test_a_table_with_nothing_skipped_carries_no_legend() -> None:
     assert "failed to unfold" not in body
 
 
+def test_dagger_legend_appears_only_once_in_rendered_report(
+    reference_run: Path,
+) -> None:
+    import json
+
+    outcomes = [{"variable_name": "m", "status": "skipped", "n_bins": 1}]
+    (reference_run / "artifacts" / "ibu_outcomes.json").write_text(json.dumps(outcomes))
+    source: str = report.render(reference_run)
+    assert source.count("failed to unfold") == 1
+
+
 def test_reading_the_skip_set_creates_nothing(tmp_path: Path) -> None:
     """`report` is a read-only consumer: it must not make `artifacts/`."""
     before: list[str] = sorted(p.name for p in tmp_path.iterdir())

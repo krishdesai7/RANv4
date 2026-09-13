@@ -87,7 +87,7 @@
 \newcommand{\ConfigPair}[4]{\ConfigKey{#1} & #2 & \ConfigKey{#3} & #4 \\}
 \newcommand{\ConfigWide}[2]{
   \ConfigKey{#1} &
-  \multicolumn{3}{>{\raggedright\arraybackslash}p{0.69\linewidth}}{#2} \\
+  \multicolumn{3}{>{\raggedright\arraybackslash}p{\dimexpr\linewidth-0.20\linewidth-2\tabcolsep\relax}@{}}{#2} \\
 }
 \newcommand{\TimingSubphase}[1]{\hspace*{1.15em}#1}
 

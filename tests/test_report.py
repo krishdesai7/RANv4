@@ -129,7 +129,12 @@ def test_the_variable_list_uses_physics_symbols_in_display_order() -> None:
 
 def test_the_variable_list_spans_the_row() -> None:
     rows: str = report.config_rows({"variables": ["m", "f_ch"]}, None)
-    assert r"\ConfigWide{variables}{$m$ [GeV], $f_{ch}$}" in rows
+    assert r"\ConfigWide{variables}{" in rows
+    assert r"\textbf{Mass and hard scale (IRC-safe kinematics):} $m$ [GeV]" in rows
+    assert (
+        r"\textbf{Hadronization, multiplicity and fragmentation (IRC-unsafe):} $f_{ch}$"
+        in rows
+    )
 
 
 def test_the_mmd_sigmas_collapse_to_a_median_and_a_bracket() -> None:
@@ -225,29 +230,26 @@ def _entry(before: float, after: float) -> dict[str, float]:
     }
 
 
-def test_rows_are_grouped_and_in_display_order() -> None:
+def test_rows_are_in_display_order() -> None:
     ran = {f"detector_{v}": _entry(1.0, 0.1) for v in SUBSTRUCTURE_VARIABLES}
 
     body: str = report.metrics_table(
         "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, None, None, frozenset()
     )
 
-    assert "Mass and hard scale" in body
-    assert body.index("Mass and hard scale") < body.index("Continuous angularities")
+    # Group headings live in the configuration table, not the metric tables
+    assert "Mass and hard scale" not in body
     assert body.index(r"$\ln\rho$") < body.index(r"$\lambda^{1}_{0.5}$")
-    assert body.count(r"\midrule") == 4  # one per group
+    assert body.count(r"\midrule") == 1  # single header rule
+    assert body.count(r"\\") == len(SUBSTRUCTURE_VARIABLES)
 
 
-def test_a_group_with_no_variables_is_omitted() -> None:
+def test_a_group_with_no_variables_is_omitted_from_config_variables() -> None:
     """`--var m --var w` has nothing in the splitting group."""
-    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in ("m", "w")}
-
-    body: str = report.metrics_table(
-        "detector", "wasserstein", ("m", "w"), ran, None, None, frozenset()
-    )
-
-    assert "Splitting" not in body
-    assert body.count(r"\midrule") == 2
+    rows: str = report.config_rows({"variables": ["m", "w"]}, None)
+    assert "Splitting" not in rows
+    assert "Mass and hard scale" in rows
+    assert "Continuous angularities" in rows
 
 
 def test_a_missing_baseline_renders_dashes() -> None:

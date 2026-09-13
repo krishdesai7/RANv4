@@ -15,7 +15,7 @@
 \usepackage[table]{xcolor}
 
 % Replacement contract:
-% Replace the six <<...>> tokens before compilation. CONFIG_ROWS, TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row bodies, including row terminators. Each metrics body also owns its first \midrule and interleaves full-width group-heading rows with its data rows. Numbers are inserted at full precision in plain decimal notation. All rounding policy lives here, not in the generator. Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and may contain underscores; text VALUES are not, and must be wrapped in \ConfigVal or otherwise escaped by the generator.
+% Replace the six <<...>> tokens before compilation. CONFIG_ROWS, TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row bodies, including row terminators. Each metrics body also owns its first \midrule and provides data rows in physics display order. Numbers are inserted at full precision in plain decimal notation. All rounding policy lives here, not in the generator. Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and may contain underscores; text VALUES are not, and must be wrapped in \ConfigVal or otherwise escaped by the generator.
 
 \newcommand{\RunName}{\detokenize{<<RUN_NAME>>}}
 
@@ -25,7 +25,7 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0pt}
 \setlength{\tabcolsep}{5pt}
-\renewcommand{\arraystretch}{1.12}
+\renewcommand{\arraystretch}{1.03}
 \pagestyle{empty}
 
 \newcommand{\ReportTitle}{
@@ -202,7 +202,7 @@
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
@@ -223,7 +223,7 @@
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup
@@ -271,7 +271,7 @@
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{JS divergence \([ \times \num{e3} ]\)}
 \begingroup
@@ -292,7 +292,7 @@
 \bottomrule
 \end{tabular}
 \endgroup
-\vspace{1.1em}
+\vspace{0.7em}
 
 \FigureLabel{VLC divergence \([ \times \num{e3} ]\)}
 \begingroup

@@ -52,6 +52,9 @@ test = [
     "scipy>=1.18.1",
 ]
 release = ["rooster>=0.1.1"]
+temp = [
+    "pypdfium2>=5.13.0",
+]
 
 
 [tool.uv]

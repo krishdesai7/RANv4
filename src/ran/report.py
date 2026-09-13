@@ -133,10 +133,43 @@ def _format_value(value: object, /) -> str:
             return str(object=value)
 
 
-def _variables_cell(names: Sequence[str], /) -> str:
-    r"""The observable list as physics symbols, in display order. Anything without a `
-    JET_OBS` entry (a Gaussian run's `dim_0`) falls back to its escaped name.
+def _populated_groups(present: frozenset[str], /) -> list[tuple[str, Sequence[str]]]:
+    """The display groups this run's variables actually populate, in order.
+
+    `--var m --var w` leaves the splitting group empty, and an empty group would print a
+    heading with no rows under it.
     """
+    return [
+        (label, in_group)
+        for label, members in JET_VARIABLE_GROUPS
+        if (in_group := [v for v in members if v in present])
+    ]
+
+
+def _variables_cell(names: Sequence[str], /) -> str:
+    r"""The observable list formatted by physics group, or flat if non-jet.
+
+    Each populated group is rendered multiline: `\textbf{<label>:} <symbols>`.
+    """
+    groups: list[tuple[str, Sequence[str]]] = _populated_groups(frozenset(names))
+    if groups:
+        formatted: list[str] = []
+        for label, members in groups:
+            symbols: str = ", ".join(
+                JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
+                for name in members
+            )
+            formatted.append(rf"\textbf{{{label}:}} {symbols}")
+        grouped_names: frozenset[str] = frozenset(v for _, m in groups for v in m)
+        other: list[str] = [v for v in names if v not in grouped_names]
+        if other:
+            other_symbols: str = ", ".join(
+                JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
+                for name in other
+            )
+            formatted.append(rf"\textbf{{Other observables:}} {other_symbols}")
+        return r" \newline\vspace{2pt} ".join(formatted)
+
     ordered: tuple[int, ...] = display_order(names)
     return ", ".join(
         JET_OBS[name].symbol if name in JET_OBS else latex_text(name)
@@ -327,41 +360,10 @@ def _row(
 
 
 _DAGGER_LEGEND: Final[str] = (
-    rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\footnotesize \(^\dag\) "
-    r"IBU's purity binning produced a single bin, so IBU failed to unfold.} \\"
+    rf"\rowcolor{{white}}\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}"
+    r"{\footnotesize \(^\dag\) IBU's purity binning produced a single bin, "
+    r"so IBU failed to unfold.} \\"
 )
-
-
-def _group_lines(
-    label: str,
-    members: Sequence[str],
-    level: str,
-    metric: str,
-    ran: Mapping[str, Any],
-    ibu: Mapping[str, Any] | None,
-    omnifold: Mapping[str, Any] | None,
-    skipped: frozenset[str],
-    /,
-) -> list[str]:
-    """A rule, an upright bold heading spanning the table, then its rows."""
-    return [
-        r"\midrule",
-        rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\bfseries {label}}} \\",
-        *(_row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in members),
-    ]
-
-
-def _populated_groups(present: frozenset[str], /) -> list[tuple[str, Sequence[str]]]:
-    """The display groups this run's variables actually populate, in order.
-
-    `--var m --var w` leaves the splitting group empty, and an empty group would print a
-    heading with no rows under it.
-    """
-    return [
-        (label, in_group)
-        for label, members in JET_VARIABLE_GROUPS
-        if (in_group := [v for v in members if v in present])
-    ]
 
 
 def metrics_table(
@@ -376,27 +378,17 @@ def metrics_table(
 ) -> str:
     """One level's row bodies for one metric.
 
-    The template owns the tabular, column spec and header; this owns the rules, group
-    headings and data rows. `skipped` names vars IBU gave up on, which are daggered.
+    The template owns the tabular, column spec and header; this owns the initial rule,
+    data rows in physics display order, and optional dagger legend.
     """
-    groups: list[tuple[str, Sequence[str]]] = _populated_groups(frozenset(variables))
-    lines: list[str] = [
-        line
-        for label, members in groups
-        for line in _group_lines(
-            label, members, level, metric, ran, ibu, omnifold, skipped
-        )
+    ordered: tuple[int, ...] = display_order(variables)
+    ordered_vars: list[str] = [variables[i] for i in ordered]
+    rows: list[str] = [
+        _row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in ordered_vars
     ]
-    emitted: list[str] = [v for _, members in groups for v in members]
+    lines: list[str] = [r"\midrule", *rows]
 
-    if not lines:  # a non-jet run: rows, no grouping
-        emitted = list(variables)
-        lines.append(r"\midrule")
-        lines.extend(
-            _row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in emitted
-        )
-
-    if any(v in skipped for v in emitted):
+    if any(v in skipped for v in ordered_vars):
         lines.append(_DAGGER_LEGEND)
     return "\n".join(lines)
 
@@ -541,7 +533,7 @@ _AUX_SUFFIXES: Final[tuple[str, ...]] = (".aux", ".log", ".out")
 
 def _compile(source: Path, artifacts: Path, run_dir: Path, /) -> None:
     r"""Run `pdflatex` twice, from `artifacts/`, emitting into the run root."""
-    if shutil.which(cmd="pdflatex") is None:
+    if shutil.which("pdflatex") is None:
         msg: str = (
             "pdflatex is not on PATH. Install a TeX distribution, or pass "
             "--no-compile to emit report.tex alone."

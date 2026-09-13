@@ -56,12 +56,18 @@ import ran  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 import typer
 from ran.data import RANDataset, load_jet_dataset
 from ran.data.config import gaussian_config_from_run_config
-from ran.evaluate import _improvement, _wd_per_dim
-from ran.logging_config import configure_logging
-from ran.mmd import MMDCache, bandwidths, build_cache, subsample_indices, weighted_mmd
-from ran.models import build_generator
+from ran.evaluation.evaluate import _improvement, _wd_per_dim
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import Split, artifacts_dir
-from ran.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
+from ran.training.mmd import (
+    MMDCache,
+    bandwidths,
+    build_cache,
+    subsample_indices,
+    weighted_mmd,
+)
+from ran.training.models import build_generator
+from ran.training.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 
 if TYPE_CHECKING:
     from collections.abc import Callable

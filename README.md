@@ -233,17 +233,17 @@ bit-identical between the clean and poisoned arms.
 
 This build relies on the JAX backend.
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using RAN as a library module rather than a command-line tool, ensure that **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using RAN as a library module rather than a command-line tool, ensure that **any `ran.*` import must come before `import keras`**. `src/ran/training/train.py` raises a clear error if the backend has been initialized to something else.
 
 ### Precision
 
-The project runs in single precision end to end. The pin is a single constant, `EVENT_DTYPE` in `src/ran/rantypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/ran/models.py` follow from it.
+The project runs in single precision end to end. The pin is a single constant, `EVENT_DTYPE` in `src/ran/rantypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/ran/training/models.py` follow from it.
 
 Every jet observable is float32-clean. In particular, `mass` and `mult` survive a float32 round trip bit-exactly, and the others lose exactly half a ULP, the least a cast can cost. Across 320 paired seeds, single and double precision are indistinguishable on unfolding improvement to within 3.5 sigma, while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
 
 `ran.data.download` computes jet observables in double precision, because the ε protecting degenerate jets is below the smallest single precision denormal.
 
-`src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
+`src/ran/training/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
 - Model state lives in JAX pytrees (`TrainState`) for the duration of training
 - Updates are applied through `stateless_call`/`stateless_apply`
@@ -275,10 +275,6 @@ RANv4/
 │   ├── __init__.py               Pins KERAS_BACKEND=jax and JAX_ENABLE_X64=0
 │   ├── __main__.py               Fallback entry point (python -m ran)
 │   ├── cli.py                    Unified Typer command tree; target of the `ran` script
-│   ├── workflow.py               Training and reload workflow
-│   ├── report.py                 PDF dossier behind `ran report`
-│   ├── leakage.py                Data-poisoning leakage check
-│   ├── logging_config.py         Structured application logging
 │   ├── py.typed                  PEP 561 typing marker
 │   ├── rantypes/
 │   │   ├── events.py             Split, Events, ZXY, Populations, DatasetSplits
@@ -302,12 +298,21 @@ RANv4/
 │   │   ├── design.py             Bootstrap x seed grid: resampling, one cell, loading
 │   │   ├── variance.py           Two-way ANOVA components, covariances
 │   │   └── report.py             Decomposition table, variance.npz, correlation.pdf
-│   ├── models.py                 Generator and discriminator architectures
-│   ├── train.py                  Fused JAX training program
-│   ├── plotting.py               Detector-level, particle-level, and loss curve plots
-│   ├── templates/report.tex      LaTeX skeleton `report.py` fills in
-│   ├── timing.py                 Optional per-phase wall-clock reporting
-│   └── evaluate.py               Post-hoc distance metrics (Wasserstein, JS, triangular)
+│   ├── training/
+│   │   ├── models.py             Generator and discriminator architectures
+│   │   ├── train.py              Fused JAX training program
+│   │   ├── mmd.py                Weighted MMD for checkpoint selection
+│   │   └── workflow.py           Training and reload workflow behind `ran train`
+│   ├── evaluation/
+│   │   ├── evaluate.py           Post-hoc distance metrics (Wasserstein, JS, triangular)
+│   │   ├── plotting.py           Detector-level, particle-level, and loss curve plots
+│   │   └── leakage.py            Data-poisoning leakage check
+│   ├── reporting/
+│   │   ├── report.py             PDF dossier behind `ran report`
+│   │   └── templates/report.tex  LaTeX skeleton `report.py` fills in
+│   └── instrumentation/
+│       ├── timing.py             Optional per-phase wall-clock reporting
+│       └── logging_config.py     Structured application logging
 ├── params/                       Gaussian config YAML files
 │   ├── 1d_default.yaml
 │   ├── 2d_correlated.yaml
@@ -382,7 +387,7 @@ runs/<timestamp>/
 
 ## Training Hyperparameters
 
-These are internal training defaults in `src/ran/train.py`; the CLI-exposed training options are listed above.
+These are internal training defaults in `src/ran/training/train.py`; the CLI-exposed training options are listed above.
 
 | Parameter           | Default | Description                                 |
 | ------------------- | ------- | ------------------------------------------- |

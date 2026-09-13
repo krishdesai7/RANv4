@@ -15,14 +15,14 @@ from jaxtyping import Array, Float, Int, jaxtyped
 
 from ran.data.device import EvalSplit
 
-from .data.device import DeviceSplits, gather, train_indices
-from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices, weighted_mmd
-from .models import build_discriminator, build_generator
+from ..data.device import DeviceSplits, gather, train_indices
+from ..instrumentation.timing import is_enabled, phase
 
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time
-from .rantypes import COMPILE_CACHE_DIR, Variables, artifacts_dir
-from .timing import is_enabled, phase
+from ..rantypes import COMPILE_CACHE_DIR, Variables, artifacts_dir
+from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices, weighted_mmd
+from .models import build_discriminator, build_generator
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,9 +35,8 @@ if TYPE_CHECKING:
     from jaxtyping import PRNGKeyArray
     from numpy.typing import NDArray
 
-    from .data.device import EvalSplit, TrainSplit
-    from .mmd import MMDCache
-    from .rantypes import (
+    from ..data.device import EvalSplit, TrainSplit
+    from ..rantypes import (
         ZXY,
         DatasetSplits,
         DiscGradFn,
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
         StatelessOptimizer,
         TrainStep,
     )
+    from .mmd import MMDCache
 
 
 logger: Logger = logging.getLogger(name=__name__)
@@ -57,7 +57,8 @@ if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
     # jitted steps below fail deep inside a trace.
     raise RuntimeError(
-        f"ran.train requires the JAX backend, got {keras.backend.backend()!r}. "
+        "ran.training.train requires the JAX backend, got "
+        f"{keras.backend.backend()!r}. "
         "Import `ran` (or any ran.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )

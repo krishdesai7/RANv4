@@ -13,13 +13,13 @@ from matplotlib.figure import Figure
 from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
-from .evaluate import _get_weights
-from .rantypes import (
+from ..rantypes import (
     PANEL_COLUMNS,
     PANEL_WIDTH_INCHES,
     PANELS_PER_PAGE,
     display_order,
 )
+from .evaluate import _get_weights
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from matplotlib.patches import Polygon
     from numpy.typing import NDArray
 
-    from .data import ArrayDataset
-    from .rantypes import EventArray, Populations, RANModel, VarInfo
+    from ..data import ArrayDataset
+    from ..rantypes import EventArray, Populations, RANModel, VarInfo
 
 type AxesHist = tuple[
     NDArray[np.double],

@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from ..instrumentation.timing import note
 from ..rantypes import (
     CACHE_DIR,
     EVENT_DTYPE,
@@ -19,7 +20,6 @@ from ..rantypes import (
     GaussianConfig,
     Populations,
 )
-from ..timing import note
 from .config import parse_gaussian_config
 
 if TYPE_CHECKING:
@@ -101,7 +101,7 @@ def _draw_gaussian(
     # Two dots draw this dataset, and on an A100 XLA runs both at TF32 -- a
     # 10-bit mantissa -- unless told otherwise. Neither cancels, so the cost is
     # an honest ~5e-4 relative rather than the unbounded error the same default
-    # caused in `ran.mmd`; what it buys instead is that the sample is a
+    # caused in `ran.training.mmd`; what it buys instead is that the sample is a
     # function of the config and the seed alone, rather than of the hardware
     # that happened to draw it. A cached .npz is keyed on the physics config,
     # so without this a file drawn on a login node and one drawn on a GPU node

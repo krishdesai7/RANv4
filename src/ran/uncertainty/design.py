@@ -213,8 +213,8 @@ def run_cell(
     """Train one `(dataset, seed)` cell and record its weights on the common set."""
     # Deferred so that `ran uncertainty collect`, which only reads npz and
     # reports, does not pay for importing keras and jax.
-    from ..evaluate import _get_weights
-    from ..train import train
+    from ..evaluation.evaluate import _get_weights
+    from ..training.train import train
 
     b, s = spec.cell_of_index(index)
     params: GaussianConfig | None = (

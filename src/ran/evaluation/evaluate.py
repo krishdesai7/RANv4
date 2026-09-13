@@ -10,13 +10,13 @@ import numpy as np
 from rich.console import Console
 from rich.table import Table
 
-from .data import (
+from ..data import (
     ArrayDataset,
     RANDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
 )
-from .rantypes import EVENT_DTYPE, RUN_DIR, DatasetName, artifacts_dir
+from ..rantypes import EVENT_DTYPE, RUN_DIR, DatasetName, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from jax import Array as JaxArray
     from numpy.typing import NDArray
 
-    from .rantypes import (
+    from ..rantypes import (
         ZXY,
         DatasetSplits,
         EventArray,

@@ -1,7 +1,7 @@
 """Tests for the sliced Wasserstein distance.
 
-Every metric in `ran.evaluate` is computed per coordinate axis, so all of them
-are blind to joint structure by construction: two distributions with identical
+Every metric in `ran.evaluation.evaluate` is computed per coordinate axis, so all of
+them are blind to joint structure by construction: two distributions with identical
 marginals and different correlations score identically. The sliced Wasserstein
 distance projects onto random directions instead of axes, which is exactly the
 gap. `test_sees_correlation_that_the_axis_metrics_miss` is the whole point of

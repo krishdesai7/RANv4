@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ..evaluate import (
+from ..evaluation.evaluate import (
     _improvement,
     _js_per_dim,
     _load_splits,

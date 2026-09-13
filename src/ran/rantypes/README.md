@@ -2,7 +2,7 @@
 
 Records, constants and aliases shared across the package.
 
-Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.train`.
+Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.training.train`.
 
 ## module: `configs`
 
@@ -50,7 +50,7 @@ $-2^{15}$ is that number: absurd on sight for any standardized observable, exact
 
 ## module: `enums`
 
-CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `ran.data` implements, and `LogLevel` one that `ran.logging_config` does.
+CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `ran.data` implements, and `LogLevel` one that `ran.instrumentation.logging_config` does.
 
 ## module: `events`
 

@@ -8,9 +8,9 @@ import typer
 
 from .baselines import evaluate_runs as ibu_evaluate_runs
 from .baselines.omnifold import evaluate_runs as omnifold_evaluate_runs
-from .evaluate import evaluate_runs
-from .leakage import run_leakage_check
-from .logging_config import configure_logging
+from .evaluation.evaluate import evaluate_runs
+from .evaluation.leakage import run_leakage_check
+from .instrumentation.logging_config import configure_logging
 from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
     POISON_SENTINEL,
@@ -19,8 +19,8 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
-from .report import build_report
-from .workflow import run
+from .reporting.report import build_report
+from .training.workflow import run
 
 baseline_app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 uncertainty_app: typer.Typer = typer.Typer(

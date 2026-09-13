@@ -16,7 +16,6 @@ import keras
 import numpy as np
 import pytest
 from ran.data import DeviceSplits, RANDataset, train_indices
-from ran.models import build_generator
 from ran.rantypes import (
     COMPILE_CACHE_DIR,
     TRUTH_SENTINEL,
@@ -24,7 +23,8 @@ from ran.rantypes import (
     Events,
     Split,
 )
-from ran.train import (
+from ran.training.models import build_generator
+from ran.training.train import (
     EPS,
     LOG2,
     TrainResult,
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from jax._src.basearray import Array
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EvalStep, RANModel, TrainStep, Variables
-    from ran.train import EpochParams
+    from ran.training.train import EpochParams
 
 
 def test_backend_is_jax_pinned_to_single_precision() -> None:
@@ -320,7 +320,7 @@ class TestTrainSteps:
     def _setup(
         dim: int = 2, n: int = 64, lambda_dispersion: float = 0.0
     ) -> tuple[tuple[TrainStep, TrainStep, EvalStep], TrainState, tuple[Array, ...]]:
-        from ran.models import build_discriminator, build_generator
+        from ran.training.models import build_discriminator, build_generator
 
         keras.utils.set_random_seed(0)
         g: RANModel = build_generator(dim=dim, hidden_units=8, n_layers=1)

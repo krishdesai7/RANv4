@@ -73,8 +73,8 @@ from typing import TYPE_CHECKING, NamedTuple, cast
 import numpy as np
 import ran  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 from ran.data import RANDataset, load_jet_dataset
-from ran.evaluate import _improvement, _wd_per_dim
-from ran.logging_config import configure_logging
+from ran.evaluation.evaluate import _improvement, _wd_per_dim
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
 from scipy.optimize import root
 

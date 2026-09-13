@@ -60,7 +60,7 @@ def test_evaluation_records_metrics_artifact_completion(
 ) -> None:
     import keras
     import numpy as np
-    from ran import evaluate
+    from ran.evaluation import evaluate
     from ran.rantypes import ZXY, Events
 
     run_dir: Path = tmp_path / "sample-run"
@@ -98,12 +98,13 @@ def test_evaluation_records_metrics_artifact_completion(
     )
     monkeypatch.setattr(evaluate, "render_metrics", lambda *_args, **_kwargs: None)
 
-    with caplog.at_level(logging.INFO, logger="ran.evaluate"):
+    with caplog.at_level(logging.INFO, logger="ran.evaluation.evaluate"):
         _ = evaluate.evaluate_run(run_dir)
 
     out_path: Path = run_dir / "artifacts" / "metrics.json"
     messages = [
-        record.getMessage() for record in _completion_records(caplog, "ran.evaluate")
+        record.getMessage()
+        for record in _completion_records(caplog, "ran.evaluation.evaluate")
     ]
     assert out_path.exists()
     assert any(

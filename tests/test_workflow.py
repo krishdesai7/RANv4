@@ -21,12 +21,12 @@ from typing import TYPE_CHECKING, override
 
 import numpy as np
 import pytest
-from ran import workflow
 from ran.data import RANDataset, parse_gaussian_config
 from ran.rantypes import ZXY, DatasetName, Events, Populations
 from ran.rantypes.events import DatasetSplits
-from ran.train import TrainResult, train
-from ran.workflow import _compact_variables
+from ran.training import workflow
+from ran.training.train import TrainResult, train
+from ran.training.workflow import _compact_variables
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -720,7 +720,7 @@ def test_timing_writes_a_phase_breakdown_into_the_run_dir(
     what says the phases survive a real call rather than only the unit tests in
     `tests/test_timing.py`.
     """
-    from ran import timing
+    from ran.instrumentation import timing
 
     monkeypatch.chdir(tmp_path)
     _ = (tmp_path / "cfg.yaml").write_text(data=CONFIG_2D)

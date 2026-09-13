@@ -13,7 +13,7 @@ rebuild its populations, score a weight vector against the same metrics
 `ran evaluate` uses --- and the symmetry is the point. The comparison is only
 worth anything if both arms are scored by the same code, which is why this lives
 here rather than in a separate repository with its own vendored copy of
-`ran.evaluate` drifting away from this one.
+`ran.evaluation.evaluate` drifting away from this one.
 
 Two things differ from `ibu.py`, both forced by the subprocess:
 
@@ -43,8 +43,8 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from .. import timing
-from ..evaluate import apply_to_runs, render_metrics
+from ..evaluation.evaluate import apply_to_runs, render_metrics
+from ..instrumentation import timing
 from ..rantypes import artifacts_dir
 from ._shared import evaluate_dimension, load_populations, parse_run_config
 

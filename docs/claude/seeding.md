@@ -34,7 +34,7 @@ dropped, and since the permutation is redrawn each epoch it is a different
 random tail every pass. A split too small for one group still trains: it
 becomes a single group with every batch in it, and one generator update.
 
-`ran leakage-check` (in `src/ran/leakage.py`) depends on this: both arms must
+`ran leakage-check` (in `src/ran/evaluation/leakage.py`) depends on this: both arms must
 share `--seed` or initialization variance swamps the effect and the arms differ
 even with no leakage. With it fixed, detector-level results are bit-identical
 between the clean and poisoned arms.

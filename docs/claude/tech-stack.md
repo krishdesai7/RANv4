@@ -1,6 +1,6 @@
 # Tech Stack
 
-- Python >= 3.14, managed with `uv` (no pip). Not 3.13: `src/ran/timing.py`
+- Python >= 3.14, managed with `uv` (no pip). Not 3.13: `src/ran/instrumentation/timing.py`
   uses PEP 758's unparenthesized `except OSError, ValueError:`, which is a
   `SyntaxError` on anything earlier — and ruff's formatter canonicalises the
   parenthesized form to it, so it will come back if someone "fixes" it
@@ -23,7 +23,7 @@ for the Keras backend slot or for the GPU.
 defaults to TensorFlow when that variable is unset, and TensorFlow is not
 installed, so the pin makes `import keras` work at all. It must land before
 the first keras import, which is why it lives in the package `__init__`;
-`src/ran/train.py` keeps a cheap guard that raises a readable error if someone
+`src/ran/training/train.py` keeps a cheap guard that raises a readable error if someone
 sets `KERAS_BACKEND` to something else by hand.
 
 ## Gaussian Config Format

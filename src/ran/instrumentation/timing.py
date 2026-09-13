@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Final, cast, override
 from rich.console import Console
 from rich.table import Table
 
-from .rantypes import COMPILE_CACHE_DIR, artifacts_dir
+from ..rantypes import COMPILE_CACHE_DIR, artifacts_dir
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping

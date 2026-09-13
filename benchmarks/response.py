@@ -60,7 +60,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 import keras
 import numpy as np
 from ran.data import load_jet_dataset
-from ran.logging_config import configure_logging
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
 from scipy.special import expit
 

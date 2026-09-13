@@ -5,12 +5,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
-from ran import evaluate
 from ran.baselines import _shared as shared
 from ran.baselines import ibu
 from ran.data import ArrayDataset, RANDataset
-from ran.models import build_generator
+from ran.evaluation import evaluate
 from ran.rantypes import ZXY, DatasetSplits, Events, Populations, artifacts_dir
+from ran.training.models import build_generator
 
 if TYPE_CHECKING:
     from collections.abc import Callable

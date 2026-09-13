@@ -5,27 +5,27 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .data import RANDataset
-from .evaluate import (
-    _collect_test_data,
-    _improvement,
-    _triangular_per_dim,
-    _wd_per_dim,
-)
-from .rantypes import (
+from ..data import RANDataset
+from ..rantypes import (
     EVENT_DTYPE,
     POISON_SENTINEL,
     TRUTH_SENTINEL,
     Events,
     Populations,
 )
-from .train import train
+from ..training.train import train
+from .evaluate import (
+    _collect_test_data,
+    _improvement,
+    _triangular_per_dim,
+    _wd_per_dim,
+)
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Literal
 
-    from .rantypes import ZXY, DatasetSplits, EventArray, RANModel
+    from ..rantypes import ZXY, DatasetSplits, EventArray, RANModel
 
 logger: Logger = logging.getLogger(name=__name__)
 

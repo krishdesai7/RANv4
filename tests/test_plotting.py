@@ -20,9 +20,9 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
-from ran import plotting
 from ran.data import ArrayDataset
-from ran.plotting import (
+from ran.evaluation import plotting
+from ran.evaluation.plotting import (
     _DETECTOR,
     _hist_ratio_panel,
     _plot_level,
@@ -202,7 +202,7 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         del save_path
         captured.extend(figures)
 
-    monkeypatch.setattr("ran.plotting._save_pages", capture)
+    monkeypatch.setattr("ran.evaluation.plotting._save_pages", capture)
     values = np.array(
         [[-1.0, -0.5], [0.0, 0.2], [0.5, 0.8], [1.0, 1.2]], dtype=np.single
     )
@@ -283,7 +283,7 @@ def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("ran.evaluation.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -306,7 +306,7 @@ def _panel_titles_for(
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("ran.evaluation.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -332,7 +332,7 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     mc = rng.normal(size=(64, 1)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("ran.evaluation.plotting._save_pages", _capture_save)
     _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, baselines)
     return _last_drawn_figure()
 
@@ -496,7 +496,7 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
     def generator(z: NDArray[np.single]) -> NDArray[np.single]:
         return np.ones((len(z), 1), dtype=np.single)
 
-    monkeypatch.setattr("ran.plotting._save_pages", capture)
+    monkeypatch.setattr("ran.evaluation.plotting._save_pages", capture)
     plot_levels(
         dataset,
         cast("RANModel", generator),
@@ -935,7 +935,7 @@ class TestBaselineOverlays:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The overlays are indexed per panel; an off-by-one would drop one."""
-        monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+        monkeypatch.setattr("ran.evaluation.plotting._save_pages", _capture_save)
         rng = np.random.default_rng(0)
         dim = 3
         nature = rng.normal(size=(64, dim)).astype(np.single)

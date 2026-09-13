@@ -4,18 +4,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, assert_type
 
 from jax._src.basearray import Array as JaxArray
-from ran.evaluate import _get_weights as evaluate_weights
-from ran.models import build_discriminator, build_generator
+from ran.evaluation.evaluate import _get_weights as evaluate_weights
 
 # Specifically what this test is checking
-from ran.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
+from ran.evaluation.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
 from ran.rantypes import (
     KerasVariable,
     RANModel,
     Variables,
 )
-from ran.train import TrainResult, _make_steps
-from ran.workflow import _load_artifacts
+from ran.training.models import build_discriminator, build_generator
+from ran.training.train import TrainResult, _make_steps
+from ran.training.workflow import _load_artifacts
 
 if TYPE_CHECKING:
     from typing import Any

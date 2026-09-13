@@ -20,10 +20,10 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from ran import timing
 from ran.baselines import _shared as shared
 from ran.baselines import omnifold
 from ran.data import ArrayDataset
+from ran.instrumentation import timing
 from ran.rantypes import ZXY, DatasetSplits, Events
 
 if TYPE_CHECKING:

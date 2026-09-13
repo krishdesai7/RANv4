@@ -1,4 +1,4 @@
-"""Tests for `ran.report`'s template loading and value-formatting primitives."""
+"""Tests for `ran.reporting.report`'s template loading and value formatting."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from ran import report
 from ran.rantypes import SUBSTRUCTURE_VARIABLES
+from ran.reporting import report
 
 
 def test_the_template_ships_with_the_package() -> None:

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
+from ..instrumentation.timing import note
 from ..rantypes import (
     CACHE_DIR,
     CACHE_FILENAMES,
@@ -15,7 +16,6 @@ from ..rantypes import (
     Events,
     Populations,
 )
-from ..timing import note
 from .datasets import RANDataset
 from .download import download_jet_data
 

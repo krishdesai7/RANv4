@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal
 import jax.numpy as jnp
 import numpy as np
 from jax._src.basearray import Array  # ruff: ignore[typing-only-third-party-import]
-from ran.mmd import (
+from ran.training.mmd import (
     MMDCache,
     bandwidths,
     build_cache,

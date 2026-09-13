@@ -7,10 +7,6 @@ src/ran/                      Python package
 ├── __init__.py               Pins KERAS_BACKEND=jax, JAX_ENABLE_X64=0 (see tech-stack.md)
 ├── __main__.py                Fallback entry point (python -m ran)
 ├── cli.py                    Unified Typer command tree; `ran` script targets cli:app
-├── workflow.py                Training and reload workflow behind `ran train`
-├── report.py                  PDF dossier behind `ran report` (see reporting.md)
-├── leakage.py                 Data-poisoning leakage check behind `ran leakage-check`
-├── logging_config.py         Rich structured application logging
 ├── py.typed                  PEP 561 marker
 ├── rantypes/
 │   ├── events.py              Split, Events, ZXY, Populations, DatasetSplits
@@ -34,13 +30,22 @@ src/ran/                      Python package
 │   ├── design.py                Bootstrap x seed grid: resampling, one cell, loading
 │   ├── variance.py              Two-way ANOVA components, covariances, quantile binning
 │   └── report.py                Decomposition table, variance.npz, correlation.pdf
-├── models.py                   Generator and discriminator architectures
-├── train.py                    Fused JAX training program (owns TrainResult/TrainState/RunCarry)
-├── plotting.py                 Detector-level, particle-level, and loss curve plots
-├── templates/
-│   └── report.tex               LaTeX skeleton `report.py` fills in; see reporting.md
-├── timing.py                    Optional per-phase wall clock (see timing.md)
-└── evaluate.py                  Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
+├── training/
+│   ├── models.py               Generator and discriminator architectures
+│   ├── train.py                Fused JAX training program (owns TrainResult/TrainState/RunCarry)
+│   ├── mmd.py                  Weighted MMD, the checkpoint-selection signal
+│   └── workflow.py             Training and reload workflow behind `ran train`
+├── evaluation/
+│   ├── evaluate.py             Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
+│   ├── plotting.py             Detector-level, particle-level, and loss curve plots
+│   └── leakage.py              Data-poisoning leakage check behind `ran leakage-check`
+├── reporting/
+│   ├── report.py               PDF dossier behind `ran report` (see reporting.md)
+│   └── templates/
+│       └── report.tex          LaTeX skeleton `report.py` fills in; see reporting.md
+└── instrumentation/
+    ├── timing.py               Optional per-phase wall clock (see timing.md)
+    └── logging_config.py       Rich structured application logging
 
 params/                        Gaussian config YAML files
 ├── 1d_default.yaml

@@ -20,7 +20,7 @@ from importlib import resources
 from itertools import starmap
 from typing import TYPE_CHECKING, cast
 
-from .rantypes import (
+from ..rantypes import (
     ARTIFACTS_DIR,
     JET_OBS,
     JET_VARIABLE_GROUPS,
@@ -65,9 +65,9 @@ _DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 
 def load_template() -> str:
     """The shipped LaTeX template, as text."""
-    return (resources.files(anchor="ran") / "templates" / "report.tex").read_text(
-        encoding="utf-8"
-    )
+    return (
+        resources.files(anchor="ran.reporting") / "templates" / "report.tex"
+    ).read_text(encoding="utf-8")
 
 
 def _plain(value: float, /) -> str:
@@ -197,8 +197,8 @@ def _gaussian_params_cell(params: Mapping[str, Any], /) -> str:
 
 def _sigma_cell(sigmas: Sequence[float], /) -> str:
     r"""`median x (1/2 .. 2)` when the values really are the bracket else raw."""
-    # Deferred: `ran.mmd` imports jax, which this module must not load eagerly.
-    from .mmd import _SCALES
+    # Deferred: `ran.training.mmd` imports jax, which this module must not load eagerly.
+    from ..training.mmd import _SCALES
 
     if len(sigmas) == len(_SCALES):
         median: float = sigmas[_SCALES.index(1.0)]

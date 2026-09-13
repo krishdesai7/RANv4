@@ -103,7 +103,7 @@ A per-bin correction, learned from one population and applied to another.
 
 IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on train+val and applied to the held-out test split, so the sample it scores is genuinely not the sample it learned from.
 
-That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied: `ran.train` reads the test split only to compute a diagnostic that cannot influence the returned model, and never to fit or select. A comparison is only a comparison if both sides see the same events.
+That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied: `ran.training.train` reads the test split only to compute a diagnostic that cannot influence the returned model, and never to fit or select. A comparison is only a comparison if both sides see the same events.
 
 ### `ibu::_assign_bins`
 

@@ -61,7 +61,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from ran.logging_config import configure_logging
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import artifacts_dir
 from rich.console import Console
 from rich.table import Table

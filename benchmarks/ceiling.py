@@ -13,12 +13,12 @@ import numpy as np
 import typer
 from jax import Array
 from ran.data import load_jet_dataset
-from ran.evaluate import _improvement, _wd_per_dim
-from ran.logging_config import configure_logging
-from ran.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
-from ran.models import build_discriminator, build_generator
+from ran.evaluation.evaluate import _improvement, _wd_per_dim
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split, artifacts_dir
-from ran.train import (
+from ran.training.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
+from ran.training.models import build_discriminator, build_generator
+from ran.training.train import (
     MMD_SUBSAMPLE,
     PARAMS_FILE,
     load_params,
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from typing import Any, Final
 
     from numpy.typing import NDArray
-    from ran.mmd import MMDCache
     from ran.rantypes import DatasetSplits, EventArray, Populations, RANModel
+    from ran.training.mmd import MMDCache
 
 LOG2: Final[np.double] = np.log(2.0)
 
@@ -90,7 +90,7 @@ def _fit_classifier(
     x_val, y_val = _labelled(val_pos, val_neg)
     # Keras reduces a weighted loss with `sum_over_batch_size` -- it divides by
     # the row count, not by the weight sum -- which is exactly what
-    # `ran.train.weighted_bce` does. The two are the same quantity, so a
+    # `ran.training.train.weighted_bce` does. The two are the same quantity, so a
     # sample-weighted fit here early-stops on the same number C then scores.
     fit_w: dict[str, NDArray[np.single]] | None = (
         None if train_w is None else {"sample_weight": train_w}
@@ -311,7 +311,7 @@ def _run_weights(
     """`(x, y, w)` for one split, weighted by a saved run's generator.
 
     Rows are `[x_data ; x_sim]`, so `y` is 1 on nature and 0 on MC and the
-    weights come back through `ran.train.normalize_weights` -- the same
+    weights come back through `ran.training.train.normalize_weights` -- the same
     normalization the training loop applies, rather than a re-derivation of it.
     """
     g: keras.Model = cast(typ=keras.Model, val=_generator_at(run_dir, config, epoch))

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol, TypedDict
 import numpy as np
 
 # `Variables` is used as a runtime annotation by the `@jaxtyped(beartype)`
-# functions in `ran.train`, and beartype has to evaluate the alias to check
+# functions in `ran.training.train`, and beartype has to evaluate the alias to check
 # it -- so `JaxArray` cannot hide under TYPE_CHECKING.
 from jax import Array as JaxArray
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-    from ..train import TrainState
+    from ..training.train import TrainState
 
 # ---------------------------------
 # Plotting

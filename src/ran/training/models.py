@@ -7,7 +7,7 @@ import keras
 if TYPE_CHECKING:
     from typing import Protocol
 
-    from .rantypes import RANModel
+    from ..rantypes import RANModel
 
     class _InputFactory(Protocol):
         def __call__(

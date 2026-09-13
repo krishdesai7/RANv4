@@ -4,13 +4,15 @@
 
 Importing anything under `ran` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
 
-`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`ran.rantypes.constants`, with its annotation twin `EventArray` in :mod:`ran.rantypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`ran.models` follow from it.
+`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`ran.rantypes.constants`, with its annotation twin `EventArray` in :mod:`ran.rantypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`ran.training.models` follow from it.
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
-Import the submodule needed (`from ran.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
+Import the submodule needed (`from ran.training.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
 
-## module `evaluate`
+Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD, the `ran train` workflow), `evaluation/` (metrics, plots, the leakage check), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Those four have empty `__init__.py` files on purpose. `training.workflow` imports `evaluation`, and `evaluation.leakage` imports `training.train`, so re-exporting from either `__init__` would turn that two-way package dependency into an import cycle.
+
+## module `evaluation.evaluate`
 
 Computes distance metrics on test sets for completed runs: per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and triangular discriminators, both before and after reweighting.
 
@@ -126,7 +128,7 @@ Compute distance metrics for completed runs.
 
 - `None`
 
-## module `leakage`
+## module `evaluation.leakage`
 
 Quick leakage check: poison z_true and verify training is unaffected.
 
@@ -136,7 +138,7 @@ network can see z_true, the two diverge.
 Both arms must use the same `init_seed` or the comparison is meaningless: with
 random initialization the run-to-run spread swamps the effect being tested.
 
-## module `plotting`
+## module `evaluation.plotting`
 
 ### `plot_detector_level(test_dataset: ArrayDataset, g: keras.Model, save_path: Path = Path("plots/detector_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
 
@@ -170,7 +172,7 @@ Generate particle level plots.
 
 - `None`
 
-## :mod:`ran.train`
+## :mod:`ran.training.train`
 
 Adversarial training loop for RAN, on Keras 3 with the JAX backend, as a single fused XLA program.
 
@@ -330,7 +332,7 @@ running best inside the trace.
 
 - `TrainResult` The training result.
 
-## module `workflow`
+## module `training.workflow`
 
 ### def `_prepare_gaussian(config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int) -> tuple[DatasetSplits, int, GaussianConfig]`
 

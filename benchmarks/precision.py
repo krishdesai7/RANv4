@@ -12,10 +12,10 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EventArray, RANModel
-    from ran.train import TrainResult
+    from ran.training.train import TrainResult
 
     class ModelBuilder(Protocol):
-        """The exact shape of `ran.models.build_{generator,discriminator}`.
+        """The exact shape of `ran.training.models.build_{generator,discriminator}`.
 
         Spelled out rather than `Callable[..., RANModel]` so that rebinding the
         module attributes below type-checks instead of needing a suppression.
@@ -40,7 +40,7 @@ os.environ["JAX_ENABLE_X64"] = str(object=int(DTYPE == "float64"))
 
 import numpy as np
 import ran  # ruff: ignore[unused-import] -- import order is load-bearing; see above
-import ran.train as train_module
+import ran.training.train as train_module
 from ran.data import RANDataset
 from ran.rantypes import (
     Events,
@@ -58,12 +58,12 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 
 def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """Rebuild the model factories at `dtype` without mutating the source file."""
-    source: str = (REPO_ROOT / "src" / "ran" / "models.py").read_text()
+    source: str = (REPO_ROOT / "src" / "ran" / "training" / "models.py").read_text()
     namespace: dict[str, Any] = {}
     exec(  # ruff: ignore[exec-builtin] -- module's own source, recompiled with one literal changed
         compile(
             source=source.replace('"float32"', f'"{dtype}"'),
-            filename="ran/models.py",
+            filename="ran/training/models.py",
             mode="exec",
         ),
         globals=namespace,

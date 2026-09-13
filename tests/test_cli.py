@@ -58,7 +58,7 @@ def test_train_converts_typer_values_for_the_workflow(
 ) -> None:
     """`ran.cli` imports `run` at module scope, so patch the name it calls.
 
-    Replacing `sys.modules["ran.workflow"]` would only work if the command
+    Replacing `sys.modules["ran.training.workflow"]` would only work if the command
     re-imported on every invocation, which it deliberately no longer does.
     """
     calls: list[dict[str, object]] = []

@@ -13,7 +13,7 @@ report. `artifacts_dir(run_dir)` is the single accessor and it creates the
 directory, so anything that only _reads_ must use `run_dir / ARTIFACTS_DIR`
 instead — rendering a report must not mkdir into a directory it was handed.
 
-`src/ran/templates/report.tex` is the document; `src/ran/report.py` only fills
+`src/ran/reporting/templates/report.tex` is the document; `src/ran/reporting/report.py` only fills
 in `<<TOKEN>>` slots and never decides layout. All rounding policy lives in
 the template's `siunitx` column types, so changing how a number reads is a
 LaTeX edit, not a Python one.

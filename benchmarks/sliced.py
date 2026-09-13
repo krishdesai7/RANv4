@@ -1,6 +1,6 @@
 """Are the per-axis metrics missing joint structure?
 
-Every number in `ran.evaluate` is computed one coordinate axis at a time --
+Every number in `ran.evaluation.evaluate` is computed one coordinate axis at a time --
 `_wd_per_dim`, `_js_per_dim`, `_triangular_per_dim` all loop over columns. That
 makes the whole metric suite blind to correlation by construction: two
 distributions with identical marginals and different joint structure score
@@ -18,7 +18,7 @@ off-diagonal structure.
 here would mean discarding `w` -- measuring the wrong distribution -- or
 resampling events to represent it, which injects sampling noise into the
 quantity being measured. `w1_weighted` is the same estimator `scipy` computes
-and `ran.evaluate` already relies on, vectorised over projections.
+and `ran.evaluation.evaluate` already relies on, vectorised over projections.
 
 **Standardised against the reference.** Directions are drawn on the sphere, so
 the axes have to be commensurable; without it whichever observable carries the
@@ -58,7 +58,7 @@ import numpy as np
 import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
 from ran.data import RANDataset, load_jet_dataset
 from ran.data.config import gaussian_config_from_run_config
-from ran.logging_config import configure_logging
+from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import Split, artifacts_dir
 from rich.console import Console
 from rich.table import Table

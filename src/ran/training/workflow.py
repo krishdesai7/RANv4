@@ -11,16 +11,15 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 
-from .baselines import parse_run_config
-from .data import (
+from ..baselines import parse_run_config
+from ..data import (
     RANDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
     parse_gaussian_config,
 )
-from .evaluate import evaluate_run
-from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
-from .plotting import (
+from ..evaluation.evaluate import evaluate_run
+from ..evaluation.plotting import (
     BaselineOverlay,
     ibu_overlay,
     omnifold_overlay,
@@ -28,21 +27,22 @@ from .plotting import (
     plot_losses,
     plot_selection,
 )
-from .rantypes import (
+from ..instrumentation.timing import phase, report, write
+from ..rantypes import (
     JET_OBS,
     DatasetName,
     GaussianConfig,
     VarInfo,
     artifacts_dir,
 )
-from .timing import phase, report, write
+from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
 from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
-    from .rantypes import DatasetSplits, EventArray, Populations, RANModel, RunConfig
+    from ..rantypes import DatasetSplits, EventArray, Populations, RANModel, RunConfig
     from .train import EpochParams, TrainResult
 
 logger: Logger = logging.getLogger(__name__)

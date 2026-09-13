@@ -97,6 +97,8 @@ infer-return-types = "checked"
 preset = "all"
 treat-all-caps-as-final = true
 permissive-ignores = true
+strict-callable-subtyping = true
+strict-partial-subtyping = true
 project-excludes = [
     "legacy",
     # The quarantined TensorFlow workers import packages that cannot exist

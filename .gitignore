@@ -24,8 +24,9 @@ runs/*/artifacts/omnifold_checkpoints/
 # Sandbox
 sandbox.ipynb
 
-# LLM docs
-docs/
+# LLM docs (docs/claude/ is tracked -- CLAUDE.md reference material)
+docs/*
+!docs/claude/
 
 # Local task worktrees
 .worktrees/

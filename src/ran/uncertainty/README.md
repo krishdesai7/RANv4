@@ -150,7 +150,7 @@ decomposing whatever landed would charge the imbalance to the dataset axis.
 > variance budget at one sample size does not describe a measurement at
 > another: the finite-sample component is the one being reported, and it is the
 > one that moves with N. Both grids are being rerun at 1.6M — the decomposition
-> *and* the covariance, since mixing sizes across the two would describe no
+> _and_ the covariance, since mixing sizes across the two would describe no
 > single model. Until those land, the numbers here are the best available and
 > are quantitatively wrong for the current run. The structural findings
 > (initialization has no main effect; the interaction dominates) are what is

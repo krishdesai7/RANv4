@@ -6,7 +6,7 @@ End-to-end unfolding run: train -> IBU baseline -> replot with the baseline over
 
 ### Examples
 
-```zsh
+```shell
     sbatch scripts/submit.zsh                       # all 6 jet observables
     sbatch scripts/submit.zsh --seed 7              # extra flags reach `ran train`
     sbatch scripts/submit.zsh --var m --var w       # a subset
@@ -42,10 +42,10 @@ The default `TRAIN_ARGS` is _prepended_ to the command line arguments. Since cli
 - `-b1024`: Batch size.
 - `--seed`: Seed for the random number generator. `train` draws one from system entropy and records it in config.json, so the run is reproducible after the fact without pinning it in advance.
 
-## submit_precision.sh
+## submit_precision.zsh
 
 - Runs 72 paired float64/float32 precision-benchmark seeds and appends the results to f64.log/f32.log at the repo root.
-- Run it on a login node with `bash scripts/submit_precision.sh`. Do NOT sbatch this file itself; it computes the seed list and submits the job.
+- Run it on a login node with `zsh scripts/submit_precision.zsh`. Do NOT sbatch this file itself; it computes the seed list and submits the job.
 - One node = 4 A100x40G on Perlmutter. 72 seeds x 2 dtypes = 144 independent runs, so this script throttles them across the node's 4 GPUs with `srun --exact` steps in a background loop. 144 runs/4 GPUs should finish in under 30 min; `-t00:45:00` is 1.5x that; a comfortable margin while still landing in a favorable queue window.
 - The heredoc is the batch script; it is quoted (`EOF`) so shell expansion happens at job runtime, not now. Everything the job needs reaches it via `--export`. `-o` lives on the command line because SLURM does not expand shell vars in `#SBATCH` lines.
 - Each run is one `srun` step pinned to a single GPU. `--exact` lets multiple steps share the allocation simultaneously (without it the first step grabs the whole node and the rest block). `--gpus-per-task=1` sets `CUDA_VISIBLE_DEVICES` per step so JAX in each run sees exactly one GPU, which matters, because JAX preallocates most of the memory on every device it can see. ~16 cores/56GB per A100 (4 GPUs, 64 cores, 256GB on a Perlmutter GPU node).
@@ -62,7 +62,7 @@ RAN training in that directory is read, never repeated.
 
 ### Examples
 
-```zsh
+```shell
     sbatch scripts/submit_omnifold.zsh runs/2026-09-06T203848Z
     sbatch scripts/submit_omnifold.zsh runs/2026-09-06T203848Z --niter 5
 ```
@@ -99,7 +99,7 @@ checks that they do.
 is not in `uv.lock`, and first use pulls ~3.5GB of CUDA wheels --- which a compute
 node generally cannot do. Warm it on a login node:
 
-```zsh
+```shell
     uv run --no-project src/ran/baselines/_omnifold_worker.py
 ```
 
@@ -109,7 +109,7 @@ One hyperparameter arm sweep, packed into a single multi-node job: three levels 
 
 Run on the login node:
 
-```zsh
+```shell
     zsh scripts/submit_hparam.zsh                                  # lr_g at 3e-5 / 1e-4 / 3e-4
     FLAG=--lr-d LEVELS="1e-4 3e-4 1e-3" zsh scripts/submit_hparam.zsh
     NODES=3 zsh scripts/submit_hparam.zsh                          # half the GPUs, two waves

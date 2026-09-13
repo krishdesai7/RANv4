@@ -129,7 +129,12 @@ def test_the_variable_list_uses_physics_symbols_in_display_order() -> None:
 
 def test_the_variable_list_spans_the_row() -> None:
     rows: str = report.config_rows({"variables": ["m", "f_ch"]}, None)
-    assert r"\ConfigWide{variables}{$m$ [GeV], $f_{ch}$}" in rows
+    assert r"\ConfigWide{variables}{" in rows
+    assert r"\textbf{Mass and hard scale (IRC-safe kinematics):} $m$ [GeV]" in rows
+    assert (
+        r"\textbf{Hadronization, multiplicity and fragmentation (IRC-unsafe):} $f_{ch}$"
+        in rows
+    )
 
 
 def test_the_mmd_sigmas_collapse_to_a_median_and_a_bracket() -> None:
@@ -225,29 +230,26 @@ def _entry(before: float, after: float) -> dict[str, float]:
     }
 
 
-def test_rows_are_grouped_and_in_display_order() -> None:
+def test_rows_are_in_display_order() -> None:
     ran = {f"detector_{v}": _entry(1.0, 0.1) for v in SUBSTRUCTURE_VARIABLES}
 
     body: str = report.metrics_table(
         "detector", "wasserstein", SUBSTRUCTURE_VARIABLES, ran, None, None, frozenset()
     )
 
-    assert "Mass and hard scale" in body
-    assert body.index("Mass and hard scale") < body.index("Continuous angularities")
+    # Group headings live in the configuration table, not the metric tables
+    assert "Mass and hard scale" not in body
     assert body.index(r"$\ln\rho$") < body.index(r"$\lambda^{1}_{0.5}$")
-    assert body.count(r"\midrule") == 4  # one per group
+    assert body.count(r"\midrule") == 1  # single header rule
+    assert body.count(r"\\") == len(SUBSTRUCTURE_VARIABLES)
 
 
-def test_a_group_with_no_variables_is_omitted() -> None:
+def test_a_group_with_no_variables_is_omitted_from_config_variables() -> None:
     """`--var m --var w` has nothing in the splitting group."""
-    ran = {f"detector_{v}": _entry(1.0, 0.1) for v in ("m", "w")}
-
-    body: str = report.metrics_table(
-        "detector", "wasserstein", ("m", "w"), ran, None, None, frozenset()
-    )
-
-    assert "Splitting" not in body
-    assert body.count(r"\midrule") == 2
+    rows: str = report.config_rows({"variables": ["m", "w"]}, None)
+    assert "Splitting" not in rows
+    assert "Mass and hard scale" in rows
+    assert "Continuous angularities" in rows
 
 
 def test_a_missing_baseline_renders_dashes() -> None:
@@ -322,6 +324,17 @@ def test_a_table_with_nothing_skipped_carries_no_legend() -> None:
 
     assert report._DAGGER_LEGEND not in body
     assert "failed to unfold" not in body
+
+
+def test_dagger_legend_appears_only_once_in_rendered_report(
+    reference_run: Path,
+) -> None:
+    import json
+
+    outcomes = [{"variable_name": "m", "status": "skipped", "n_bins": 1}]
+    (reference_run / "artifacts" / "ibu_outcomes.json").write_text(json.dumps(outcomes))
+    source: str = report.render(reference_run)
+    assert source.count("failed to unfold") == 1
 
 
 def test_reading_the_skip_set_creates_nothing(tmp_path: Path) -> None:
@@ -655,9 +668,48 @@ class TestOmniFoldColumns:
         cells = [c.strip() for c in body.splitlines()[-1].split("&")]
         # label, Sim, IBU, IBU%, OmniFold, OmniFold%, RAN, RAN%
         assert len(cells) == report._TABLE_COLUMNS
-        assert cells[2].startswith("2")
-        assert cells[4].startswith("3")
-        assert cells[6].startswith("1")
+        assert cells[2].removeprefix(r"\bfseries ").startswith("2")
+        assert cells[4].removeprefix(r"\bfseries ").startswith("3")
+        assert cells[6].removeprefix(r"\bfseries ").startswith("1")
+        # RAN performed best (1.0 vs 2.0 and 3.0), so its cells are bolded
+        assert cells[6].startswith(r"\bfseries")
+        assert cells[7].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[4].startswith(r"\bfseries")
+
+    def test_best_performing_method_is_bolded(self) -> None:
+        r"""The method achieving lowest distance is highlighted with \bfseries."""
+        # OmniFold (0.001) wins over RAN (0.002) and IBU (0.003)
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": _entry(1.0, 0.002)},
+            {"detector_m": _entry(1.0, 0.003)},
+            {"detector_m": _entry(1.0, 0.001)},
+            frozenset(),
+        )
+        cells = [c.strip() for c in body.splitlines()[-1].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert cells[5].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[6].startswith(r"\bfseries")
+
+    def test_skipped_ibu_is_not_eligible_for_best_method(self) -> None:
+        """A daggered IBU did not unfold, so it cannot win even with a lower value."""
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("zg",),
+            {"detector_zg": _entry(1.0, 0.5)},
+            {"detector_zg": _entry(1.0, 0.1)},
+            {"detector_zg": _entry(1.0, 0.4)},
+            frozenset({"zg"}),
+        )
+        # Last line is the legend, second to last is data row
+        cells = [c.strip() for c in body.splitlines()[-2].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
 
     def test_a_render_without_omnifold_still_fills_the_columns(self) -> None:
         """The template fixes the column count, so absent means dashes."""

@@ -726,6 +726,29 @@ forwards an unset variable delivers `""`, not absence.
 `rantypes/constants.py`, because the `cache_dir=` defaults throughout
 `ran.data` bind to `CACHE_DIR` at import either way.
 
+### Dev-tool caches
+
+`.cache/` also holds the dev-tool caches that used to litter the repo root --
+`.cache/pytest`, `.cache/ruff`, `.cache/complexipy` and `.cache/pycache`. These
+are a separate concern from the regenerable-data cache above: they exist to
+declutter the root, not to be relocated off `$HOME` on a cluster, so unlike
+`CACHE_DIR` they are **not** chained to `RAN_CACHE_DIR` -- moving a few
+kilobytes of lint/test cache buys nothing on a quota, and chaining it would
+make `RAN_CACHE_DIR` mean two different things.
+
+Each tool gets there by whatever mechanism it supports, since not all of them
+take the same kind of configuration:
+
+- `pytest` and `complexipy` read `cache_dir`/`cache-dir` from `pyproject.toml`
+  (`[tool.pytest.ini_options]`, `[tool.complexipy]`), because both support a
+  config key but neither reads an environment variable for it.
+- `ruff` and CPython's own bytecode cache take theirs from `RUFF_CACHE_DIR` and
+  `PYTHONPYCACHEPREFIX`, set in `.env`, because a `pyproject.toml` key is not
+  the only thing that works and the project's `.env` is already the place
+  environment-only settings live (see `RAN_CACHE_DIR` above, and `JAX_PLATFORMS`).
+  `.env` must actually be sourced into the shell for these to take effect --
+  it is not read by `uv run` or any script here.
+
 ### Compilation cache
 
 `train()` calls `_use_compilation_cache()`, which points XLA's persistent cache

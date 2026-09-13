@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, Populations
 
-logger = logging.getLogger("ran.sliced")
+logger: logging.Logger = logging.getLogger("ran.sliced")
 
 
 def w1_weighted(

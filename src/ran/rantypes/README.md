@@ -28,7 +28,7 @@ Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the defau
 
 ### Constants: `CACHE_ENV_VAR`, `CACHE_DIR`, `COMPILE_CACHE_DIR`
 
-Everything RAN can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `RAN_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
+Everything RAN can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `RAN_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, relocating the tree to e.g. `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
 
 It is deliberately not derived from `XDG_CACHE_HOME`. That variable is already set, or defaults to `~/.cache`, on most Linux systems — deriving from it would silently move every existing checkout's cache and orphan the jet data already on disk.
 
@@ -112,10 +112,6 @@ A real measurement has no answer key. Filling the field rather than dropping it 
 **Returns:**
 
 - `Populations`: The sample.
-
-**Returns:**
-
-- `Populations`: The sample at the new precision.
 
 ##### `require_truth() -> EventArray`
 

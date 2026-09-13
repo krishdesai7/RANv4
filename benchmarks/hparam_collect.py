@@ -72,7 +72,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-logger = logging.getLogger("ran.hparam")
+logger: logging.Logger = logging.getLogger("ran.hparam")
 
 #: The two independent randomness axes of CLAUDE.md's Seeding section:
 #: `seed` sets initialization, `data_seed` sets shuffle, split and batch order.

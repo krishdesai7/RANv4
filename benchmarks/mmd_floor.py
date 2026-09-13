@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
 
-logger = logging.getLogger("ran.mmd_floor")
+logger: logging.Logger = logging.getLogger("ran.mmd_floor")
 
 #: The value the dispersion analysis has been using, for comparison. It is the
 #: 1/m extrapolation of the ~5e-4 measured at m=8192 in `benchmarks/README.md`.

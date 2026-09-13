@@ -81,7 +81,7 @@ if TYPE_CHECKING:
 
 LOG2: float = math.log(2.0)
 _P_CLIP: float = 1e-7
-logger = logging.getLogger("ran.response")
+logger: logging.Logger = logging.getLogger("ran.response")
 
 
 @dataclass(frozen=True)

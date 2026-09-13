@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from typer.main import Typer
 
-runner = CliRunner()
+runner: CliRunner = CliRunner()
 
 
 def _command_names(typer_app: Typer) -> set[str | None]:

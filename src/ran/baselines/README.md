@@ -21,7 +21,7 @@ needs and the silent CPU fallback it prevents.
 
 Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics RAN is scored by.
 
-A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. Both baselines are callers, which is what the split was for: adding OmniFold was a matter of writing an unfolder and a subprocess, and neither arm's scoring moved.
+A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else; both IBU and OmniFold are callers into this shared scoring path.
 
 ### `_shared::parse_run_config`
 
@@ -46,7 +46,7 @@ Returns an `UnfoldingPopulations`, which unpacks as `(fit, test)`. Both are `Pop
 By construction, `fit` is `Split.TRAIN | Split.VAL`, not `Split.ALL`. A baseline fitted on every event and then
 scored on the test split would be scored on data it had already used and would be handed information RAN is denied: `train` does read the test split now, to compute a test-level MMD diagnostic, but nothing weight-bearing depends on that read, so the test split still cannot influence the returned model or its selection (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`). The comparison is only a comparison if both sides see the same events.
 
-Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist. One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
+Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. One thing still widens: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
 
 #### Arguments
 

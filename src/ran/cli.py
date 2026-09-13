@@ -22,10 +22,12 @@ from .rantypes import (
 from .report import build_report
 from .workflow import run
 
-baseline_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
-uncertainty_app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+baseline_app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+uncertainty_app: typer.Typer = typer.Typer(
+    rich_markup_mode="rich", no_args_is_help=True
+)
 
-app = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 app.add_typer(
     typer_instance=baseline_app, name="baseline", help="Run comparison baselines."
 )
@@ -77,7 +79,7 @@ def _canonical_variables(chosen: list[str] | None, /) -> tuple[str, ...]:
 def train_command(
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
     n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
-    config: Path | None = None,
+    config: Annotated[Path | None, typer.Option()] = None,
     dataset: Annotated[
         DatasetName, typer.Option("--dataset", "-D")
     ] = DatasetName.gaussian,
@@ -87,41 +89,20 @@ def train_command(
     n_layers: Annotated[int, typer.Option("--n-layers", "-l", min=1)] = 2,
     n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 100,
     n_disc_steps: Annotated[int, typer.Option("--n-disc-steps", "-k", min=1)] = 5,
-    lr_g: Annotated[float, typer.Option("--lr-g", min=0.0)] = 3e-5,
-    lr_d: Annotated[float, typer.Option("--lr-d", min=0.0)] = 1e-4,
+    lr_g: Annotated[float, typer.Option(min=0.0)] = 3e-5,
+    lr_d: Annotated[float, typer.Option(min=0.0)] = 1e-4,
     lambda_dispersion: Annotated[
         float,
-        typer.Option(
-            "--lambda-dispersion",
-            min=0.0,
-            help="Penalty on the variance of g's weights. 0 disables it.",
-        ),
+        typer.Option(min=0.0, help="Penalty on variance of g's weights. 0 to disable."),
     ] = 0.015,
-    log_every: Annotated[
-        int,
-        typer.Option(
-            "--log-every",
-            min=1,
-            help="Log training progress every N epochs.",
-        ),
-    ] = 1,
-    plots: Annotated[
-        bool,
-        typer.Option(
-            "--plots/--no-plots",
-            help="Draw figures. Can be turned off for hyperparameter sweeps,"
-            "bootstrapping, etc. Metrics still run.",
-        ),
-    ] = True,
+    log_every: Annotated[int, typer.Option(min=1, help="Log every N epochs.")] = 1,
+    plots: Annotated[bool, typer.Option(help="Draw plots. Metrics still run.")] = True,
     run_dir: Annotated[
         Path | None,
-        typer.Option(
-            "--run-dir",
-            help="Where to save this run. Default is a timestamp under runs/.",
-        ),
+        typer.Option(help="Where to save this run. Default: timestamp under runs/."),
     ] = None,
-    seed: int | None = None,
-    data_seed: int = 42,
+    seed: Annotated[int | None, typer.Option()] = None,
+    data_seed: Annotated[int, typer.Option()] = 42,
 ) -> None:
     run(
         batch_size,
@@ -205,10 +186,10 @@ def uncertainty_run_command(
     design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
     n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
     n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
-    n_eval: Annotated[int, typer.Option("--n-eval", min=1)] = 100_000,
+    n_eval: Annotated[int, typer.Option(min=1)] = 100_000,
     dataset: Annotated[DatasetName, typer.Option("--dataset", "-D")] = DatasetName.jets,
     variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
-    config: Path | None = None,
+    config: Annotated[Path | None, typer.Option()] = None,
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
     n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
     hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
@@ -220,8 +201,8 @@ def uncertainty_run_command(
     lambda_dispersion: Annotated[
         float, typer.Option("--lambda-dispersion", min=0.0)
     ] = 0.015,
-    data_seed: int = 42,
-    init_seed: int = 0,
+    data_seed: Annotated[int, typer.Option()] = 42,
+    init_seed: Annotated[int, typer.Option()] = 0,
 ) -> None:
     """Train one (bootstrap dataset, init seed) cell of the design."""
     from .uncertainty import DesignSpec, run_cell

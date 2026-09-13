@@ -300,6 +300,59 @@ _METRICS: Final[tuple[tuple[str, str], ...]] = (
 _TABLE_COLUMNS: Final[int] = 8
 
 
+def _metric_value(
+    source: Mapping[str, Any] | None, key: str, metric_key: str, /
+) -> float | None:
+    """Extract a finite metric value from a source mapping, or `None`."""
+    if source is None:
+        return None
+    entry: Mapping[str, Any] | None = source.get(key)
+    if entry is None:
+        return None
+    val: object = entry.get(metric_key)
+    if val is not None and isinstance(val, (int, float)) and math.isfinite(val):
+        return float(val)
+    return None
+
+
+def _best_methods(
+    variable: str,
+    level: str,
+    metric: str,
+    ran: Mapping[str, Any],
+    ibu: Mapping[str, Any] | None,
+    omnifold: Mapping[str, Any] | None,
+    daggered: bool,
+    /,
+) -> frozenset[str]:
+    """Identify which method(s) achieved the best (lowest) distance after unfolding.
+
+    IBU is excluded if purity binning failed (`daggered`). Only evaluated when at least
+    two methods are competing.
+    """
+    key: str = f"{level}_{variable}"
+    metric_key: str = f"{metric}_after"
+    sources: tuple[tuple[str, Mapping[str, Any] | None], ...] = (
+        ("ran", ran),
+        ("ibu", None if daggered else ibu),
+        ("omnifold", omnifold),
+    )
+    candidates: dict[str, float] = {
+        name: val
+        for name, src in sources
+        if (val := _metric_value(src, key, metric_key)) is not None
+    }
+    if len(candidates) < 2:
+        return frozenset()
+
+    best_val: float = min(candidates.values())
+    return frozenset(
+        m
+        for m, v in candidates.items()
+        if math.isclose(v, best_val, rel_tol=1e-7, abs_tol=1e-12)
+    )
+
+
 def _method_cells(
     source: Mapping[str, Any] | None,
     level: str,
@@ -307,6 +360,8 @@ def _method_cells(
     metric: str,
     scale: float,
     /,
+    *,
+    is_best: bool = False,
 ) -> tuple[str, str]:
     """One method's `(value, improvement)` pair, or dashes where it has not run.
 
@@ -318,11 +373,14 @@ def _method_cells(
     )
     if entry is None:
         return (_DASH, _DASH)
-    return (
-        decimal(entry[f"{metric}_after"] * scale),
-        # Improvements are ratios: scaling them would be wrong.
-        decimal(entry[f"{metric}_improvement_pct"]),
-    )
+    val: str = decimal(entry[f"{metric}_after"] * scale)
+    impr: str = decimal(entry[f"{metric}_improvement_pct"])
+    if is_best:
+        if val != _DASH:
+            val = rf"\bfseries {val}"
+        if impr != _DASH:
+            impr = rf"\bfseries {impr}"
+    return (val, impr)
 
 
 def _row(
@@ -347,14 +405,21 @@ def _row(
     scale: float = _SCALE[metric]
     ours: Mapping[str, float] = ran[f"{level}_{variable}"]
 
+    best: frozenset[str] = _best_methods(
+        variable, level, metric, ran, ibu, omnifold, daggered
+    )
+
     cells: list[str] = [label, decimal(ours[f"{metric}_before"] * scale)]
-    cells.extend(_method_cells(ibu, level, variable, metric, scale))
-    cells.extend(_method_cells(omnifold, level, variable, metric, scale))
     cells.extend(
-        (
-            decimal(ours[f"{metric}_after"] * scale),
-            decimal(ours[f"{metric}_improvement_pct"]),
+        _method_cells(ibu, level, variable, metric, scale, is_best="ibu" in best)
+    )
+    cells.extend(
+        _method_cells(
+            omnifold, level, variable, metric, scale, is_best="omnifold" in best
         )
+    )
+    cells.extend(
+        _method_cells(ran, level, variable, metric, scale, is_best="ran" in best)
     )
     return " & ".join(cells) + r" \\"
 

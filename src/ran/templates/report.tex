@@ -13,6 +13,8 @@
 \usepackage{pdflscape}
 \usepackage{graphicx}
 \usepackage[table]{xcolor}
+\usepackage{etoolbox}
+\robustify\bfseries
 
 % Replacement contract:
 % Replace the six <<...>> tokens before compilation. CONFIG_ROWS, TIMINGS_ROWS, DETECTOR_TABLE, and PARTICLE_TABLE are complete LaTeX row bodies, including row terminators. Each metrics body also owns its first \midrule and provides data rows in physics display order. Numbers are inserted at full precision in plain decimal notation. All rounding policy lives here, not in the generator. Configuration KEYS passed to \ConfigPair or \ConfigWide are detokenized and may contain underscores; text VALUES are not, and must be wrapped in \ConfigVal or otherwise escaped by the generator.
@@ -48,6 +50,8 @@
 \sisetup{
   mode                 = match,
   reset-math-version   = false,
+  reset-text-series    = false,
+  text-series-to-math  = true,
   group-separator      = {,},
   group-digits         = integer,
   group-minimum-digits = 4,

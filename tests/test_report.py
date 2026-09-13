@@ -668,9 +668,48 @@ class TestOmniFoldColumns:
         cells = [c.strip() for c in body.splitlines()[-1].split("&")]
         # label, Sim, IBU, IBU%, OmniFold, OmniFold%, RAN, RAN%
         assert len(cells) == report._TABLE_COLUMNS
-        assert cells[2].startswith("2")
-        assert cells[4].startswith("3")
-        assert cells[6].startswith("1")
+        assert cells[2].removeprefix(r"\bfseries ").startswith("2")
+        assert cells[4].removeprefix(r"\bfseries ").startswith("3")
+        assert cells[6].removeprefix(r"\bfseries ").startswith("1")
+        # RAN performed best (1.0 vs 2.0 and 3.0), so its cells are bolded
+        assert cells[6].startswith(r"\bfseries")
+        assert cells[7].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[4].startswith(r"\bfseries")
+
+    def test_best_performing_method_is_bolded(self) -> None:
+        r"""The method achieving lowest distance is highlighted with \bfseries."""
+        # OmniFold (0.001) wins over RAN (0.002) and IBU (0.003)
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("m",),
+            {"detector_m": _entry(1.0, 0.002)},
+            {"detector_m": _entry(1.0, 0.003)},
+            {"detector_m": _entry(1.0, 0.001)},
+            frozenset(),
+        )
+        cells = [c.strip() for c in body.splitlines()[-1].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert cells[5].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
+        assert not cells[6].startswith(r"\bfseries")
+
+    def test_skipped_ibu_is_not_eligible_for_best_method(self) -> None:
+        """A daggered IBU did not unfold, so it cannot win even with a lower value."""
+        body = report.metrics_table(
+            "detector",
+            "wasserstein",
+            ("zg",),
+            {"detector_zg": _entry(1.0, 0.5)},
+            {"detector_zg": _entry(1.0, 0.1)},
+            {"detector_zg": _entry(1.0, 0.4)},
+            frozenset({"zg"}),
+        )
+        # Last line is the legend, second to last is data row
+        cells = [c.strip() for c in body.splitlines()[-2].split("&")]
+        assert cells[4].startswith(r"\bfseries")
+        assert not cells[2].startswith(r"\bfseries")
 
     def test_a_render_without_omnifold_still_fills_the_columns(self) -> None:
         """The template fixes the column count, so absent means dashes."""

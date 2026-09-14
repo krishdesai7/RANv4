@@ -18,6 +18,7 @@ import pytest
 from ran.data import DeviceSplits, RANDataset, train_indices
 from ran.rantypes import (
     COMPILE_CACHE_DIR,
+    LOG2,
     TRUTH_SENTINEL,
     ZXY,
     Events,
@@ -26,7 +27,6 @@ from ran.rantypes import (
 from ran.training.models import build_generator
 from ran.training.train import (
     EPS,
-    LOG2,
     TrainResult,
     TrainState,
     _make_steps,

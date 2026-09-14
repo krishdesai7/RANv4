@@ -102,7 +102,6 @@ def load_jet_dataset(
     z_gen: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     x_sim: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
 
-    # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[np.single, np.single]] = {}
     for i, var in enumerate(iterable=variables):
         with np.load(file=cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:

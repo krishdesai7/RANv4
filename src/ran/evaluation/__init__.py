@@ -13,7 +13,6 @@ from .plotting import COLOR_MC as COLOR_MC
 from .plotting import COLOR_NATURE as COLOR_NATURE
 from .plotting import COLOR_OMNIFOLD as COLOR_OMNIFOLD
 from .plotting import COLOR_RAN as COLOR_RAN
-from .plotting import LN2 as LN2
 from .plotting import LOSS_YLIM_FRACTION as LOSS_YLIM_FRACTION
 from .plotting import SELECTION_MMD_LINTHRESH as SELECTION_MMD_LINTHRESH
 from .plotting import SELECTION_SMOOTHING_WINDOW as SELECTION_SMOOTHING_WINDOW

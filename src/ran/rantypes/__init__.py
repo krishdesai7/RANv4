@@ -12,6 +12,7 @@ from .constants import GENERATORS as GENERATORS
 from .constants import JET_DISPLAY_ORDER as JET_DISPLAY_ORDER
 from .constants import JET_OBS as JET_OBS
 from .constants import JET_VARIABLE_GROUPS as JET_VARIABLE_GROUPS
+from .constants import LOG2 as LOG2
 from .constants import LOG_RHO_FLOOR as LOG_RHO_FLOOR
 from .constants import N_FILES as N_FILES
 from .constants import PANEL_COLUMNS as PANEL_COLUMNS

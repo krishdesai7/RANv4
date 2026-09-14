@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -14,6 +13,7 @@ from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
 from ..rantypes import (
+    LOG2,
     PANEL_COLUMNS,
     PANEL_WIDTH_INCHES,
     PANELS_PER_PAGE,
@@ -96,8 +96,6 @@ SELECTION_MMD_LINTHRESH: Final[float] = 5e-4
 # this is a legibility aid, not a smoothing of the reported criterion.
 SELECTION_SMOOTHING_WINDOW: Final[int] = 5
 
-
-LN2: Final[float] = math.log(2)
 # The equilibrium band. Every series a converged run produces sits within a
 # fraction of a percent of `ln 2`, and autoscaling that band to the height of
 # the axes makes a 0.4% drift look like a divergence. Fixed limits also make
@@ -524,7 +522,7 @@ def _page_figure(
 ) -> Figure:
     """One page of the level figure: up to `PANELS_PER_PAGE` panels."""
     ncols: int = min(PANEL_COLUMNS, len(indices))
-    nrows: int = math.ceil(len(indices) / ncols)
+    nrows: int = int(np.ceil(len(indices) / ncols))
     figure = Figure(figsize=(PANEL_WIDTH_INCHES * ncols, style.height_per_dim * nrows))
     figure.canvas = FigureCanvasPdf(figure)
     # Absolute margins in inches do not survive a figure whose height varies
@@ -717,16 +715,16 @@ def plot_losses(
     # be this one drawn twice. Older runs carry a `val_g` key holding exactly
     # that copy --- it is deliberately not read.
     _ = ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
-    _ = ax.axhline(y=LN2, color="gray", lw=1)  # no `label`: it is a tick, not a series
+    _ = ax.axhline(y=LOG2, color="gray", lw=1)  # no `label`: it is a tick, not a series
 
     _ = ax.set_ylim(
-        bottom=LN2 * (1 - LOSS_YLIM_FRACTION), top=LN2 * (1 + LOSS_YLIM_FRACTION)
+        bottom=LOG2 * (1 - LOSS_YLIM_FRACTION), top=LOG2 * (1 + LOSS_YLIM_FRACTION)
     )
     # Invariant: `offsets` is symmetric and odd-length, which is the only
     # reason `len(offsets) // 2` is the index of the zero offset -- i.e. the
     # only reason the $\ln 2$ label below lands on the $\ln 2$ tick.
     offsets: tuple[float, ...] = (-2.0, -1.0, 0.0, 1.0, 2.0)
-    ticks: list[float] = [LN2 * (1 + k * 2.0**-5) for k in offsets]
+    ticks: list[float] = [LOG2 * (1 + k * 2.0**-5) for k in offsets]
     _ = ax.set_yticks(ticks=ticks)
     _ = ax.set_yticklabels(
         labels=[

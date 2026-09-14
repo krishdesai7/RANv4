@@ -64,11 +64,6 @@ if keras.backend.backend() != "jax":
 EPS: Final[float] = keras.config.epsilon()
 _HISTORY_KEYS: Final[tuple[str, str, str]] = ("train_d", "train_g", "val_d")
 
-# The min-max equilibrium: `d` at chance, so the reweighted distributions are
-# indistinguishable to it. No longer what selection scores against -- kept for
-# the test that shows the old BCE criterion disagrees with MMD selection.
-LOG2: Final[float] = np.log(2.0)
-
 # Fixed subsample size for the detector-level MMD comparison selection reads.
 # The unbiased estimator has a resolution floor around 5e-4 in MMD^2, measured
 # at m=8192 (not this m); the floor scales approximately as 1/m, so 16384 is

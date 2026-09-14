@@ -287,3 +287,5 @@ TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(int_type=np.short).min)
 # would report the poisoned arm as having none and `require_truth()` would
 # refuse the particle-level comparison the check exists to make.
 POISON_SENTINEL: Final[np.double] = np.double(-999.0)
+
+LOG2: Final[float] = np.log(2.0)

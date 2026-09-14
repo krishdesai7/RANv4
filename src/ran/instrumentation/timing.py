@@ -10,8 +10,8 @@ is shares of the total rather than raw seconds alone, and nested phases are
 recorded with their depth so `train.compile` can be read against `train`.
 
 One number needs a caveat carried with it. `train.compile` reads near-zero
-whenever XLA's persistent cache is warm (see Caching in `CLAUDE.md`), which is
-the common case and would point optimization effort at the wrong place.
+whenever XLA's persistent cache is warm (see docs/claude/caching.md), which
+is the common case and would point optimization effort at the wrong place.
 `timings.json` therefore records whether the cache directory held anything when
 the run started, sampled before the first compile could fill it.
 """
@@ -160,9 +160,9 @@ def phases() -> tuple[Phase, ...]:
 def note(detail: str, /, *, to: str | None = None) -> None:
     """Annotate an open phase, if there is one.
 
-    This is what lets `datasets.py` say "cache hit" about a phase that
-    `workflows/train.py` opened, without the loaders having to own a phase of their
-    own or thread a handle down through their signatures.
+    Lets `datasets.py` say "cache hit" about a phase that `workflows/train.py`
+    opened, without the loaders having to own a phase of their own or thread
+    a handle down through their signatures.
 
     `to` names which open phase it means, and the loaders always pass it. They
     are called from more than one place --- `evaluate_run` rebuilds the same
@@ -292,9 +292,9 @@ def report(console: Console | None = None, /) -> None:
 
 
 def _is_valid_phase(phase: object, /) -> bool:
-    """Whether a parsed phase record has what `_merged_phases` and the total
-    read without raising: a name to merge on, a depth to sum by, a number to
-    sum.
+    """Whether a parsed phase record has a name to merge on, a depth to sum
+    by, and a finite number to sum -- what `_merged_phases` and the total
+    need to read it without raising.
 
     `NaN` and `Infinity` are `float`s and pass the isinstance check, but a
     payload carrying either is corrupt in exactly the way the other invalid
@@ -359,22 +359,23 @@ def write(run_dir: Path, /, *, pass_name: str, filename: str = "timings.json") -
     """Merge this pass's phases into `filename`. A no-op when timing is off
     or nothing was timed.
 
-    `scripts/submit.sh` makes three passes over one run directory -- train,
-    baseline, then reload for the figures -- and an overwriting writer meant
-    the reload pass destroyed the training numbers on every pipeline run.
-    Phases merge by name: this pass's record replaces a same-named one from an
-    earlier pass and leaves the rest untouched. `pass_name` is what makes a
-    merged file legible, saying which invocation produced each row.
+    `scripts/submit.zsh` makes three passes over one run directory -- train,
+    baseline, then reload for the figures -- so an overwriting writer would
+    let the reload pass destroy the training numbers on every pipeline run.
+    Phases merge by name instead: this pass's record replaces a same-named one
+    from an earlier pass and leaves the rest untouched. `pass_name` names
+    which invocation produced each row.
 
     Flat, with a `depth` field rather than nested objects, so a sweep can join
     it against `config.json` without walking a tree. Every number here comes
-    from `perf_counter`, so the `np.float32` JSON hazard `CLAUDE.md` warns about
-    cannot arise --- nothing needs coercing on the way out.
+    from `perf_counter`, so the `np.float32` JSON hazard (see
+    docs/claude/precision.md) cannot arise -- nothing needs coercing on the
+    way out.
 
     `filename` exists because the merge is **by phase name alone, not by
-    (pass, name)**. That is right for the passes of one pipeline over one run,
-    which is what it was built for: `load` legitimately replaces `train`'s
-    `plots` row. It is wrong for a different program over the same directory.
+    (pass, name)**. That is right for the passes of one pipeline over one
+    run: `load` legitimately replaces `train`'s `plots` row. It is wrong for
+    a different program over the same directory.
     `ran baseline omnifold` also has phases called `data` and `evaluate`, and
     writing them here would silently destroy the training pass's --- the rows
     anyone actually wants. So it writes `timings_omnifold.json` instead, and
@@ -403,12 +404,18 @@ def write(run_dir: Path, /, *, pass_name: str, filename: str = "timings.json") -
         for p in _ordered(_recorder.records)
     ]
     phases: list[dict[str, Any]] = _merged_phases(previous, fresh)
-    # A reload pass samples the compile cache before it can compile anything
-    # into it, so it never has a real value to report; keep the training
-    # pass's reading rather than overwrite it with nothing.
-    warm: bool | None = _recorder.compile_cache_warm
-    if warm is None:
-        warm = previous.get("compile_cache_warm")
+    # `compile_cache_warm` is only meaningful for a pass that actually
+    # compiled something -- a reload pass samples it anyway (every
+    # `_Recorder` does, unconditionally), but that reading says nothing
+    # about whether *this* pass's compile ran warm or cold, because it never
+    # had a `compile` phase to begin with. Keep the training pass's reading
+    # in that case rather than overwrite it with an irrelevant one.
+    compiled_this_pass: bool = any(p.name == "compile" for p in _recorder.records)
+    warm: bool = (
+        _recorder.compile_cache_warm
+        if compiled_this_pass or "compile_cache_warm" not in previous
+        else previous["compile_cache_warm"]
+    )
     payload: dict[str, Any] = {
         "total_seconds": sum(p["seconds"] for p in phases if p["depth"] == 0),
         "compile_cache_warm": warm,

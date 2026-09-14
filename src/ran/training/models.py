@@ -7,6 +7,8 @@ import keras
 if TYPE_CHECKING:
     from typing import Protocol
 
+    from keras.src.backend.common.keras_tensor import KerasTensor
+
     from ..rantypes import RANModel
 
     class _InputFactory(Protocol):
@@ -32,30 +34,30 @@ if TYPE_CHECKING:
         ) -> RANModel: ...
 
 
-_keras_input = cast("_InputFactory", keras.Input)
-_keras_dense = cast("_DenseFactory", keras.layers.Dense)
-_keras_model = cast("_ModelFactory", keras.Model)
+_keras_input: _InputFactory = cast(typ="_InputFactory", val=keras.Input)
+_keras_dense: _DenseFactory = cast(typ="_DenseFactory", val=keras.layers.Dense)
+_keras_model: _ModelFactory = cast(typ="_ModelFactory", val=keras.Model)
 
 
 def build_generator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
 ) -> RANModel:
     """g(z): nominal-level events -> per-event weights."""
-    inputs = _keras_input(shape=(dim,), dtype="float32")
-    x = inputs
+    inputs: KerasTensor = _keras_input(shape=(dim,), dtype="float32")
+    x: KerasTensor = inputs
     for _ in range(n_layers):
-        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(x)
-    x = _keras_dense(1, activation="softplus", dtype="float32")(x)
-    return _keras_model(inputs, x, name="generator")
+        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(inputs=x)
+    x = _keras_dense(units=1, activation="softplus", dtype="float32")(inputs=x)
+    return _keras_model(inputs, outputs=x, name="generator")
 
 
 def build_discriminator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
 ) -> RANModel:
     """d(x): reco-level events -> data vs MC probability."""
-    inputs = _keras_input(shape=(dim,), dtype="float32")
-    x = inputs
+    inputs: KerasTensor = _keras_input(shape=(dim,), dtype="float32")
+    x: KerasTensor = inputs
     for _ in range(n_layers):
-        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(x)
-    x = _keras_dense(1, activation="sigmoid", dtype="float32")(x)
-    return _keras_model(inputs, x, name="discriminator")
+        x = _keras_dense(hidden_units, activation="relu", dtype="float32")(inputs=x)
+    x = _keras_dense(units=1, activation="sigmoid", dtype="float32")(inputs=x)
+    return _keras_model(inputs, outputs=x, name="discriminator")

@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ..evaluation.evaluate import apply_to_runs, render_metrics
+from ..evaluation import apply_to_runs, render_metrics
 from ..instrumentation import timing
 from ..rantypes import artifacts_dir
 from ._shared import evaluate_dimension, load_populations, parse_run_config
@@ -86,7 +86,7 @@ def worker_script() -> AbstractContextManager[Path]:
     stash the path.
     """
     return resources.as_file(
-        resources.files(anchor="ran") / "baselines" / "_omnifold_worker.py"
+        path=resources.files(anchor="ran") / "baselines" / "_omnifold_worker.py"
     )
 
 
@@ -311,7 +311,9 @@ def evaluate_single(
         logger.info(
             "%s: metrics_omnifold.json exists, skipping (use --force)", run_dir.name
         )
-        return cast("dict[str, MetricRecord]", json.loads(s=out_path.read_text()))
+        return cast(
+            typ="dict[str, MetricRecord]", val=json.loads(s=out_path.read_text())
+        )
 
     with timing.phase("parse_config"):
         raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
@@ -346,7 +348,7 @@ def evaluate_single(
         metrics: dict[str, MetricRecord] = _metrics_for(config, data, weights)
 
     json.dump(obj=metrics, fp=out_path.open(mode="w"), indent=2)
-    np.savez(weights_path, weights=weights)
+    np.savez(weights_path, weights)
     logger.info(
         "%s: saved OmniFold metrics to %s and weights to %s",
         run_dir.name,

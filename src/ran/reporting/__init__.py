@@ -1,10 +1,33 @@
-from .report import TEMPLATE_TOKEN as TEMPLATE_TOKEN
-from .report import build_report as build_report
-from .report import config_rows as config_rows
-from .report import decimal as decimal
-from .report import latex_text as latex_text
-from .report import load_template as load_template
-from .report import metrics_table as metrics_table
-from .report import render as render
-from .report import skipped_variables as skipped_variables
-from .report import timing_rows as timing_rows
+from typing import TYPE_CHECKING
+
+from . import report
+from .report import (
+    TEMPLATE_TOKEN,
+    build_report,
+    config_rows,
+    decimal,
+    latex_text,
+    load_template,
+    metrics_table,
+    render,
+    skipped_variables,
+    timing_rows,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Final
+
+__all__: Final[Sequence[str]] = (
+    "TEMPLATE_TOKEN",
+    "build_report",
+    "config_rows",
+    "decimal",
+    "latex_text",
+    "load_template",
+    "metrics_table",
+    "render",
+    "report",
+    "skipped_variables",
+    "timing_rows",
+)

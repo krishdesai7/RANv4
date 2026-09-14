@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ..instrumentation.timing import note
+from ..instrumentation import note
 from ..rantypes import (
     CACHE_DIR,
     EVENT_DTYPE,

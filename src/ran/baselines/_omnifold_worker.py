@@ -43,12 +43,12 @@ from pathlib import Path
 import numpy as np
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+os.environ.setdefault(key="TF_CPP_MIN_LOG_LEVEL", value="2")
 
 
 def _as_2d(array: object) -> np.ndarray:
     """OmniFold's `DataLoader` wants `(n, d)`; a 1D observable arrives as `(n,)`."""
-    values = np.asarray(array, dtype=np.single)
+    values: np.typing.NDArray[np.single] = np.asarray(a=array, dtype=np.single)
     return values[..., np.newaxis] if values.ndim == 1 else values
 
 
@@ -89,7 +89,7 @@ def _timed_steps(unfold: object) -> tuple[list[float], list[float]]:
             continue
 
         def timed(iteration: int, _original=original, _into=into) -> object:
-            started = time.perf_counter()
+            started: float = time.perf_counter()
             try:
                 return _original(iteration)
             finally:
@@ -111,13 +111,15 @@ def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
         weighted_binary_crossentropy
     )
 
-    started = time.perf_counter()
-    x_data = _as_2d(payload["x_data"])
-    x_sim = _as_2d(payload["x_sim"])
-    z_gen = _as_2d(payload["z_gen"])
-    z_target = _as_2d(payload["z_target"]) if "z_target" in payload else z_gen
+    started: float = time.perf_counter()
+    x_data: np.ndarray = _as_2d(array=payload["x_data"])
+    x_sim: np.ndarray = _as_2d(array=payload["x_sim"])
+    z_gen: np.ndarray = _as_2d(array=payload["z_gen"])
+    z_target: np.ndarray = (
+        _as_2d(array=payload["z_target"]) if "z_target" in payload else z_gen
+    )
 
-    out_dir = Path(str(payload["out_dir"]))
+    out_dir = Path(str(object=payload["out_dir"]))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     unfold = MultiFold(
@@ -126,48 +128,51 @@ def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
         MLP(x_data.shape[1]),
         DataLoader(reco=x_data),
         DataLoader(reco=x_sim, gen=z_gen),
-        log_folder=str(out_dir),
-        weights_folder=str(out_dir / "omnifold_checkpoints"),
+        log_folder=str(object=out_dir),
+        weights_folder=str(object=out_dir / "omnifold_checkpoints"),
         niter=int(payload["niter"]),
         epochs=int(payload["epochs"]),
         batch_size=int(payload["batch_size"]),
         verbose=False,
     )
-    init_seconds = time.perf_counter() - started
+    init_seconds: float = time.perf_counter() - started
 
     step1_seconds, step2_seconds = _timed_steps(unfold)
-    unfold_started = time.perf_counter()
+    unfold_started: float = time.perf_counter()
     unfold.Unfold()
-    unfold_seconds = time.perf_counter() - unfold_started
+    unfold_seconds: float = time.perf_counter() - unfold_started
 
     # `model2` is the particle-level (step 2) classifier: the one that maps gen
     # features to weights, and the only one whose output is an unfolding. Step 1
     # lives at detector level and would not be applicable to `z_target`.
-    reweight_started = time.perf_counter()
+    reweight_started: float = time.perf_counter()
     weights = unfold.reweight(z_target, unfold.model2).astype(np.single).ravel()
     # Mean one, matching the normalization `ran`'s own weights carry, so the two
     # are comparable without the caller rescaling either.
     weights = weights / weights.mean()
-    reweight_seconds = time.perf_counter() - reweight_started
+    reweight_seconds: float = time.perf_counter() - reweight_started
 
     np.savez(
-        out_path,
+        file=out_path,
         weights=weights,
-        device=np.array(_device_of(unfold.model2)),
-        tf_version=np.array(__import__("tensorflow").__version__),
-        init_seconds=np.array(init_seconds),
-        unfold_seconds=np.array(unfold_seconds),
-        reweight_seconds=np.array(reweight_seconds),
-        step1_seconds=np.asarray(step1_seconds, dtype=np.double),
-        step2_seconds=np.asarray(step2_seconds, dtype=np.double),
+        device=np.array(object=_device_of(model=unfold.model2)),
+        tf_version=np.array(object=__import__(name="tensorflow").__version__),
+        init_seconds=np.array(object=init_seconds),
+        unfold_seconds=np.array(object=unfold_seconds),
+        reweight_seconds=np.array(object=reweight_seconds),
+        step1_seconds=np.asarray(a=step1_seconds, dtype=np.double),
+        step2_seconds=np.asarray(a=step2_seconds, dtype=np.double),
     )
 
 
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"usage: {Path(sys.argv[0]).name} <input.npz> <output.npz>")
-    with np.load(sys.argv[1], allow_pickle=False) as payload:
-        run({key: payload[key] for key in payload.files}, Path(sys.argv[2]))
+    with np.load(file=sys.argv[1], allow_pickle=False) as payload:
+        run(
+            payload={key: payload[key] for key in payload.files},
+            out_path=Path(sys.argv[2]),
+        )
 
 
 if __name__ == "__main__":

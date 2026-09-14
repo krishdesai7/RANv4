@@ -1,28 +1,72 @@
-from .evaluate import MetricSet as MetricSet
-from .evaluate import apply_to_runs as apply_to_runs
-from .evaluate import evaluate_run as evaluate_run
-from .evaluate import evaluate_runs as evaluate_runs
-from .evaluate import render_metrics as render_metrics
-from .plotting import ALPHA_FILL as ALPHA_FILL
-from .plotting import ALPHA_IBU as ALPHA_IBU
-from .plotting import ALPHA_OMNIFOLD as ALPHA_OMNIFOLD
-from .plotting import ALPHA_RAN as ALPHA_RAN
-from .plotting import COLOR_IBU as COLOR_IBU
-from .plotting import COLOR_MC as COLOR_MC
-from .plotting import COLOR_NATURE as COLOR_NATURE
-from .plotting import COLOR_OMNIFOLD as COLOR_OMNIFOLD
-from .plotting import COLOR_RAN as COLOR_RAN
-from .plotting import LOSS_YLIM_FRACTION as LOSS_YLIM_FRACTION
-from .plotting import SELECTION_MMD_LINTHRESH as SELECTION_MMD_LINTHRESH
-from .plotting import SELECTION_SMOOTHING_WINDOW as SELECTION_SMOOTHING_WINDOW
-from .plotting import Z_BASELINE as Z_BASELINE
-from .plotting import Z_RAN as Z_RAN
-from .plotting import AxesHist as AxesHist
-from .plotting import BaselineOverlay as BaselineOverlay
-from .plotting import ibu_overlay as ibu_overlay
-from .plotting import omnifold_overlay as omnifold_overlay
-from .plotting import plot_detector_level as plot_detector_level
-from .plotting import plot_levels as plot_levels
-from .plotting import plot_losses as plot_losses
-from .plotting import plot_particle_level as plot_particle_level
-from .plotting import plot_selection as plot_selection
+from typing import TYPE_CHECKING
+
+from . import evaluate, plotting
+from .evaluate import (
+    MetricSet,
+    apply_to_runs,
+    evaluate_run,
+    evaluate_runs,
+    render_metrics,
+)
+from .plotting import (
+    ALPHA_FILL,
+    ALPHA_IBU,
+    ALPHA_OMNIFOLD,
+    ALPHA_RAN,
+    COLOR_IBU,
+    COLOR_MC,
+    COLOR_NATURE,
+    COLOR_OMNIFOLD,
+    COLOR_RAN,
+    LOSS_YLIM_FRACTION,
+    SELECTION_MMD_LINTHRESH,
+    SELECTION_SMOOTHING_WINDOW,
+    Z_BASELINE,
+    Z_RAN,
+    AxesHist,
+    BaselineOverlay,
+    ibu_overlay,
+    omnifold_overlay,
+    plot_detector_level,
+    plot_levels,
+    plot_losses,
+    plot_particle_level,
+    plot_selection,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Final
+
+__all__: Final[Sequence[str]] = (
+    "ALPHA_FILL",
+    "ALPHA_IBU",
+    "ALPHA_OMNIFOLD",
+    "ALPHA_RAN",
+    "COLOR_IBU",
+    "COLOR_MC",
+    "COLOR_NATURE",
+    "COLOR_OMNIFOLD",
+    "COLOR_RAN",
+    "LOSS_YLIM_FRACTION",
+    "SELECTION_MMD_LINTHRESH",
+    "SELECTION_SMOOTHING_WINDOW",
+    "Z_BASELINE",
+    "Z_RAN",
+    "AxesHist",
+    "BaselineOverlay",
+    "MetricSet",
+    "apply_to_runs",
+    "evaluate",
+    "evaluate_run",
+    "evaluate_runs",
+    "ibu_overlay",
+    "omnifold_overlay",
+    "plot_detector_level",
+    "plot_levels",
+    "plot_losses",
+    "plot_particle_level",
+    "plot_selection",
+    "plotting",
+    "render_metrics",
+)

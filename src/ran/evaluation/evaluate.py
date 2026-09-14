@@ -11,7 +11,6 @@ from rich.console import Console
 from rich.table import Table
 
 from ..data import (
-    ArrayDataset,
     RANDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
@@ -27,6 +26,7 @@ if TYPE_CHECKING:
     from jax import Array as JaxArray
     from numpy.typing import NDArray
 
+    from ..data import ArrayDataset
     from ..rantypes import (
         ZXY,
         DatasetSplits,

@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 
-from ..baselines import parse_run_config
+from ..baselines._shared import parse_run_config
 from ..data import (
     RANDataset,
     gaussian_config_from_run_config,

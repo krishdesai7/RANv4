@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ..instrumentation.timing import note
+from ..instrumentation import note
 from ..rantypes import (
     CACHE_DIR,
     CACHE_FILENAMES,

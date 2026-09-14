@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
-from ..evaluation.evaluate import apply_to_runs, render_metrics
+from ..evaluation import apply_to_runs, render_metrics
 from ..rantypes import (
     DEFAULT_PURITY_THRESHOLD,
     IBUResult,
     VariableOutcome,
     artifacts_dir,
 )
-from ..training.engine import EPS
+from ..training import EPS
 from ._shared import (
     evaluate_dimension,
     load_populations,

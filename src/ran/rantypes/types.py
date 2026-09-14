@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import ArrayLike, NDArray
 
-    from ..training.engine import TrainState
+    from ..training import TrainState
 
 # ---------------------------------
 # Plotting

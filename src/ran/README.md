@@ -8,9 +8,9 @@ Importing anything under `ran` first pins the Keras 3 backend to JAX and disable
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
-Import the submodule needed (`from ran.training.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
+Import the submodule needed (`from ran.workflows.train import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
 
-Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD, the `ran train` workflow), `evaluation/` (metrics, plots, the leakage check), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Those four have empty `__init__.py` files on purpose. `training.workflow` imports `evaluation`, and `evaluation.leakage` imports `training.engine`, so re-exporting from either `__init__` would turn that two-way package dependency into an import cycle.
+Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD), `evaluation/` (metrics and plots), `workflows/` (the orchestration behind `ran train` and `ran leakage-check`), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Dependencies point one way: `workflows` imports `training`, `evaluation` and `baselines`, and none of those import `workflows`. Keep it that way. Importing any submodule runs its parent package's `__init__.py` first, so a package that re-exports its own modules must never sit below something that imports it back. `training.workflow` and `evaluation.leakage` used to live inside the packages they depend on, and re-exporting `run` from `training/__init__.py` closed exactly that loop.
 
 ## module `evaluation.evaluate`
 
@@ -127,16 +127,6 @@ Compute distance metrics for completed runs.
 **Returns:**
 
 - `None`
-
-## module `evaluation.leakage`
-
-Quick leakage check: poison z_true and verify training is unaffected.
-
-Sets z_true to a silly value in one arm and compares against a clean arm; if any
-network can see z_true, the two diverge.
-
-Both arms must use the same `init_seed` or the comparison is meaningless: with
-random initialization the run-to-run spread swamps the effect being tested.
 
 ## module `evaluation.plotting`
 
@@ -332,7 +322,17 @@ running best inside the trace.
 
 - `TrainResult` The training result.
 
-## module `training.workflow`
+## module `workflows.leakage`
+
+Quick leakage check: poison z_true and verify training is unaffected.
+
+Sets z_true to a silly value in one arm and compares against a clean arm; if any
+network can see z_true, the two diverge.
+
+Both arms must use the same `init_seed` or the comparison is meaningless: with
+random initialization the run-to-run spread swamps the effect being tested.
+
+## module `workflows.train`
 
 ### def `_prepare_gaussian(config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int) -> tuple[DatasetSplits, int, GaussianConfig]`
 

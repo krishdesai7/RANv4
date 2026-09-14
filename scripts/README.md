@@ -28,7 +28,7 @@ _`-c32` is mandatory:_ the gpu_shared queue requires exactly 32 logical cores pe
 - `set -e` is important here because this script involves running four distinct stages, and a failed train must not go on to run IBU against a previous run directory.
 - `RAN_CACHE_DIR` is inherited from the submitting shell (SLURM exports the environment by default).
 - `_save_run` names the run directory for the UTC timestamp and returns it only to its Python caller, so a shell has to find it. Hence this script anchors on a marker file rather than "newest directory": `runs/` already holds older runs, and a mistake here would silently attach IBU to one of them.
-- IBU unfolds the same populations for comparison. The reload pass after it puts the baseline into the figures: `workflow.run` reads ibu_weights.npz only if it exists when the plots are drawn, and on the training pass it does not exist yet.
+- IBU unfolds the same populations for comparison. The reload pass after it puts the baseline into the figures: `workflows.train.run` reads ibu_weights.npz only if it exists when the plots are drawn, and on the training pass it does not exist yet.
 - The reload pass does not update metrics.json (it only forces on a fresh train), so it must be recomputed explicitly.
 - The script logs evidence that the persistent compilation cache did its job. A populated directory makes the _next_ run skip ~4.6s of XLA compilation; an empty one means `RAN_CACHE_DIR` points somewhere unwritable and JAX only warned about it.
 
@@ -123,7 +123,7 @@ Every sweep in `benchmarks/README.md` under "What was ruled out" ran **one** run
 
 ### `--run-dir`
 
-Without it every run lands on a second-resolution UTC timestamp under `runs/`, created with `exist_ok=True`. Twenty-four runs of identical shape launched together finish inside the same second, and the losers were overwritten with no error and no way to tell afterwards which arm had gone missing. `--run-dir` names each run so its arm is recoverable, and `workflow._new_run_dir` refuses a directory that already holds a `config.json` rather than landing on top of it. An _empty_ directory is accepted, because this script creates one per run to
+Without it every run lands on a second-resolution UTC timestamp under `runs/`, created with `exist_ok=True`. Twenty-four runs of identical shape launched together finish inside the same second, and the losers were overwritten with no error and no way to tell afterwards which arm had gone missing. `--run-dir` names each run so its arm is recoverable, and `workflows.train._new_run_dir` refuses a directory that already holds a `config.json` rather than landing on top of it. An _empty_ directory is accepted, because this script creates one per run to
 redirect `train.log` into before training starts.
 
 ### Wall clock

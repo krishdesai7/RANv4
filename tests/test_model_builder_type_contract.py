@@ -10,7 +10,7 @@ def test_builder_contract_hides_unsupported_model_members(tmp_path: Path) -> Non
     _ = probe.write_text(
         "from pathlib import Path\n\n"
         "from ran.training.models import build_generator\n"
-        "from ran.training.workflow import _load_artifacts\n\n"
+        "from ran.workflows.train import _load_artifacts\n\n"
         "build_generator().unsupported_builder_model_member\n"
         "_load_artifacts(Path('run'))[0].unsupported_loaded_model_member\n"
     )

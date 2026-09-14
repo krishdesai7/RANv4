@@ -301,11 +301,12 @@ RANv4/
 │   ├── training/
 │   │   ├── models.py             Generator and discriminator architectures
 │   │   ├── engine.py             Fused JAX training program
-│   │   ├── mmd.py                Weighted MMD for checkpoint selection
-│   │   └── workflow.py           Training and reload workflow behind `ran train`
+│   │   └── mmd.py                Weighted MMD for checkpoint selection
 │   ├── evaluation/
 │   │   ├── evaluate.py           Post-hoc distance metrics (Wasserstein, JS, triangular)
-│   │   ├── plotting.py           Detector-level, particle-level, and loss curve plots
+│   │   └── plotting.py           Detector-level, particle-level, and loss curve plots
+│   ├── workflows/
+│   │   ├── train.py              Training and reload workflow behind `ran train`
 │   │   └── leakage.py            Data-poisoning leakage check
 │   ├── reporting/
 │   │   ├── report.py             PDF dossier behind `ran report`

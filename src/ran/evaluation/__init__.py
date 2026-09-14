@@ -3,7 +3,6 @@ from .evaluate import apply_to_runs as apply_to_runs
 from .evaluate import evaluate_run as evaluate_run
 from .evaluate import evaluate_runs as evaluate_runs
 from .evaluate import render_metrics as render_metrics
-from .leakage import run_leakage_check as run_leakage_check
 from .plotting import ALPHA_FILL as ALPHA_FILL
 from .plotting import ALPHA_IBU as ALPHA_IBU
 from .plotting import ALPHA_OMNIFOLD as ALPHA_OMNIFOLD

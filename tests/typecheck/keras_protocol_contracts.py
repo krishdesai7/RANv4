@@ -15,7 +15,7 @@ from ran.rantypes import (
 )
 from ran.training.engine import TrainResult, _make_steps
 from ran.training.models import build_discriminator, build_generator
-from ran.training.workflow import _load_artifacts
+from ran.workflows.train import _load_artifacts
 
 if TYPE_CHECKING:
     from typing import Any

@@ -33,11 +33,12 @@ src/ran/                      Python package
 ├── training/
 │   ├── models.py               Generator and discriminator architectures
 │   ├── engine.py               Fused JAX training program (owns TrainResult/TrainState/RunCarry)
-│   ├── mmd.py                  Weighted MMD, the checkpoint-selection signal
-│   └── workflow.py             Training and reload workflow behind `ran train`
+│   └── mmd.py                  Weighted MMD, the checkpoint-selection signal
 ├── evaluation/
 │   ├── evaluate.py             Post-hoc distance metrics (Wasserstein, JS, triangular discriminator)
-│   ├── plotting.py             Detector-level, particle-level, and loss curve plots
+│   └── plotting.py             Detector-level, particle-level, and loss curve plots
+├── workflows/
+│   ├── train.py                Training and reload workflow behind `ran train`
 │   └── leakage.py              Data-poisoning leakage check behind `ran leakage-check`
 ├── reporting/
 │   ├── report.py               PDF dossier behind `ran report` (see reporting.md)

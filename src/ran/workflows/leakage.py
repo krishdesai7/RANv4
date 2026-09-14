@@ -6,6 +6,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..data import RANDataset
+from ..evaluation.evaluate import (
+    _collect_test_data,
+    _improvement,
+    _triangular_per_dim,
+    _wd_per_dim,
+)
 from ..rantypes import (
     EVENT_DTYPE,
     POISON_SENTINEL,
@@ -14,12 +20,6 @@ from ..rantypes import (
     Populations,
 )
 from ..training.engine import train
-from .evaluate import (
-    _collect_test_data,
-    _improvement,
-    _triangular_per_dim,
-    _wd_per_dim,
-)
 
 if TYPE_CHECKING:
     from logging import Logger

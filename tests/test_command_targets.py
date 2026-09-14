@@ -1,11 +1,11 @@
 def test_primary_workflow_has_a_domain_entry_point() -> None:
-    from ran.training.workflow import run
+    from ran.workflows.train import run
 
     assert callable(run)
 
 
 def test_leakage_check_has_a_package_entry_point() -> None:
-    from ran.evaluation.leakage import run_leakage_check
+    from ran.workflows.leakage import run_leakage_check
 
     assert callable(run_leakage_check)
 

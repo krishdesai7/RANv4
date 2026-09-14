@@ -21,4 +21,3 @@ from .mmd import subsample_indices as subsample_indices
 from .mmd import weighted_mmd as weighted_mmd
 from .models import build_discriminator as build_discriminator
 from .models import build_generator as build_generator
-from .workflow import run as run

@@ -2,7 +2,7 @@
 
 Off unless `RAN_TIMING` is set, and *off* means a shared no-op context manager:
 no `perf_counter`, no allocation, nothing appended. That matters because the
-timers sit at phase boundaries inside `workflow.run` and `engine.train`, which a
+timers sit at phase boundaries inside `workflows.train.run` and `engine.train`, which a
 sweep crosses a few hundred times.
 
 The point of the layer is to say which component to go optimize, so the report
@@ -161,7 +161,7 @@ def note(detail: str, /, *, to: str | None = None) -> None:
     """Annotate an open phase, if there is one.
 
     This is what lets `datasets.py` say "cache hit" about a phase that
-    `workflow.py` opened, without the loaders having to own a phase of their
+    `workflows/train.py` opened, without the loaders having to own a phase of their
     own or thread a handle down through their signatures.
 
     `to` names which open phase it means, and the loaders always pass it. They

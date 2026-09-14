@@ -143,7 +143,7 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
         for i, a in enumerate(iterable=arrays)
     }
     path: Path = artifacts_dir(run_dir) / PARAMS_FILE
-    # Same unpack-into-savez suppression `workflow._save_run` carries: a
+    # Same unpack-into-savez suppression `workflows.train._save_run` carries: a
     # str-keyed dict could in principle hold "allow_pickle", which is declared
     # bool. These keys are all `field:index`, so it cannot.
     np.savez(file=path, **flat)  # ty:ignore[invalid-argument-type]

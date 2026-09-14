@@ -3,7 +3,7 @@
 `RAN_TIMING=1` makes a run report where its wall clock went; unset, the layer
 is a genuine no-op — `phase()` hands back one shared do-nothing context
 manager, so a boundary costs no `perf_counter` call and no allocation. That
-matters because the timers sit inside `workflow.run` and `engine.train`, which a
+matters because the timers sit inside `workflows.train.run` and `engine.train`, which a
 sweep crosses a few hundred times.
 
 ```bash

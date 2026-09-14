@@ -58,7 +58,7 @@ def test_train_converts_typer_values_for_the_workflow(
 ) -> None:
     """`ran.cli` imports `run` at module scope, so patch the name it calls.
 
-    Replacing `sys.modules["ran.training.workflow"]` would only work if the command
+    Replacing `sys.modules["ran.workflows.train"]` would only work if the command
     re-imported on every invocation, which it deliberately no longer does.
     """
     calls: list[dict[str, object]] = []
@@ -123,7 +123,7 @@ def test_train_converts_typer_values_for_the_workflow(
     # A tuple in canonical order, not a set: these names index columns, and
     # `--var w --var m` must describe the same run as `--var m --var w`.
     assert calls[0]["variables"] == ("m", "w")
-    # Paths stay Paths: `workflow.run` is typed `load_run: Path | None` and
+    # Paths stay Paths: `workflows.train.run` is typed `load_run: Path | None` and
     # opens them directly. Only typer's own wrappers get converted; the
     # DatasetName enum remains an enum, and repeated --var becomes a tuple.
     assert calls[0]["load_run"] == tmp_path

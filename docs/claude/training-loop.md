@@ -48,7 +48,7 @@ that implements it.
 
 Selection is **detector level** (`x_sim` reweighted vs `x_data`), so it needs
 no truth and the method stays deployable. The particle-level MMD is computed
-too, but on the host in `workflow`, never in the trace, which keeps `z_true`
+too, but on the host in `workflows.train`, never in the trace, which keeps `z_true`
 out of the traced program while still producing the curve. The number
 reported for the restored checkpoint comes from a _test_ subsample, not the
 val one selection minimized.

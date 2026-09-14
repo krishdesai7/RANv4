@@ -256,7 +256,7 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
         residual: JaxArray = empty.at[index].add(values=residuals)
         return count * mean_weight + residual
 
-    return jax.vmap(fun=one_column, in_axes=(1, 0))(col=x, col_edges=edges)
+    return jax.vmap(one_column, in_axes=(1, 0))(x, edges)
 
 
 def _cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxArray:

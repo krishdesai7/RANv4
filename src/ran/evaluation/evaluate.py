@@ -256,6 +256,7 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
         residual: JaxArray = empty.at[index].add(values=residuals)
         return count * mean_weight + residual
 
+    # arguments must be positional, not keyword, for vmap
     return jax.vmap(one_column, in_axes=(1, 0))(x, edges)
 
 

@@ -199,7 +199,6 @@ def _purity_bins(
     if max_bins <= 0:
         raise ValueError("max_bins must be positive")
 
-    # One-time preprocessing.
     gen_sorted: EventArray = np.sort(a=gen)
 
     lower: EventArray = np.minimum(gen, sim)
@@ -384,10 +383,8 @@ def _run_and_evaluate(
             weights=test_weights,
         )
 
-    # Every detector entry, then every particle entry -- the order
-    # `evaluate.evaluate_run` writes. Two files in the same nominal format with
-    # different key orders is the shape of bug that surfaces the first time
-    # someone zips them positionally.
+    # Every detector entry, then every particle entry, matching the key order
+    # `evaluation.evaluate.evaluate_run` writes to metrics.json.
     metrics: dict[str, MetricRecord] = detector | particle
 
     return IBUResult(
@@ -408,8 +405,8 @@ def evaluate_single(
 
     The cache hit requires both `metrics_ibu.json` and `ibu_outcomes.json` to
     exist -- a directory holding only the former is an incomplete result (an
-    older run, or one interrupted between the two writes), and Task 12 needs
-    the outcomes file to mark variables IBU refused to unfold. Missing either
+    older run, or one interrupted between the two writes), and the outcomes
+    file is needed to mark variables IBU refused to unfold. Missing either
     file is treated as a cache miss and recomputes both.
     """
     out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
@@ -451,8 +448,6 @@ def evaluate_single(
     weights_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     np.savez(
         weights_path,
-        # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. The keys are
-        # built by f-string, so their type is plain `str`.
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
         },

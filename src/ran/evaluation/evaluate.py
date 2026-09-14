@@ -61,9 +61,10 @@ def apply_to_runs(
             log.warning("%s: failed", d.name, exc_info=True)
 
 
+# ruff: ignore[implicit-return]
 def _load_splits(config: dict[str, Any]) -> DatasetSplits:
     dataset: DatasetName = DatasetName(
-        value=str(config.get("dataset", DatasetName.gaussian.value))
+        value=str(object=config.get("dataset", DatasetName.gaussian.value))
     )
     n_samples: int = config["n_samples"]
     batch_size: int = config["batch_size"]
@@ -74,7 +75,7 @@ def _load_splits(config: dict[str, Any]) -> DatasetSplits:
     if dataset == DatasetName.gaussian:
         if "gaussian_params" in config:
             params: GaussianConfig = gaussian_config_from_run_config(
-                cast("Mapping[str, Any]", config["gaussian_params"]), dim
+                cast(typ="Mapping[str, Any]", val=config["gaussian_params"]), dim
             )
         else:
             # Legacy config format: hardcoded mu/sigma, only smearing varied.
@@ -100,11 +101,10 @@ def _load_splits(config: dict[str, Any]) -> DatasetSplits:
             # The recorded list, in the recorded order. Round-tripping it
             # through a set here is what mismatched these columns against the
             # `var_names` below --- and against the generator's own training.
-            variables=cast("Sequence[str]", config["variables"]),
+            variables=cast(typ="Sequence[str]", val=config["variables"]),
             seed=data_seed,
         )
         return splits
-    raise ValueError(f"Unknown dataset: {dataset!r}")
 
 
 def _collect_test_data(test_ds: ArrayDataset) -> ZXY:
@@ -176,11 +176,11 @@ def _prepare(
     """
     ref_2d, comp_2d = _as_columns(ref, comp)
     w: JaxArray = (
-        jnp.ones((comp_2d.shape[0],), dtype=EVENT_DTYPE)
+        jnp.ones(shape=(comp_2d.shape[0],), dtype=EVENT_DTYPE)
         if weights is None
-        else jnp.asarray(weights)
+        else jnp.asarray(a=weights)
     )
-    return jnp.asarray(ref_2d), jnp.asarray(comp_2d), w
+    return jnp.asarray(a=ref_2d), jnp.asarray(a=comp_2d), w
 
 
 def _bin_edges(
@@ -242,19 +242,21 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
     section of CLAUDE.md.
     """
     n_bins: int = edges.shape[1] - 1
-    mean_weight: JaxArray = jnp.mean(weights)
+    mean_weight: JaxArray = jnp.mean(a=weights)
     residuals: JaxArray = weights - mean_weight
 
     def one_column(col: JaxArray, col_edges: JaxArray) -> JaxArray:
         index: JaxArray = jnp.clip(
-            jnp.searchsorted(col_edges, col, side="right") - 1, 0, n_bins - 1
+            jnp.searchsorted(a=col_edges, v=col, side="right") - 1,
+            min=0,
+            max=n_bins - 1,
         )
-        empty: JaxArray = jnp.zeros((n_bins,), dtype=EVENT_DTYPE)
-        count: JaxArray = empty.at[index].add(jnp.ones_like(residuals))
-        residual: JaxArray = empty.at[index].add(residuals)
+        empty: JaxArray = jnp.zeros(shape=(n_bins,), dtype=EVENT_DTYPE)
+        count: JaxArray = empty.at[index].add(values=jnp.ones_like(a=residuals))
+        residual: JaxArray = empty.at[index].add(values=residuals)
         return count * mean_weight + residual
 
-    return jax.vmap(one_column, in_axes=(1, 0))(x, edges)
+    return jax.vmap(fun=one_column, in_axes=(1, 0))(col=x, col_edges=edges)
 
 
 def _cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxArray:
@@ -276,39 +278,39 @@ def _cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxAr
     """
     n: int = ref.shape[0]
     signed: JaxArray = jnp.concatenate(
-        [
-            jnp.full((n,), 1.0 / n, dtype=EVENT_DTYPE),
-            -weights / jnp.sum(weights),
+        arrays=[
+            jnp.full(shape=(n,), fill_value=1.0 / n, dtype=EVENT_DTYPE),
+            -weights / jnp.sum(a=weights),
         ]
     )
     pooled: JaxArray = jnp.concatenate([ref, comp], axis=0)
-    order: JaxArray = jnp.argsort(pooled, axis=0)
-    values: JaxArray = jnp.take_along_axis(pooled, order, axis=0)
+    order: JaxArray = jnp.argsort(a=pooled, axis=0)
+    values: JaxArray = jnp.take_along_axis(arr=pooled, indices=order, axis=0)
     gap: JaxArray = jnp.cumsum(
-        jnp.take_along_axis(
-            jnp.broadcast_to(signed[:, None], pooled.shape), order, axis=0
+        a=jnp.take_along_axis(
+            arr=jnp.broadcast_to(signed[:, None], pooled.shape), indices=order, axis=0
         ),
         axis=0,
     )
-    return jnp.sum(jnp.abs(gap[:-1]) * jnp.diff(values, axis=0), axis=0)
+    return jnp.sum(a=jnp.abs(gap[:-1]) * jnp.diff(a=values, axis=0), axis=0)
 
 
 @jax.jit
 def _histogram_kernel(
     ref: JaxArray, comp: JaxArray, weights: JaxArray, edges: JaxArray
 ) -> tuple[JaxArray, JaxArray]:
-    ones: JaxArray = jnp.ones((ref.shape[0],), dtype=EVENT_DTYPE)
-    return _counts(ref, edges, ones), _counts(comp, edges, weights)
+    ones: JaxArray = jnp.ones(shape=(ref.shape[0],), dtype=EVENT_DTYPE)
+    return _counts(ref, edges, weights=ones), _counts(comp, edges, weights)
 
 
 @jax.jit
 def _metrics_kernel(
     ref: JaxArray, comp: JaxArray, weights: JaxArray, edges: JaxArray
 ) -> tuple[JaxArray, JaxArray, JaxArray]:
-    ones: JaxArray = jnp.ones((ref.shape[0],), dtype=EVENT_DTYPE)
+    ones: JaxArray = jnp.ones(shape=(ref.shape[0],), dtype=EVENT_DTYPE)
     return (
         _cdf_gap_integral(ref, comp, weights),
-        _counts(ref, edges, ones),
+        _counts(ref, edges, weights=ones),
         _counts(comp, edges, weights),
     )
 
@@ -322,9 +324,9 @@ def _normalize(counts: JaxArray) -> NDArray[np.double]:
     scores are not pinned to the data's precision. An all-zero histogram is
     left unnormalized rather than divided by zero.
     """
-    dense: NDArray[np.double] = np.asarray(counts, dtype=np.double)
+    dense: NDArray[np.double] = np.asarray(a=counts, dtype=np.double)
     total: NDArray[np.double] = dense.sum(axis=1, keepdims=True)
-    return cast("NDArray[np.double]", dense / np.where(total > 0, total, 1.0))
+    return cast(typ="NDArray[np.double]", val=dense / np.where(total > 0, total, 1.0))
 
 
 def _wd_per_dim(
@@ -334,7 +336,7 @@ def _wd_per_dim(
 ) -> NDArray[np.double]:
     """1D Wasserstein distance per dimension."""
     ref_2d, comp_2d, w = _prepare(ref, comp, weights)
-    return np.asarray(_cdf_gap_integral(ref_2d, comp_2d, w), dtype=np.double)
+    return np.asarray(a=_cdf_gap_integral(ref_2d, comp_2d, weights=w), dtype=np.double)
 
 
 def _normalized_histograms(
@@ -349,7 +351,7 @@ def _normalized_histograms(
     below comparable across dimensions. `weights` reweights `comp` only.
     """
     ref_2d, comp_2d, w = _prepare(ref, comp, weights)
-    edges: JaxArray = jnp.asarray(_bin_edges(ref_2d, comp_2d, n_bins))
+    edges: JaxArray = jnp.asarray(a=_bin_edges(ref_2d, comp_2d, n_bins))
     h_ref, h_comp = _histogram_kernel(ref_2d, comp_2d, w, edges)
     return _normalize(counts=h_ref), _normalize(counts=h_comp)
 
@@ -408,7 +410,7 @@ def _triangular_from_histograms(
     diff: NDArray[np.double] = p - q
     return (
         np.sum(
-            np.where(nonempty, diff**2 / np.where(nonempty, denom, 1.0), 0.0), axis=1
+            a=np.where(nonempty, diff**2 / np.where(nonempty, denom, 1.0), 0.0), axis=1
         )
         * 1e3
     )
@@ -459,8 +461,8 @@ def _metrics_per_dim(
     ref_2d, comp_2d, w = _prepare(ref, comp, weights)
     edges: JaxArray = jnp.asarray(_bin_edges(ref_2d, comp_2d, n_bins))
     distance, h_ref, h_comp = _metrics_kernel(ref_2d, comp_2d, w, edges)
-    p: NDArray[np.double] = _normalize(h_ref)
-    q: NDArray[np.double] = _normalize(h_comp)
+    p: NDArray[np.double] = _normalize(counts=h_ref)
+    q: NDArray[np.double] = _normalize(counts=h_comp)
     return MetricSet(
         wasserstein=np.asarray(distance, dtype=np.double),
         jensenshannon=_js_from_histograms(p, q),
@@ -483,7 +485,7 @@ def _metric_entry(before: MetricSet, after: MetricSet, index: int) -> dict[str, 
         now: float = float(now_all[index])
         entry[f"{name}_before"] = was
         entry[f"{name}_after"] = now
-        entry[f"{name}_improvement_pct"] = _improvement(was, now)
+        entry[f"{name}_improvement_pct"] = _improvement(before=was, after=now)
     return entry
 
 
@@ -497,7 +499,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
 
     if out_path.exists() and not force:
         logger.info("%s: metrics.json exists, skipping (use --force)", run_dir.name)
-        return cast("dict[str, Any]", json.loads(out_path.read_text()))
+        return cast(typ="dict[str, Any]", val=json.loads(s=out_path.read_text()))
 
     # Imported here, not at module scope, so this module stays keras-free on
     # import.
@@ -508,10 +510,10 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
     g: RANModel = keras.saving.load_model(artifacts_dir(run_dir) / "generator.keras")
 
     splits: DatasetSplits = _load_splits(config)
-    test: Populations = _collect_test_data(splits.test).partition()
+    test: Populations = _collect_test_data(test_ds=splits.test).partition()
     # Left on device: every metric below runs there, so the only array that
     # crosses back is the handful of numbers per dimension they reduce to.
-    w: JaxArray = _generator_weights(g, test.mc.z)
+    w: JaxArray = _generator_weights(g, z_gen=test.mc.z)
 
     # Variable names for labeling
     dataset: str = config.get("dataset", "gaussian")
@@ -527,13 +529,13 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
         ("detector", test.data, test.mc.x),
         ("particle", test.require_truth(), test.mc.z),
     ]:
-        before: MetricSet = _metrics_per_dim(data, mc)
-        after: MetricSet = _metrics_per_dim(data, mc, weights=w)
+        before: MetricSet = _metrics_per_dim(ref=data, comp=mc)
+        after: MetricSet = _metrics_per_dim(ref=data, comp=mc, weights=w)
 
-        for i, var in enumerate(var_names):
-            metrics[f"{level}_{var}"] = _metric_entry(before, after, i)
+        for i, var in enumerate(iterable=var_names):
+            metrics[f"{level}_{var}"] = _metric_entry(before, after, index=i)
 
-    json.dump(obj=metrics, fp=out_path.open("w"), indent=2)
+    json.dump(obj=metrics, fp=out_path.open(mode="w"), indent=2)
     logger.info("%s: saved metrics to %s", run_dir.name, out_path)
     render_metrics(run_dir.name, metrics, var_names)
     return metrics
@@ -549,7 +551,7 @@ def render_metrics(
     """Render evaluation metrics as one Rich table per available level."""
     active_console: Console = console or Console()
     for level in ("detector", "particle"):
-        level_metrics = [
+        level_metrics: list[tuple[str, Any]] = [
             (var, metrics[f"{level}_{var}"])
             for var in var_names
             if f"{level}_{var}" in metrics

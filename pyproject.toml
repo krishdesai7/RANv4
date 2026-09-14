@@ -77,7 +77,8 @@ cache_dir = ".cache/pytest"
 filterwarnings = [
     # `keras.Variable.__array__` takes only `dtype`, but NumPy 2 also requires a `copy` kwarg, so every `model.save()` trips this from inside Keras's own `convert_to_numpy`. Third-party and unfixed as of keras 3.15.1.
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
-    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
+    # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile.
+    "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
 ]
 addopts = "-xqn8"
 env = [

@@ -1,7 +1,8 @@
+# pyrefly: ignore-errors[unused-call-result]
 import os
 
-os.environ.setdefault(key="KERAS_BACKEND", value="jax")  # pyrefly: ignore[unused-call-result]
-os.environ.setdefault(key="JAX_ENABLE_X64", value="0")  # pyrefly: ignore[unused-call-result]
+os.environ.setdefault(key="KERAS_BACKEND", value="jax")
+os.environ.setdefault(key="JAX_ENABLE_X64", value="0")
 
 from .cli import app as app
 from .cli import configure as configure

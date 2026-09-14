@@ -30,8 +30,8 @@ def _scalar_covariance(arr: NDArray[np.double], dim: int) -> NDArray[np.double]:
     """Cov = σ²·I  from a single sigma, however it is spelled.
 
     `0.5`, `[0.5]` and `[[0.5]]` are the same single sigma, so all three land
-    here and all three are squared. Dispatching on `size` rather than `ndim` is
-    what makes that true of the last one.
+    here and all three are squared. Dispatching on `size` rather than `ndim`
+    catches the last one too.
     """
     val: np.double = arr.ravel()[0]
     if val <= 0:

@@ -52,24 +52,20 @@ def _savez_atomic(path: Path, /, **arrays: NDArray[Any]) -> None:
     """Write an `.npz` that a concurrent reader either misses or sees whole.
 
     `np.savez` streams into the destination it is handed, so a reader that
-    arrives mid-write gets a truncated zip rather than an error it could
-    recover from. RAN's cache is shared by construction: `RAN_CACHE_DIR` is one
-    directory on `$SCRATCH`, `submit_uncertainty.sh` packs a grid of cells onto
-    a node against it, and `pytest -n16` does the same thing on a smaller
-    scale -- two workers that land on tests sharing a cache key are two writers
-    on one path.
+    arrives mid-write gets a truncated zip. RAN's cache is shared by
+    construction (`submit_uncertainty.zsh` packs a grid of cells against one
+    `RAN_CACHE_DIR`, and `pytest -n16` does the same on a smaller scale), so
+    two workers can race to write the same cache key.
 
-    Writing beside the target and renaming makes publishing a single atomic
-    `rename(2)`, which POSIX guarantees within a directory; the temp file is
-    created in that same directory for exactly that reason. Two writers racing
-    is then harmless -- each builds its own file, one rename wins, and both
+    Writing beside the target and renaming makes publishing one atomic
+    `rename(2)`, which POSIX guarantees within a directory. Two writers racing
+    is then harmless: each builds its own file, one rename wins, and both
     hold identical bytes because the key is a hash of what produced them.
 
     The temp name keeps a `.npz` suffix because `np.savez` appends one to any
     path lacking it, which would otherwise leave the real output beside a
-    stray. `unlink` runs from a `finally`: after a successful rename there is
-    nothing at the temp path and `missing_ok` absorbs it, and a failed write
-    leaves no partial file behind.
+    stray. `unlink` runs from a `finally` so a failed write leaves no partial
+    file behind; `missing_ok` absorbs the already-renamed case.
     """
     tmp: Path = path.with_name(name=f"{path.name}.{uuid.uuid4().hex}.tmp.npz")
     try:
@@ -268,9 +264,9 @@ class RANDataset:
         else:
             parsed = parse_gaussian_config(config_path)
 
-        # The parameters go into `_draw_gaussian` at the float64 they were parsed
-        # in, and the sample narrows to `np.single` once on the way out because the draw
-        # upcasts again and costs precision in the Cholesky whenever `np.single`
+        # `_draw_gaussian` runs at the float64 the config was parsed in; the
+        # sample narrows to EVENT_DTYPE once, on the way out, so the Cholesky
+        # smear inside the draw never loses precision to an earlier cast.
         cache_path: Path = self._cache_path(parsed, n_samples)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 

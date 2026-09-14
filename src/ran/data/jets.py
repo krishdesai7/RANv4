@@ -66,18 +66,17 @@ def load_jet_dataset(
     """Build jet splits with column `i` taken from `variables[i]`.
 
     `variables` is a `Sequence` and the order is load-bearing: it is the column
-    order of every array downstream, it is what `_save_run` records, and it is
-    what a later `ran evaluate` or `ran baseline ibu` must reproduce exactly to
-    label those columns --- or to feed a trained generator its own features.
+    order of every array downstream, `_save_run` records it, and a later
+    `ran evaluate` or `ran baseline ibu` must reproduce it exactly to label
+    those columns --- or to feed a trained generator its own features.
     Passing a `set` or `frozenset` here is a bug, not a convenience.
     """
     _reject_unordered(variables)
-    # The npz caches on disk are float64, which is what the Zenodo release ships
-    # and what the standardization statistics are computed in. Narrowing happens
+    # The npz caches on disk are float64 (what the Zenodo release ships, and
+    # what the standardization statistics are computed in). Narrowing happens
     # once here, on the way into the pipeline.
     scalar: np.dtype[np.single] = np.dtype(EVENT_DTYPE)
 
-    # Check cache, download if needed
     missing: list[str] = [
         v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
     ]
@@ -90,7 +89,6 @@ def load_jet_dataset(
 
     n_features: int = len(variables)
 
-    # Check available samples
     with np.load(file=cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
         n_avail: int = min(
             len(cast("NDArray[Any]", f["z_true"])),
@@ -99,7 +97,6 @@ def load_jet_dataset(
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
-    # Initialize arrays
     z_true: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     x_data: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     z_gen: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)

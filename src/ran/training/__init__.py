@@ -9,3 +9,16 @@ from .mmd import weighted_mmd as weighted_mmd
 from .models import build_discriminator as build_discriminator
 from .models import build_generator as build_generator
 from .train import EPS as EPS
+from .train import MMD_SUBSAMPLE as MMD_SUBSAMPLE
+from .train import PARAMS_FILE as PARAMS_FILE
+from .train import RunCarry as RunCarry
+from .train import TrainResult as TrainResult
+from .train import TrainState as TrainState
+from .train import _make_steps as _make_steps
+from .train import bce_sums as bce_sums
+from .train import load_params as load_params
+from .train import normalize_weights as normalize_weights
+from .train import save_params as save_params
+from .train import train as train
+from .train import weight_dispersion as weight_dispersion
+from .train import weighted_bce as weighted_bce

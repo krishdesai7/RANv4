@@ -13,9 +13,7 @@ from beartype import beartype
 from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
-from ran.data.device import EvalSplit
-
-from ..data.device import DeviceSplits, gather, train_indices
+from ..data import DeviceSplits, EvalSplit, gather, train_indices
 from ..instrumentation.timing import is_enabled, phase
 
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
@@ -35,7 +33,7 @@ if TYPE_CHECKING:
     from jaxtyping import PRNGKeyArray
     from numpy.typing import NDArray
 
-    from ..data.device import EvalSplit, TrainSplit
+    from ..data import TrainSplit
     from ..rantypes import (
         ZXY,
         DatasetSplits,
@@ -48,7 +46,7 @@ if TYPE_CHECKING:
         StatelessOptimizer,
         TrainStep,
     )
-    from .mmd import MMDCache
+    from . import MMDCache
 
 
 logger: Logger = logging.getLogger(name=__name__)

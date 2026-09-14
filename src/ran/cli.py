@@ -6,10 +6,9 @@ from typing import Annotated
 import numpy as np
 import typer
 
-from .baselines import evaluate_runs as ibu_evaluate_runs
-from .baselines.omnifold import evaluate_runs as omnifold_evaluate_runs
-from .evaluation.evaluate import evaluate_runs
-from .instrumentation.logging_config import configure_logging
+from .baselines import ibu_evaluate_runs, omnifold_evaluate_runs
+from .evaluation import evaluate_runs
+from .instrumentation import configure_logging
 from .rantypes import (
     DEFAULT_PURITY_THRESHOLD,
     POISON_SENTINEL,
@@ -18,7 +17,7 @@ from .rantypes import (
     DatasetName,
     LogLevel,
 )
-from .reporting.report import build_report
+from .reporting import build_report
 from .workflows import run, run_leakage_check
 
 baseline_app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)

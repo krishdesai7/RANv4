@@ -299,6 +299,10 @@ class TestEvaluateSingle:
         artifacts: Path = run_dir / "artifacts"
         assert (artifacts / "metrics_omnifold.json").is_file()
         assert (artifacts / "omnifold_weights.npz").is_file()
+        # The reload pass in `workflows.train` reads the array back by this name;
+        # a positional `np.savez` would store it as `arr_0` instead.
+        with np.load(artifacts / "omnifold_weights.npz", allow_pickle=False) as saved:
+            assert saved.files == ["weights"]
         assert set(metrics) == {
             f"{level}_dim_{i}" for level in ("detector", "particle") for i in range(dim)
         }

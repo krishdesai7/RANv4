@@ -85,8 +85,11 @@ def worker_script() -> AbstractContextManager[Path]:
     extracts, which is why the caller must treat it as a context manager and not
     stash the path.
     """
+    # Positional on purpose: `as_file` is a `functools.singledispatch` function,
+    # which dispatches on the type of `args[0]` and raises a TypeError if the path
+    # is passed as `path=`.
     return resources.as_file(
-        path=resources.files(anchor="ran") / "baselines" / "_omnifold_worker.py"
+        resources.files(anchor="ran") / "baselines" / "_omnifold_worker.py"
     )
 
 
@@ -348,7 +351,10 @@ def evaluate_single(
         metrics: dict[str, MetricRecord] = _metrics_for(config, data, weights)
 
     json.dump(obj=metrics, fp=out_path.open(mode="w"), indent=2)
-    np.savez(weights_path, weights)
+    # The array must stay a keyword argument: `np.savez` names each keyword array
+    # by its keyword and each positional one `arr_0`, `arr_1`, ..., and the
+    # reload pass in `workflows.train` reads this file back as `["weights"]`.
+    np.savez(weights_path, weights=weights)
     logger.info(
         "%s: saved OmniFold metrics to %s and weights to %s",
         run_dir.name,

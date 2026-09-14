@@ -14,7 +14,7 @@ from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
 from ..data import DeviceSplits, EvalSplit, gather, train_indices
-from ..instrumentation.timing import is_enabled, phase
+from ..instrumentation import is_enabled, phase
 
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time

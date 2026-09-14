@@ -18,16 +18,16 @@ from ..data import (
     load_jet_dataset,
     parse_gaussian_config,
 )
-from ..evaluation.evaluate import evaluate_run
-from ..evaluation.plotting import (
+from ..evaluation import (
     BaselineOverlay,
+    evaluate_run,
     ibu_overlay,
     omnifold_overlay,
     plot_levels,
     plot_losses,
     plot_selection,
 )
-from ..instrumentation.timing import phase, report, write
+from ..instrumentation import phase, report, write
 from ..rantypes import (
     JET_OBS,
     DatasetName,
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from ..rantypes import DatasetSplits, EventArray, Populations, RANModel, RunConfig
     from .engine import EpochParams, TrainResult
 
-logger: Logger = logging.getLogger(__name__)
+logger: Logger = logging.getLogger(name=__name__)
 
 # `json.dump(indent=2)` has no way to keep one array inline, and a twelve-name
 # variable list costs fourteen lines of a config a person is meant to read.

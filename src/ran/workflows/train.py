@@ -35,15 +35,23 @@ from ..rantypes import (
     VarInfo,
     artifacts_dir,
 )
-from ..training.engine import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
-from ..training.mmd import bandwidths, build_cache, mmd_curve, subsample_indices
+from ..training import (
+    MMD_SUBSAMPLE,
+    bandwidths,
+    build_cache,
+    mmd_curve,
+    save_params,
+    subsample_indices,
+    train,
+)
+from ..training.engine import _weights_per_epoch
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
     from ..rantypes import DatasetSplits, EventArray, Populations, RANModel, RunConfig
-    from ..training.engine import EpochParams, TrainResult
+    from ..training import EpochParams, TrainResult
 
 logger: Logger = logging.getLogger(name=__name__)
 

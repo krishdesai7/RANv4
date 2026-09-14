@@ -1,6 +1,7 @@
 from .engine import EPS as EPS
 from .engine import MMD_SUBSAMPLE as MMD_SUBSAMPLE
 from .engine import PARAMS_FILE as PARAMS_FILE
+from .engine import EpochParams as EpochParams
 from .engine import RunCarry as RunCarry
 from .engine import TrainResult as TrainResult
 from .engine import TrainState as TrainState

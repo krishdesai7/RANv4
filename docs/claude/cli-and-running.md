@@ -62,7 +62,8 @@ uv run benchmarks/hparam_collect.py --arm-dir runs/hp_...     # paired compariso
 Development recipes go through `just` (`just` alone lists them):
 
 ```bash
-just validate   # format, lint, type-check, complexity, tests -- all read-only
+just validate   # format, lint, typecheck, complexity, tests -- all read-only
+just ci         # validate, then audit locked dependencies for known vulnerabilities
 just lint-fix   # safe lint fixes, then format
 just test -k train   # extra args forward to pytest
 just test-fast  # the same suite minus `slow`, for a check mid-work
@@ -75,8 +76,9 @@ uneven: 37 of the 601 cases are ~55s of a ~76s run, and the other ~500 are
 fixed, known list rather than a random one.
 
 The `slow` marker goes on a test for a reason, not a measured duration. A test
-is `slow` if it **runs a training program** (one `train()` call is ~0.5s even
-with the XLA cache warm), **shells out to `pdflatex`**, or **averages many
+is `slow` if it **runs a training program** (one `engine.train()` call is
+~0.5s even with the XLA cache warm), **shells out to `pdflatex`**, or
+**averages many
 random draws to measure a statistical property** (`tests/test_mmd_floor.py`).
 A test against the piece directly costs a few milliseconds and needs no
 marker; a full run costs a hundred times that and does.

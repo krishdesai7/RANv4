@@ -29,7 +29,7 @@ The phases, nested ones indented under their parent:
 | Phase | Covers |
 | --- | --- |
 | `data` | Building or loading the splits. The `Detail` column says which branch it took --- `cache hit`, `generated`, `downloaded from Zenodo` --- filled in by the loaders, which know, via `timing.note(..., to="data")` |
-| `train` | The whole of `train()` |
+| `train` | The whole of `engine.train()` |
 | ` transfer` | `DeviceSplits.from_splits`, the one host->device copy of a run |
 | ` compile` | XLA compiling the fused whole-run program |
 | ` epochs` | Executing it |

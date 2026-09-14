@@ -45,7 +45,7 @@ Each tool gets there by whatever mechanism it supports:
 
 ## Compilation cache
 
-`train()` calls `_use_compilation_cache()`, which points XLA's persistent cache
+`engine.train()` calls `_use_compilation_cache()`, which points XLA's persistent cache
 at `CACHE_DIR / "jax"`. This is worth doing because **compile is the largest
 single term in a short run**: `benchmarks/boundary.py` on an A100 measures 4.60s
 of XLA against 0.034s per epoch, so a 100-epoch run spends half its wall clock

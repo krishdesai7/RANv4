@@ -106,7 +106,7 @@ ran train --load-run runs/<timestamp>Z              # reloads, redraws with it
 `--load-run` reloads the saved generator rather than training, so the redraw is
 cheap and the run is untouched.
 
-`plotting.BaselineOverlay` carries one weight vector **per dimension**, because
+`evaluation.plotting.BaselineOverlay` carries one weight vector **per dimension**, because
 IBU unfolds each observable separately and its weights genuinely differ between
 them; `from_shared` repeats a single vector across the dimensions for OmniFold,
 which reweights events, not observables. OmniFold draws crimson dash-dot with

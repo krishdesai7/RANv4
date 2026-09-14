@@ -15,16 +15,17 @@ The evidence, because this is the kind of decision that gets re-litigated:
   (error ~1e-8), and the batched scan reduction lands within 5e-4 of
   `min_delta`, because summing 8192-element batches then 61 partials is
   effectively pairwise summation.
-- 20 paired seeds put float32 and float64 within ±0.5 percentage points of
-  unfolding improvement (TOST p=0.015; paired t-test p=0.16, so no detectable
-  difference). See `benchmarks/precision.py` and `benchmarks/compare_precision.py`.
+- 320 paired seeds put float32 and float64 within 3.5 sigma of each other on
+  unfolding improvement — indistinguishable, and the seed-to-seed spread
+  within either precision is larger than the gap between them. See
+  `benchmarks/precision.py` and `benchmarks/compare_precision.py`.
 
 Two things the pin does **not** cover:
 
 - **It is an annotation-level contract, not a runtime one.** Nothing coerces at
   the `Populations` boundary; the checkers enforce it at author time, and the
   three data sources (`_draw_gaussian`, `load_jet_dataset`, and the
-  sample-construction in `leakage.py`) narrow explicitly.
+  sample-construction in `workflows/leakage.py`) narrow explicitly.
 - **`ran.data.download` stays float64 on purpose.** `_get_var` upcasts before
   computing observables, because the ε it uses to protect degenerate jets is
   below the smallest float32 denormal — narrowing there would hand back `NaN`
@@ -80,9 +81,9 @@ Five gotchas worth knowing:
   (the same flag [seeding.md](seeding.md) mentions).
 - **`np.float32` is not JSON-serializable.** `np.float64` subclasses Python
   `float`, so `json` accepts it silently; `np.float32` raises. Anything
-  writing numbers to JSON has to coerce first — see `evaluate._metric_entry`,
-  which puts every value through `float()` on the way into `metrics.json` for
-  exactly this reason.
+  writing numbers to JSON has to coerce first — see
+  `ran.evaluation.evaluate._metric_entry`, which puts every value through
+  `float()` on the way into `metrics.json` for exactly this reason.
 - **`keras.ops.mean` is not float64-safe.** For float64 input it selects a
   float32 compute dtype internally and returns a float64 result carrying ~1e-8
   relative error. `src/ran/training/engine.py` uses plain `jnp` and never touches it,

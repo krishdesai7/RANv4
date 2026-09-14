@@ -10,7 +10,7 @@
   siunitx, booktabs and pdflscape) for `ran report`, and only for that
 - scipy for evaluation metrics (Wasserstein distance, Jensen-Shannon divergence)
 - jaxtyping + beartype for shape/dtype checking on the training loop's array seams
-- ruff (lint + format), pyrefly (types, `--min-severity info`), complexipy (max 10)
+- ruff (lint + format), pyrefly (types, `--min-severity info`) + `uv check --locked`, complexipy (max 10)
 - TensorFlow is not a dependency, direct or transitive. JAX is the only array
   backend in the build, so nothing here has to negotiate for the GPU.
 

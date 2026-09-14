@@ -1,7 +1,7 @@
 # Training Loop
 
-`src/ran/training/engine.py` is hand-rolled, since the two-optimizer min-max game does not
-fit `Model.fit` — but it is not a Python loop over batches. **A whole run
+`src/ran/training/engine.py` is hand-rolled, since the two-optimizer min-max
+game does not fit `Model.fit` — but it is not a Python loop over batches. **A whole run
 compiles to one XLA program.** Model state lives in JAX pytrees (`TrainState`)
 for the duration, updates go through `stateless_call`/`stateless_apply`, and the
 values are written back into the Keras models at the end, so the returned
@@ -38,8 +38,9 @@ stalled one, and `log 2 - BCE` estimates a divergence only when `d` is
 optimal, which nothing reports.
 
 Instead the scan emits every epoch's parameters (`EpochParams`, ~27 MB for
-100 epochs of both networks), and `train` picks the epoch minimizing a
-weighted MMD against a fixed subsample of the validation split. MMD is a
+100 epochs of both networks), and `engine.train` picks the epoch minimizing a
+weighted MMD (`training/mmd.py`) against a fixed subsample of the validation
+split. MMD is a
 divergence — zero iff the distributions match, monotone in mismatch, no
 adversary and no optimization — so no patience or early-stopping mechanism
 is needed: `scan` has a fixed trip count, and at 0.034s/epoch against a 4.6s
@@ -61,7 +62,7 @@ measures it. `MMD_SUBSAMPLE` is 16384.
 Loss math is plain `jnp`; `lax.scan` and `jax.random` are both native.
 `stateless_call`/`stateless_apply` are the only Keras calls inside the trace.
 
-**`train(fused=False)` is the debugging path.** It runs the identical `_epoch`
+**`engine.train(fused=False)` is the debugging path.** It runs the identical `_epoch`
 function from an ordinary Python `while` — still one XLA program per epoch, but
 with breakpoints, readable tracebacks and host-side control flow. It is also the
 reference the fused path is tested against (`tests/test_train.py::TestFusion`),

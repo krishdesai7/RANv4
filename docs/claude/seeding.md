@@ -5,9 +5,9 @@ Two independent randomness axes, deliberately kept separate:
 | Seed        | Set by                            | Controls                                                         |
 | ----------- | --------------------------------- | ------------------------------------------------------------------ |
 | `data_seed` | `RANDataset` / `load_jet_dataset` | generation, shuffle, train/val/test split, per-epoch batch order |
-| `seed`      | `train`                           | weight initialization only                                       |
+| `seed`      | `engine.train`                    | weight initialization only                                       |
 
-`train(seed=None)` draws one from system entropy and **returns the value used**,
+`engine.train(seed=None)` draws one from system entropy and **returns the value used**,
 so a run stays reproducible after the fact without deciding up front that it is
 worth reproducing. Both seeds are recorded in `config.json`; configs predating
 this default to `data_seed=42`, which is what those runs actually used.
@@ -20,12 +20,12 @@ non-deterministic GPU reductions. Force those with
 `XLA_FLAGS=--xla_gpu_deterministic_ops=true` if bitwise reproducibility is ever
 needed; it costs throughput and is not needed for variance estimates.
 
-Batch order comes from `jax.random`, inside the trace. `train` seeds a key from
-`data_seed` (carried on the splits and read by `DeviceSplits.from_splits`) and
-splits it once per epoch; `train_indices(key, ...)` is a pure function of that
-key, so nothing can advance the sequence out from under a caller. A second
-`train` over the same `DatasetSplits` therefore sees identical data with no
-rewind step needed.
+Batch order comes from `jax.random`, inside the trace. `engine.train` seeds a
+key from `data_seed` (carried on the splits and read by
+`DeviceSplits.from_splits`) and splits it once per epoch; `train_indices(key,
+...)` is a pure function of that key, so nothing can advance the sequence out
+from under a caller. A second `engine.train` over the same `DatasetSplits`
+therefore sees identical data with no rewind step needed.
 
 `train_indices` also decides what an epoch skips. It permutes, then reshapes
 into `(groups, n_disc_steps, batch_size)` — the generator updates once per

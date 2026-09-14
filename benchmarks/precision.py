@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EventArray, RANModel
-    from ran.training.train import TrainResult
+    from ran.training.engine import TrainResult
 
     class ModelBuilder(Protocol):
         """The exact shape of `ran.training.models.build_{generator,discriminator}`.
@@ -40,7 +40,7 @@ os.environ["JAX_ENABLE_X64"] = str(object=int(DTYPE == "float64"))
 
 import numpy as np
 import ran  # ruff: ignore[unused-import] -- import order is load-bearing; see above
-import ran.training.train as train_module
+import ran.training.engine as engine_module
 from ran.data import RANDataset
 from ran.rantypes import (
     Events,
@@ -80,8 +80,8 @@ def main() -> None:
     # Rebinding the module's builders to the same factories recompiled at
     # another dtype -- the measurement. Left unannotated: pyrefly rejects an
     # annotation on a non-self attribute.
-    train_module.build_generator = generator  # ty: ignore[invalid-assignment]
-    train_module.build_discriminator = discriminator  # ty: ignore[invalid-assignment]
+    engine_module.build_generator = generator  # ty: ignore[invalid-assignment]
+    engine_module.build_discriminator = discriminator  # ty: ignore[invalid-assignment]
 
     rng: np.random.Generator = np.random.default_rng(seed=0)
     z_true: NDArray[scalar] = rng.normal(size=(N_SAMPLES, DIM)).astype(dtype=scalar)
@@ -111,7 +111,7 @@ def main() -> None:
     splits: DatasetSplits = RANDataset(batch_size=1024, seed=0).splits_from_data(
         data=pops.interleave()
     )
-    result: TrainResult = train_module.train(
+    result: TrainResult = engine_module.train(
         splits,
         dim=DIM,
         hidden_units=64,

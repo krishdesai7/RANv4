@@ -2,7 +2,7 @@
 
 Off unless `RAN_TIMING` is set, and *off* means a shared no-op context manager:
 no `perf_counter`, no allocation, nothing appended. That matters because the
-timers sit at phase boundaries inside `workflow.run` and `train.train`, which a
+timers sit at phase boundaries inside `workflow.run` and `engine.train`, which a
 sweep crosses a few hundred times.
 
 The point of the layer is to say which component to go optimize, so the report

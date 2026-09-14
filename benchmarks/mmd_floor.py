@@ -49,8 +49,8 @@ import ran  # ruff: ignore[unused-import]  -- pins the backend and the dtype
 from ran.data import load_jet_dataset
 from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
+from ran.training.engine import MMD_SUBSAMPLE
 from ran.training.mmd import bandwidths, build_cache, weighted_mmd
-from ran.training.train import MMD_SUBSAMPLE
 from rich.console import Console
 from rich.table import Table
 

@@ -1,6 +1,6 @@
 # Training Loop
 
-`src/ran/training/train.py` is hand-rolled, since the two-optimizer min-max game does not
+`src/ran/training/engine.py` is hand-rolled, since the two-optimizer min-max game does not
 fit `Model.fit` — but it is not a Python loop over batches. **A whole run
 compiles to one XLA program.** Model state lives in JAX pytrees (`TrainState`)
 for the duration, updates go through `stateless_call`/`stateless_apply`, and the

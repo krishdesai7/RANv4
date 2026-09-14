@@ -535,7 +535,7 @@ class TestRunCell:
     @staticmethod
     def _stub(monkeypatch: pytest.MonkeyPatch, seen: list[dict[str, Any]]) -> None:
         import ran.evaluation.evaluate
-        import ran.training
+        import ran.training.engine
         import ran.uncertainty.design as design_module
         from ran.training import TrainResult
 
@@ -569,7 +569,7 @@ class TestRunCell:
                 mmd_test=1.5e-4,
             )
 
-        monkeypatch.setattr(target=ran.training, name="train", value=fake_train)
+        monkeypatch.setattr(target=ran.training.engine, name="train", value=fake_train)
         monkeypatch.setattr(
             target=ran.evaluation.evaluate,
             name="_get_weights",

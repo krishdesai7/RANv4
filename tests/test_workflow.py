@@ -25,7 +25,7 @@ from ran.data import RANDataset, parse_gaussian_config
 from ran.rantypes import ZXY, DatasetName, Events, Populations
 from ran.rantypes.events import DatasetSplits
 from ran.training import workflow
-from ran.training.train import TrainResult, train
+from ran.training.engine import TrainResult, train
 from ran.training.workflow import _compact_variables
 
 if TYPE_CHECKING:

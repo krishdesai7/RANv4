@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from ran.rantypes import DatasetSplits
-    from ran.training.train import TrainResult
+    from ran.training.engine import TrainResult
 
 
 def _rendered() -> str:
@@ -440,7 +440,7 @@ class TestTrainIntegration:
 
     @staticmethod
     def _train(splits: DatasetSplits) -> TrainResult:
-        from ran.training.train import train
+        from ran.training.engine import train
 
         return train(splits, dim=1, n_epochs=3, hidden_units=8, n_layers=1, seed=42)
 

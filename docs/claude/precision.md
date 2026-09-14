@@ -85,7 +85,7 @@ Five gotchas worth knowing:
   exactly this reason.
 - **`keras.ops.mean` is not float64-safe.** For float64 input it selects a
   float32 compute dtype internally and returns a float64 result carrying ~1e-8
-  relative error. `src/ran/training/train.py` uses plain `jnp` and never touches it,
+  relative error. `src/ran/training/engine.py` uses plain `jnp` and never touches it,
   reducing with `jnp.sum(...) / n` instead, which `tests/test_train.py`
   guards. Anything that reaches for `keras.ops` again needs to know. `ops.sum`
   is unaffected.

@@ -366,7 +366,7 @@ between the generators and no reweighting of `z_gen` can fix both.
 **C, whether the residual is real or `d` gave up.** A and B bound what is
 achievable; C audits what a finished run did. Freeze a saved generator,
 reweight `x_sim` by its own weights, and converge a _fresh_ discriminator
-against `x_data`. Scored through `ran.training.train.weighted_bce`, so the number is
+against `x_data`. Scored through `ran.training.engine.weighted_bce`, so the number is
 `val_d` as `history.npz` defines it rather than something close to it. `--epoch`
 audits any epoch, not just the selected one, which is what `params.npz` exists
 for.

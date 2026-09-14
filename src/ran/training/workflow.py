@@ -35,15 +35,15 @@ from ..rantypes import (
     VarInfo,
     artifacts_dir,
 )
+from .engine import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
 from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
-from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
     from ..rantypes import DatasetSplits, EventArray, Populations, RANModel, RunConfig
-    from .train import EpochParams, TrainResult
+    from .engine import EpochParams, TrainResult
 
 logger: Logger = logging.getLogger(__name__)
 
@@ -378,16 +378,16 @@ def _particle_curve(
     against. Selection has already happened by the time this runs, so nothing
     the generator saw depends on it.
 
-    Unlike `train.py`'s detector-level selection, calling `.partition()` here
+    Unlike `engine.py`'s detector-level selection, calling `.partition()` here
     is correct: this runs outside the trace, after selection, and needs the
-    answer key `train.py` must never see.
+    answer key `engine.py` must never see.
     """
     pops: Populations = splits.val.as_arrays().partition()
     if not pops.has_truth:
         return None
     z_true: EventArray = pops.require_truth()
     z_gen: EventArray = pops.mc.z
-    # Seeded off `splits.train.seed` (`data_seed`), the way `train.py`'s own
+    # Seeded off `splits.train.seed` (`data_seed`), the way `engine.py`'s own
     # detector-level draws are: `s`/`s+1` val-detector and `s+2`/`s+3`
     # test-detector are already spoken for, so this uses `s+4`/`s+5`.
     seed: int = splits.train.seed

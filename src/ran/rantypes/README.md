@@ -2,7 +2,7 @@
 
 Records, constants and aliases shared across the package.
 
-Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.training.train`.
+Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `ran.training.engine`.
 
 ## module: `configs`
 

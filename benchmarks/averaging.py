@@ -59,6 +59,7 @@ from ran.data.config import gaussian_config_from_run_config
 from ran.evaluation.evaluate import _improvement, _wd_per_dim
 from ran.instrumentation.logging_config import configure_logging
 from ran.rantypes import Split, artifacts_dir
+from ran.training.engine import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 from ran.training.mmd import (
     MMDCache,
     bandwidths,
@@ -67,7 +68,6 @@ from ran.training.mmd import (
     weighted_mmd,
 )
 from ran.training.models import build_generator
-from ran.training.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 
 if TYPE_CHECKING:
     from collections.abc import Callable

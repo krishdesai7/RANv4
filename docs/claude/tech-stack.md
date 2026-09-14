@@ -23,7 +23,7 @@ for the Keras backend slot or for the GPU.
 defaults to TensorFlow when that variable is unset, and TensorFlow is not
 installed, so the pin makes `import keras` work at all. It must land before
 the first keras import, which is why it lives in the package `__init__`;
-`src/ran/training/train.py` keeps a cheap guard that raises a readable error if someone
+`src/ran/training/engine.py` keeps a cheap guard that raises a readable error if someone
 sets `KERAS_BACKEND` to something else by hand.
 
 ## Gaussian Config Format

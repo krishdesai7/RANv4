@@ -30,7 +30,7 @@ Everything below is detail this file used to carry inline. Read the linked file 
 | [docs/claude/data-model.md](docs/claude/data-model.md)           | `Populations`/`ZXY`/device-resident split types; jet column ordering     |
 | [docs/claude/structure.md](docs/claude/structure.md)             | Full source tree, `runs/` and `.cache/` layout                           |
 | [docs/claude/cli-and-running.md](docs/claude/cli-and-running.md) | CLI reference, `just` recipes, test markers, `scripts/submit.zsh`        |
-| [docs/claude/training-loop.md](docs/claude/training-loop.md)     | `train.py`'s fused `lax.scan` program and host-side checkpoint selection |
+| [docs/claude/training-loop.md](docs/claude/training-loop.md)     | `engine.py`'s fused `lax.scan` program and host-side checkpoint selection |
 | [docs/claude/seeding.md](docs/claude/seeding.md)                 | `data_seed` vs `seed`, batch order, leakage-check                        |
 | [docs/claude/precision.md](docs/claude/precision.md)             | The float32 pin, where it doesn't reach, and reproducibility gotchas     |
 | [docs/claude/tech-stack.md](docs/claude/tech-stack.md)           | Dependencies, Keras/JAX backend pin, Gaussian config YAML format         |

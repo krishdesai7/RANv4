@@ -13,8 +13,8 @@ from ran.rantypes import (
     RANModel,
     Variables,
 )
+from ran.training.engine import TrainResult, _make_steps
 from ran.training.models import build_discriminator, build_generator
-from ran.training.train import TrainResult, _make_steps
 from ran.training.workflow import _load_artifacts
 
 if TYPE_CHECKING:

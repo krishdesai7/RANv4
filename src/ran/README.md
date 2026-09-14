@@ -10,7 +10,7 @@ Importing anything under `ran` first pins the Keras 3 backend to JAX and disable
 
 Import the submodule needed (`from ran.training.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
 
-Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD, the `ran train` workflow), `evaluation/` (metrics, plots, the leakage check), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Those four have empty `__init__.py` files on purpose. `training.workflow` imports `evaluation`, and `evaluation.leakage` imports `training.train`, so re-exporting from either `__init__` would turn that two-way package dependency into an import cycle.
+Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD, the `ran train` workflow), `evaluation/` (metrics, plots, the leakage check), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Those four have empty `__init__.py` files on purpose. `training.workflow` imports `evaluation`, and `evaluation.leakage` imports `training.engine`, so re-exporting from either `__init__` would turn that two-way package dependency into an import cycle.
 
 ## module `evaluation.evaluate`
 
@@ -172,7 +172,7 @@ Generate particle level plots.
 
 - `None`
 
-## :mod:`ran.training.train`
+## :mod:`ran.training.engine`
 
 Adversarial training loop for RAN, on Keras 3 with the JAX backend, as a single fused XLA program.
 

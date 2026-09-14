@@ -233,7 +233,7 @@ bit-identical between the clean and poisoned arms.
 
 This build relies on the JAX backend.
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using RAN as a library module rather than a command-line tool, ensure that **any `ran.*` import must come before `import keras`**. `src/ran/training/train.py` raises a clear error if the backend has been initialized to something else.
+`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using RAN as a library module rather than a command-line tool, ensure that **any `ran.*` import must come before `import keras`**. `src/ran/training/engine.py` raises a clear error if the backend has been initialized to something else.
 
 ### Precision
 
@@ -243,7 +243,7 @@ Every jet observable is float32-clean. In particular, `mass` and `mult` survive 
 
 `ran.data.download` computes jet observables in double precision, because the ε protecting degenerate jets is below the smallest single precision denormal.
 
-`src/ran/training/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
+`src/ran/training/engine.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
 - Model state lives in JAX pytrees (`TrainState`) for the duration of training
 - Updates are applied through `stateless_call`/`stateless_apply`
@@ -300,7 +300,7 @@ RANv4/
 │   │   └── report.py             Decomposition table, variance.npz, correlation.pdf
 │   ├── training/
 │   │   ├── models.py             Generator and discriminator architectures
-│   │   ├── train.py              Fused JAX training program
+│   │   ├── engine.py             Fused JAX training program
 │   │   ├── mmd.py                Weighted MMD for checkpoint selection
 │   │   └── workflow.py           Training and reload workflow behind `ran train`
 │   ├── evaluation/
@@ -387,7 +387,7 @@ runs/<timestamp>/
 
 ## Training Hyperparameters
 
-These are internal training defaults in `src/ran/training/train.py`; the CLI-exposed training options are listed above.
+These are internal training defaults in `src/ran/training/engine.py`; the CLI-exposed training options are listed above.
 
 | Parameter           | Default | Description                                 |
 | ------------------- | ------- | ------------------------------------------- |

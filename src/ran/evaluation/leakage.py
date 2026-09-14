@@ -13,7 +13,7 @@ from ..rantypes import (
     Events,
     Populations,
 )
-from ..training.train import train
+from ..training.engine import train
 from .evaluate import (
     _collect_test_data,
     _improvement,

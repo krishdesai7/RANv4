@@ -44,7 +44,7 @@ from ran.data.device import TrainSplit
 # re-implementation of it that can drift.
 from ran.evaluation.evaluate import _js_per_dim, _triangular_per_dim, _wd_per_dim
 from ran.rantypes import EVENT_DTYPE, Events, Populations
-from ran.training.train import train
+from ran.training.engine import train
 
 if TYPE_CHECKING:
     from collections.abc import Generator

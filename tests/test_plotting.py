@@ -1,6 +1,6 @@
 """Tests for the loss-curve figure.
 
-`losses.pdf` carried two identical dashed lines for a long time: `train.py`
+`losses.pdf` carried two identical dashed lines for a long time: `engine.py`
 recorded the validation BCE into both the `val_d` and `val_g` history columns,
 and `plot_losses` faithfully drew both. Nothing failed --- the figure just
 claimed to show something it did not measure --- so these pin the shape of the

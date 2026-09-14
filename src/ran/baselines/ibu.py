@@ -15,7 +15,7 @@ from ..rantypes import (
     VariableOutcome,
     artifacts_dir,
 )
-from ..training.train import EPS
+from ..training.engine import EPS
 from ._shared import (
     evaluate_dimension,
     load_populations,

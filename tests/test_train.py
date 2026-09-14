@@ -24,8 +24,7 @@ from ran.rantypes import (
     Events,
     Split,
 )
-from ran.training.models import build_generator
-from ran.training.train import (
+from ran.training.engine import (
     EPS,
     TrainResult,
     TrainState,
@@ -39,6 +38,7 @@ from ran.training.train import (
     weight_dispersion,
     weighted_bce,
 )
+from ran.training.models import build_generator
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from jax._src.basearray import Array
     from numpy.typing import NDArray
     from ran.rantypes import DatasetSplits, EvalStep, RANModel, TrainStep, Variables
-    from ran.training.train import EpochParams
+    from ran.training.engine import EpochParams
 
 
 def test_backend_is_jax_pinned_to_single_precision() -> None:

@@ -214,7 +214,7 @@ def run_cell(
     # Deferred so that `ran uncertainty collect`, which only reads npz and
     # reports, does not pay for importing keras and jax.
     from ..evaluation.evaluate import _get_weights
-    from ..training.train import train
+    from ..training.engine import train
 
     b, s = spec.cell_of_index(index)
     params: GaussianConfig | None = (

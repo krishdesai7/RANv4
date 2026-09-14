@@ -55,7 +55,7 @@ if keras.backend.backend() != "jax":
     # Importing `keras` before `ran` wins the race for the backend, and the
     # jitted steps below fail deep inside a trace.
     raise RuntimeError(
-        "ran.training.train requires the JAX backend, got "
+        "ran.training.engine requires the JAX backend, got "
         f"{keras.backend.backend()!r}. "
         "Import `ran` (or any ran.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."

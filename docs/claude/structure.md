@@ -32,7 +32,7 @@ src/ran/                      Python package
 │   └── report.py                Decomposition table, variance.npz, correlation.pdf
 ├── training/
 │   ├── models.py               Generator and discriminator architectures
-│   ├── train.py                Fused JAX training program (owns TrainResult/TrainState/RunCarry)
+│   ├── engine.py               Fused JAX training program (owns TrainResult/TrainState/RunCarry)
 │   ├── mmd.py                  Weighted MMD, the checkpoint-selection signal
 │   └── workflow.py             Training and reload workflow behind `ran train`
 ├── evaluation/

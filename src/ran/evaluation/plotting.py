@@ -57,9 +57,8 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 
 
 # One place for the figure's visual hierarchy, rather than seven literals
-# scattered through `_hist_ratio_panel`. RAN's step line used to be black at
-# alpha 0.35 while IBU's ratio line was at 0.75 -- the baseline drawn twice as
-# prominently as the method being showcased, on the same panel.
+# scattered through `_hist_ratio_panel`: RAN's curve must read as the method
+# under test, not a baseline drawn at equal or greater prominence.
 COLOR_NATURE: Final[str] = "C0"  # Data / Truth
 COLOR_MC: Final[str] = "C1"  # Sim / Gen
 COLOR_IBU: Final[str] = "green"
@@ -139,11 +138,9 @@ class _PanelOverlay(NamedTuple):
 class BaselineOverlay(NamedTuple):
     """A comparison baseline's weights, and how its curve is drawn.
 
-    This replaced a bare `ibu_weights: list[EventArray] | None` that was
-    threaded through six functions. With two baselines that parameter would
-    have had to become two, and every signature between `plot_levels` and
-    `_hist_ratio_panel` would carry both --- so the shape is a list instead,
-    and a third baseline costs one constructor rather than six signatures.
+    A list of these threads through `plot_levels` and `_hist_ratio_panel`,
+    so a third baseline costs one constructor rather than a new parameter in
+    every signature between them.
 
     `weights` holds one full-length weight vector **per dimension**, because
     IBU unfolds each observable separately and its weights genuinely differ
@@ -266,12 +263,11 @@ def _hist_ratio_panel(
             linewidth=4,
             alpha=ALPHA_RAN,
             label="RAN",
-            # Above every baseline. The overlays are drawn after this call --
-            # which is what puts them last in the legend, where they belong --
-            # and at linewidth 4 the last one drawn would otherwise bury RAN
-            # wherever the curves agree, which on a converged run is
-            # everywhere. `zorder` separates paint order from legend order;
-            # without it the method being showcased sits under the baselines.
+            # Above every baseline. Overlays draw after this call, putting
+            # them last in the legend, but at linewidth 4 the last curve
+            # drawn would otherwise bury RAN wherever they agree -- which on
+            # a converged run is everywhere. `zorder` keeps paint order
+            # separate from legend order.
             zorder=Z_RAN,
         ),
     )
@@ -339,12 +335,9 @@ def _hist_ratio_panel(
             alpha=overlay.alpha,
             zorder=Z_BASELINE,
         )
-    # Every panel gets a label, a title and a legend, not only one drawn
-    # against a baseline -- no `*_weights.npz` exists on the default
-    # `ran train` path, and until one did every panel was unlabelled, untitled
-    # and legend-less. `ax.legend()` runs once here, after the overlay loop, so
-    # it picks up whichever baseline handles that loop created and omits the
-    # rest.
+    # Every panel gets a label, a title and a legend, whether or not a
+    # baseline overlay was drawn: `ax.legend()` runs once here, after the
+    # overlay loop, and picks up whichever handles that loop created.
     _ = ax.set_ylabel(ylabel="Events")
     _ = ax.set_title(label=title)
     _ = ax.legend()
@@ -369,14 +362,11 @@ def _hist_ratio_panel(
 def _save_fig(figure: Figure, save_path: Path) -> None:
     """Save `figure`, trimmed to its rendered contents.
 
-    Without `bbox_inches="tight"` the y-labels are clipped by the page edge.
-    `plot_losses` always passed it and never clipped; `plot_selection` and
-    `_plot_level` did not and did -- wide tick labels (e.g. five-digit event
-    counts) push the y-label further left than `_plot_level`'s fixed
-    `GridSpec` margins reserve for it, so a real run's `detector_level.pdf`
-    and `particle_level.pdf` clip even though a narrower synthetic figure
-    does not. All three now go through this one save path instead of calling
-    `figure.savefig` themselves.
+    Without `bbox_inches="tight"` the y-labels are clipped by the page edge:
+    wide tick labels (e.g. five-digit event counts) can push a y-label
+    further left than a fixed `GridSpec` margin reserves for it. Every save
+    path goes through here rather than calling `figure.savefig` directly, so
+    the bbox handling cannot drift out of sync between figures.
     """
     save_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(fname=save_path, bbox_inches="tight")
@@ -463,11 +453,10 @@ def _panel_spec(
             if dim > 1
             else f"{style.symbol} ({style.level} level)"
         ),
-        # `_plot_level`'s `figure.suptitle` now states `style.title_prefix`
-        # once for the whole figure, so a panel title repeating it here --
-        # even the single-dimension case's old bare `style.title_prefix` --
-        # would duplicate it. `dim > 1` still names which dimension a panel
-        # is; `dim == 1` has nothing left to say.
+        # `_plot_level`'s `figure.suptitle` already states `style.title_prefix`
+        # once for the whole figure, so a panel title would duplicate it.
+        # `dim > 1` still names which dimension a panel is; `dim == 1` has
+        # nothing left to say.
         title=(f"Dim {i}" if dim > 1 else ""),
     )
 
@@ -535,8 +524,8 @@ def _page_figure(
     # visible as axis labels rendered off the left edge of the page.
     outer_grid: GridSpec = figure.add_gridspec(nrows=nrows, ncols=ncols)
     # States the level once per page instead of on every panel title -- see
-    # `_panel_spec`. The page counter only appears when there is more than one
-    # page, so a single-page figure reads exactly as it did before.
+    # `_panel_spec`. The page counter only appears when there is more than
+    # one page.
     title: str = (
         style.title_prefix
         if pages == 1
@@ -581,12 +570,11 @@ def _plot_level(
     identity for a non-jet run) rather than by raw column index, and split
     `PANELS_PER_PAGE` to a page across the pages of ONE multi-page PDF.
 
-    Pagination is what makes the panels legible: `\includegraphics` scales a
-    figure to fit its text block and every font scales with it, so a
-    twelve-panel 12x24in figure renders its 18pt labels at 5pt. `constants`
-    carries the arithmetic and the measured table; `figure_pages` is the same
-    count, and is what `report.py` uses to know how many
-    `\includegraphics[page=...]` blocks to emit without opening the file.
+    Pagination keeps the panels legible: `\includegraphics` scales a figure
+    to fit its text block and every font scales with it, so a twelve-panel
+    12x24in figure would render its 18pt labels at 5pt. `figure_pages` gives
+    the same per-page count `report.py` needs to know how many
+    `\includegraphics[page=...]` blocks to emit, without opening the file.
     """
     dim: int = nature.shape[1]
     order: Sequence[int] = display_order(
@@ -787,10 +775,9 @@ def _mmd_scatter(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> 
     series cannot show. Only drawn when a particle-level curve exists.
 
     Lives in its own axes in the figure's right column rather than as an
-    `inset_axes` over the MMD panel -- an opaque box sitting on top of the
-    curves it is meant to explain hides exactly the criterion points it is
-    there to relate, the same defect the legend caused before it moved
-    outside the axes.
+    `inset_axes` over the MMD panel: an opaque box sitting on top of the
+    curves it is meant to explain would hide exactly the criterion points it
+    is there to relate.
     """
     detector = np.array(history["val_mmd"], dtype=np.double)
     particle = np.array(history["val_mmd_particle"], dtype=np.double)
@@ -816,14 +803,14 @@ def _mmd_values(history: dict[str, list[float]]) -> NDArray[np.double]:
 def _mmd_ylim(history: dict[str, list[float]]) -> tuple[float, float]:
     """Y-limits sized to the plotted data, not to the resolution floor.
 
-    The floor's `axhspan` used to set the view's lower bound at `ymin=0`
-    regardless of where the data actually sat, which on a real run put 63% of
-    the panel's height in the (empty) floor band and crushed every curve into
-    the top third. Padding 20% past the data's own min/max instead lets the
-    floor be clipped by the view -- still drawn, just no longer the majority
-    of the panel. Padding is taken as a fraction of `abs(value)` rather than
-    a flat multiply, so it still widens (not narrows) the view when the
-    unbiased MMD estimator's noise puts the extreme value below zero.
+    Fixing the view's lower bound to the floor's `ymin=0` would let an empty
+    floor band dominate the panel on a run whose data sits well above it, and
+    crush every curve into a fraction of the height. Padding 20% past the
+    data's own min/max instead lets the floor be clipped by the view -- still
+    drawn, just not the majority of the panel. Padding is taken as a fraction
+    of `abs(value)` rather than a flat multiply, so it still widens (not
+    narrows) the view when the unbiased MMD estimator's noise puts the
+    extreme value below zero.
     """
     values = _mmd_values(history)
     data_min, data_max = float(values.min()), float(values.max())
@@ -947,10 +934,8 @@ def plot_selection(
     to score against, so it -- and the scatter it feeds -- are optional.
 
     The legend lives in its own axes in the top right, rather than inside
-    the MMD axes: a legend drawn over the data was the original complaint
-    ("covers the bottom third of the plot"), and a `bbox_to_anchor` placed
-    outside the axes worked but left the right side of the figure empty --
-    exactly where the scatter needed to go instead of on top of the curves.
+    or beside the MMD axes, so it neither covers the data nor competes with
+    the scatter panel for the same space.
     """
     figure: Figure = Figure(figsize=(9, 6))
     figure.canvas = FigureCanvasPdf(figure)
@@ -959,10 +944,9 @@ def plot_selection(
     # Neither the outer 1x2 split nor either nested column passes an
     # explicit `wspace`/`hspace` to `add_gridspec` itself -- only to a
     # `SubplotSpec.subgridspec` nested inside a cell. `tight_layout` marks a
-    # `GridSpec` "locally modified" (and falls back to undersized margins,
-    # once silently, now emitting the warning this replaces) exactly when
-    # spacing is set on the gridspec it inspects directly; a nested
-    # subgridspec's own spacing does not trip that check. `_draw_panel`
+    # `GridSpec` "locally modified" (falling back to undersized margins)
+    # exactly when spacing is set on the gridspec it inspects directly; a
+    # nested subgridspec's own spacing does not trip that check. `_draw_panel`
     # above uses the same trick for the same reason.
     outer: GridSpec = figure.add_gridspec(nrows=1, ncols=2, width_ratios=[7, 4])
     left: GridSpecFromSubplotSpec = outer[0].subgridspec(

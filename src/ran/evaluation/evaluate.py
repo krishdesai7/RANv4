@@ -98,9 +98,9 @@ def _load_splits(config: dict[str, Any]) -> DatasetSplits:
         splits, _, _ = load_jet_dataset(
             n_samples,
             batch_size,
-            # The recorded list, in the recorded order. Round-tripping it
-            # through a set here is what mismatched these columns against the
-            # `var_names` below --- and against the generator's own training.
+            # The recorded list, in the recorded order -- a `set` here would
+            # mismatch these columns against `var_names` below, and against
+            # the generator's own training (see docs/claude/data-model.md).
             variables=cast(typ="Sequence[str]", val=config["variables"]),
             seed=data_seed,
         )
@@ -197,8 +197,7 @@ def _bin_edges(
     They come back **float32**, and that is not incidental: `JAX_ENABLE_X64=0`
     truncates a float64 array on its way into a traced function, so float64
     edges would be re-rounded at that boundary and the bin a value lands in
-    would stop matching the edges the host computed. Deciding the width in the
-    dtype the comparison happens in is what keeps the two ends one function.
+    would stop matching the edges the host computed.
     """
     lo: NDArray[np.single] = np.asarray(
         jnp.minimum(ref.min(axis=0), comp.min(axis=0)), dtype=EVENT_DTYPE
@@ -213,19 +212,18 @@ def _bin_edges(
 def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
     """Weighted bin counts per column, `(dim, n_bins)`.
 
-    `searchsorted(..., "right") - 1` is what `np.histogram` does with explicit
-    edges; the clip is its closed last bin, which is where the maxima land.
+    `searchsorted(..., "right") - 1` reproduces `np.histogram`'s placement
+    against explicit edges; the clip is its closed last bin, which is where
+    the maxima land.
 
-    The weights are **centered before they are scattered**, and the mean added
-    back through the exact count. Scattering them raw sums ~200 values of
-    magnitude ~1 per bin in float32, which is precisely what the `np.histogram`
-    this replaces did -- that function accumulates in the weights' own dtype,
-    and RAN's weights are float32. Centering leaves the scatter summing
-    residuals instead of magnitudes, an order of magnitude smaller, while the
+    The weights are **centered before they are scattered**, and the mean
+    added back through the exact count. Scattering them raw would sum ~200
+    values of magnitude ~1 per bin in float32; centering leaves the scatter
+    summing residuals instead, an order of magnitude smaller, while the
     integer count it is added back to is exact in float32 out to 2**24, far
-    above any sample this runs on. Measured against float64, that lands the JS
-    divergence within 9e-9 where the old path was 5.9e-7 off -- the difference
-    between reaching the sixth decimal `metrics.json` prints and not.
+    above any sample this runs on. Measured against float64, this lands the
+    JS divergence within 9e-9 -- the difference between reaching the sixth
+    decimal `metrics.json` prints and not.
 
     The mean is itself a float32 reduction and carries its own error, which
     does not matter: it multiplies every bin of the column by the same factor,
@@ -235,11 +233,10 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
     `.at[].add` accumulates atomically and the summation order varies between
     passes: two calls of this function on identical input return counts
     differing in the last float32 ulp, worth ~4e-8 relative on a JS divergence
-    downstream. That is accepted rather than fixed --- the alternatives are a
-    sorted segment-sum or a one-hot matmul over the full sample, which is real
-    cost for a reduction that is currently free --- but it means nothing may
-    assume two histograms of the same data are bit-identical. See the Precision
-    section of CLAUDE.md.
+    downstream. That is accepted rather than fixed -- the alternatives are a
+    sorted segment-sum or a one-hot matmul over the full sample, real cost for
+    a reduction that is currently free -- but it means nothing may assume two
+    histograms of the same data are bit-identical. See docs/claude/precision.md.
     """
     n_bins: int = edges.shape[1] - 1
     mean_weight: JaxArray = jnp.mean(a=weights)
@@ -319,11 +316,11 @@ def _metrics_kernel(
 def _normalize(counts: JaxArray) -> NDArray[np.double]:
     """Bin counts to probability masses, on the host in float64.
 
-    The counts come back from device float32 because that is what the scatter
-    that produced them sums in; everything downstream of here is a divergence
-    of a `dim x n_bins` array, which is free, so it is taken in float64 --
-    scores are not pinned to the data's precision. An all-zero histogram is
-    left unnormalized rather than divided by zero.
+    The counts come back from device in float32, the dtype the scatter that
+    produced them sums in. Everything downstream of here is a divergence of a
+    `dim x n_bins` array, which is free, so it is taken in float64 -- scores
+    are not pinned to the data's precision. An all-zero histogram is left
+    unnormalized rather than divided by zero.
     """
     dense: NDArray[np.double] = np.asarray(a=counts, dtype=np.double)
     total: NDArray[np.double] = dense.sum(axis=1, keepdims=True)
@@ -348,8 +345,8 @@ def _normalized_histograms(
 ) -> tuple[NDArray[np.double], NDArray[np.double]]:
     """The `(p, q)` probability histograms, `(dim, n_bins)` each.
 
-    Both share one binning per dimension, which is what makes the divergences
-    below comparable across dimensions. `weights` reweights `comp` only.
+    Both share one binning per dimension, so the divergences below are
+    comparable across dimensions. `weights` reweights `comp` only.
     """
     ref_2d, comp_2d, w = _prepare(ref, comp, weights)
     edges: JaxArray = jnp.asarray(a=_bin_edges(ref_2d, comp_2d, n_bins))
@@ -516,7 +513,6 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
     # crosses back is the handful of numbers per dimension they reduce to.
     w: JaxArray = _generator_weights(g, z_gen=test.mc.z)
 
-    # Variable names for labeling
     dataset: str = config.get("dataset", "gaussian")
     dim: int = config["dim"]
     if dataset == "jets":

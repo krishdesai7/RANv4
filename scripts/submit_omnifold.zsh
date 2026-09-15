@@ -76,8 +76,8 @@ module unload cudatoolkit/12.9
 trap - EXIT
 
 # `--load-run` reloads the saved generator instead of training and redraws the
-# figures, which is what puts the OmniFold curve on them: `_load_baseline_weights`
-# picks up whichever `*_weights.npz` exist at draw time. Then re-score, so
+# figures, putting the OmniFold curve on them: `_load_baseline_weights` picks
+# up whichever `*_weights.npz` exist at draw time. Then re-score, so
 # `metrics.json` and the report agree with the figures.
 uv run ran train --load-run "${RUN_DIR}"
 uv run ran evaluate --run-dir "${RUN_DIR}" --force

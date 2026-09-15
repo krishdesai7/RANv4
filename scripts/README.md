@@ -2,7 +2,7 @@
 
 ## submit.zsh
 
-End-to-end unfolding run: train -> IBU baseline -> replot with the baseline overlaid -> metrics. Defaults to all six jet observables, which is the full-fledged case; every stage runs in one sequential job on one GPU.
+End-to-end unfolding run: train -> IBU baseline -> replot with the baseline overlaid -> metrics. Defaults to all six jet observables; every stage runs in one sequential job on one GPU.
 
 ### Examples
 
@@ -15,7 +15,7 @@ End-to-end unfolding run: train -> IBU baseline -> replot with the baseline over
 
 ### Queue and resource allocation
 
-Since the default config uses GPU, not four, and therefore the queue is `shared` rather than `regular`. Nothing in `ran train` shards across devices. It is a single jitted program on device 0, so three of the four GPUs of an individual node would sit idle while JAX preallocated ~75% of each. `shared` lets the job take a quarter of a node and be charged for a quarter of a node, and small jobs backfill into gaps a whole-node request cannot reach.
+The default config uses one GPU, not four, so the queue is `shared` rather than `regular`: nothing in `ran train` shards across devices, it is a single jitted program on device 0, and the other three GPUs on a whole node would sit idle while JAX preallocated ~75% of each. `shared` charges only for the quarter of the node actually used, and small jobs backfill into gaps a whole-node request cannot reach.
 
 _`-c32` is mandatory:_ the gpu_shared queue requires exactly 32 logical cores per GPU (a quarter of the node's 128) and rejects anything else. There is deliberately no `--mem` line: the scheduler converts a memory request into an equivalent core count and enforces the larger of the two, so `--mem=<M>GB` can silently become a request for a different core count and fail the job. Omitting it lets memory come out proportional to the cores (~54GB), which does not need rederiving when the node spec changes and is far more than an individual run needs: 1M events x 6 observables is ~105MB on device (z, x and y across all three splits) and well under a gigabyte on host.
 
@@ -128,7 +128,7 @@ redirect `train.log` into before training starts.
 
 ### Wall clock
 
-`--no-plots`: the figures are a large share of a short run's wall clock and no part of scoring one. Metrics still run, which is what the collect step reads. Training itself is ~15s per run at these parameters (`benchmarks/boundary.py`, A100); `-t01:00:00` is margin for the npz load, not for the GPU, since 24 processes read the 1M-event jet cache at once.
+`--no-plots`: the figures are a large share of a short run's wall clock and no part of scoring one. Metrics still run, and the collect step reads them. Training itself is ~15s per run at these parameters (`benchmarks/boundary.py`, A100); `-t01:00:00` is margin for the npz load, not for the GPU, since 24 processes read the 1M-event jet cache at once.
 
 ### Warm up
 
@@ -136,17 +136,10 @@ If the jet cache has not been populated, a cold cache pulls 3.3GB from Zenodo in
 
 ### Options
 
-- `FLAG`: The arm axis. One value per level; the collect step reads the knob off the saved configs, so changing this to another flag needs no change downstream. Three levels around the default, so that the read is a trend across levels, and at n=8 against SD 1.9 the argmax of two arms is mostly luck.
-- `LEVELS`: The levels of the arm axis.
-- `SEEDS`: The seeds to run.
-- `NODES`: The number of nodes to use. n=8 x 3 levels = 24 runs. `NODES=6` -> 24 A100s -> a single wave, so the wall clock is one run's. Lower `NODES` to use fewer GPUs at the cost of extra waves.
-- `GPUS_PER_NODE`: The number of GPUs per node to use.
-- `GPUS_TOTAL`: The total number of GPUs to use.
-- `TRAIN_ARGS`: The training arguments to use.
-- `PROJECT_DIR`: The project directory.
-- `ARM_DIR`: The arm directory.
-- `JOB`: The job ID. `--time` is set for the wall clock of each run is ~15s of training (benchmarks/boundary.py, A100) plus npz loading and the scipy metrics. The margin is for the load, because 24 processes read the 1M-event jet cache at once.
-- `SLURM_JOB_ID`: The SLURM job ID.
+- `FLAG`, `LEVELS`, `SEEDS`: The arm axis and its levels, and the seeds swept at each. The collect step reads the knob off the saved configs, so changing `FLAG` to another flag needs no change downstream. Three levels around the default, so the read is a trend across levels, and at n=8 against SD 1.9 the argmax of two arms is mostly luck.
+- `NODES`: n=8 x 3 levels = 24 runs. `NODES=6` -> 24 A100s -> a single wave, so the wall clock is one run's. Lower `NODES` to use fewer GPUs at the cost of extra waves.
+- `TRAIN_ARGS`, `PROJECT_DIR`, `ARM_DIR`: passed straight through to the job; see the script for their defaults.
+- `JOB`: The submitted job's ID, echoed for the logs listed above.
 
 ## submit_uncertainty.zsh
 
@@ -162,7 +155,7 @@ Same as `submit_hparam.zsh`, and it matters more here: a cold cache would pull 3
 
 ### Which grid to run
 
-`B=8 S=8` is the decomposition: both axes need at least two levels for the mean squares to have degrees of freedom, and eight apiece puts the components at a useful precision. `B=100 S=2` trades the seed axis for the bootstrap one, which is the shape for the bin-to-bin covariance — a `K x K` matrix from `B` replicates wants `B` well above `K`, and at 20 bins `B=50` already gave the right aggregate structure (lag correlations, effective rank) but let individual off-diagonal entries move by up to 0.39 between reruns; `B=100` is what the published numbers use.
+`B=8 S=8` is the decomposition: both axes need at least two levels for the mean squares to have degrees of freedom, and eight apiece puts the components at a useful precision. `B=100 S=2` trades the seed axis for the bootstrap one, which is the shape for the bin-to-bin covariance — a `K x K` matrix from `B` replicates wants `B` well above `K`, and at 20 bins `B=50` already gave the right aggregate structure (lag correlations, effective rank) but let individual off-diagonal entries move by up to 0.39 between reruns; the published numbers use `B=100`.
 
 ### Options
 
@@ -171,4 +164,4 @@ Same as `submit_hparam.zsh`, and it matters more here: a cold cache would pull 3
 - `N_EVAL`: Size of the common evaluation set held out before resampling. Every cell is read on exactly these events; the default 100k costs 400KB per cell on disk.
 - `N_BINS`: Bins for the covariance, passed to `collect`. Equal-occupancy, so a discrete observable can come back with fewer.
 - `RUN_ARGS`: Training arguments. Defaults to the paper's configuration on purpose — a design run at cheaper settings is a variance budget for a model nobody is publishing.
-- `NODES`, `GPUS_PER_NODE`, `GPUS_TOTAL`, `PROJECT_DIR`, `DESIGN_DIR`, `JOB`: as in `submit_hparam.zsh`.
+- `NODES`, `PROJECT_DIR`, `DESIGN_DIR`, `JOB`: as in `submit_hparam.zsh`.

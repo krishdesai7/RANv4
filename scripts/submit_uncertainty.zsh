@@ -12,11 +12,11 @@
 # requested. Raising NODES cuts waves and buys queue time; it does not make a
 # cell faster.
 #
-# Defaults measure the decomposition. For the bin-to-bin covariance the
-# bootstrap axis is what needs replicates, not the seed one -- S can stay at 2
+# Defaults measure the decomposition. For the bin-to-bin covariance, the
+# bootstrap axis needs the replicates, not the seed one -- S can stay at 2
 # because the interaction is already measured to 49 df by the 8x8 design:
 #
-#   B=100 S=2 NODES=4 TIME=01:30:00 bash scripts/submit_uncertainty.sh
+#   B=100 S=2 NODES=4 TIME=01:30:00 zsh scripts/submit_uncertainty.zsh
 #
 # That is 200 cells over 16 GPUs -- 13 waves, ~52 min at the 1.6M cell above,
 # inside the 90 minutes requested.
@@ -29,7 +29,7 @@
 # aggregate structure was already right.
 #
 # Those published numbers were measured at `-n1000000`. The default below is
-# now 1.6M, matching what `scripts/submit.sh` trains, so a design run here
+# now 1.6M, matching what `scripts/submit.zsh` trains, so a design run here
 # supersedes them rather than describing a different model -- see the note in
 # `src/ran/uncertainty/README.md` under "What the design measured". Both grids
 # have to be rerun for that to hold: a decomposition at one sample size and a
@@ -58,7 +58,7 @@ GPUS_TOTAL=$((NODES * GPUS_PER_NODE))
 # The design measures RAN as the paper ships it, so these are the paper's
 # values and not a cheaper stand-in. A design run at other settings is a
 # variance budget for a model nobody is publishing -- which is why this tracks
-# `scripts/submit.sh` and why the two must be changed together. All twelve
+# `scripts/submit.zsh` and why the two must be changed together. All twelve
 # observables, by way of `load_jet_dataset`'s default: `--var` is repeatable
 # and would append rather than replace.
 RUN_ARGS=${RUN_ARGS:--Djets -n1600000 -l3 -u128}
@@ -69,7 +69,7 @@ echo "Design dir: ${DESIGN_DIR}"
 echo "Running ${B}x${S} = ${CELLS} cells on ${GPUS_TOTAL} GPUs"
 
 # `--gpus-per-node` has no short form, and `-G` is NOT it: `-G/--gpus` is the
-# TOTAL across the allocation. See the same note in scripts/submit_hparam.sh.
+# TOTAL across the allocation. See the same note in scripts/submit_hparam.zsh.
 JOB=$(sbatch --parsable \
   -qregular -Cgpu -Am3246_g -t"${TIME}" \
   -N "${NODES}" --gpus-per-node="${GPUS_PER_NODE}" \

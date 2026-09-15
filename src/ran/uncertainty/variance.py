@@ -87,9 +87,9 @@ class VarianceComponents(NamedTuple):
 class Covariances(NamedTuple):
     """The same three components as `K x K` matrices over binned observables.
 
-    Diagonals agree with `VarianceComponents` by construction, which is what
-    `tests/test_uncertainty.py` checks. The off-diagonals are the point: they
-    are what a bin-by-bin error bar throws away.
+    Diagonals agree with `VarianceComponents` by construction;
+    `tests/test_uncertainty.py` checks exactly that. The off-diagonals are the
+    point: a bin-by-bin error bar throws them away.
     """
 
     data: NDArray[np.double]
@@ -248,9 +248,9 @@ def binned_spectra(
 
     `weights` is `(..., n_events)` and the result is `(..., K)`, so a `(B, S)`
     design comes back as `(B, S, K)` ready for `decompose`. Every run weights
-    the *same* `column`, which is what makes the across-run variance a property
-    of the unfolding rather than of the evaluation sample: the finite size of
-    the common set shifts all runs together and cancels out of the contrast.
+    the *same* `column`, so the across-run variance is a property of the
+    unfolding rather than of the evaluation sample: the finite size of the
+    common set shifts all runs together and cancels out of the contrast.
     """
     values: NDArray[np.double] = np.asarray(a=column, dtype=np.double)
     stack: NDArray[np.double] = np.asarray(a=weights, dtype=np.double)
@@ -276,8 +276,8 @@ def weighted_means(
 
     Binning is a choice, and a decomposition that depends on it invites the
     reply that a different binning would say something else. The weighted mean
-    depends on none, so it is what the summary table reports; the binned
-    covariance is what carries the off-diagonal argument.
+    depends on none, so the summary table reports it; the binned covariance
+    carries the off-diagonal argument.
     """
     values: NDArray[np.double] = np.asarray(a=column, dtype=np.double)
     stack: NDArray[np.double] = np.asarray(a=weights, dtype=np.double)

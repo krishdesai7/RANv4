@@ -102,8 +102,8 @@ _that constraint alone_ forces negative off-diagonals. For equal-occupancy
 bins the pure-closure value is the multinomial `-1 / (K - 1)`, and
 `multinomial_off_diagonal` writes it into the output next to the measurement.
 Structure beyond that flat floor --- neighbouring bins correlating more than
-distant ones --- is what normalization cannot explain, and is the part of the
-matrix the argument rests on.
+distant ones --- is the part normalization cannot explain, and the part the
+argument rests on.
 
 Bins are equal-occupancy (`quantile_edges`) because a `K x K` covariance from
 `B` replicates needs every bin to carry enough events to be a measurement
@@ -186,7 +186,7 @@ literature calls "ensemble spread" is, here, an interaction term.
 - Ensembling over seeds at fixed data removes the interaction, leaving the
   bootstrap component. The reportable SD is **0.63-0.80x** a single run's
   spread (mean 0.73x). That factor is the value of ensembling, measured.
-- Which bootstrap replicate was drawn is what determines fit quality more than
+- Which bootstrap replicate was drawn determines fit quality more than
   which seed did: at the 100x2 grid, 10 of the 19 datasets with at least one
   cell reading `mmd_test > 5e-4` (~4 floors) have it in _both_ seeds, against
   2.1 expected if the two seeds failed independently. A bad fit is a property
@@ -206,9 +206,8 @@ So the assumption is not merely wrong in magnitude, it is wrong in shape: the
 true covariance is nearly rank-2, and no rescaling of per-bin error bars can
 represent it. This held to within 0.01 on every lag correlation and 0.2 on
 every effective rank between the 50x2 and 100x2 grids; only individual
-off-diagonal entries moved (by up to 0.39 at B=50), which is what motivated
-the larger grid and is now resolved --- entry-by-entry stability was not
-checked beyond B=100.
+off-diagonal entries moved (by up to 0.39 at B=50). This motivated the larger
+grid; entry-by-entry stability was not checked beyond B=100.
 
 **Two caveats, because they bound what the numbers support.**
 
@@ -219,5 +218,5 @@ checked beyond B=100.
 - **Quote the exact weighted mean, not the binned proxy.** Scoring the mean
   off bin centres inflates its SD by a median 24%, and by 2.5x on jet mass,
   whose outer quantile bin is wide enough to give a fluctuation there a large
-  lever arm. `weighted_means` is the exact quantity and is what the summary
-  table reports; `variance.npz`'s covariances are for binned functionals.
+  lever arm. `weighted_means` is the exact quantity, and the summary table
+  reports it; `variance.npz`'s covariances are for binned functionals.

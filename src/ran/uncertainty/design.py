@@ -16,7 +16,7 @@ batch orders; every run still sees the same 1M events. That is *method*
 variance --- an artifact of the algorithm being order-dependent, removable by
 ensembling --- and it is not the statistical uncertainty a measurement is
 obliged to report. The nonparametric bootstrap, drawing `n` of `n` with
-replacement, is what estimates the latter: how much the answer would move if
+replacement, estimates the latter: how much the answer would move if
 the experiment had collected a different sample of the same size. `data_seed`
 is therefore held **fixed** across the whole design.
 
@@ -297,9 +297,9 @@ class Design(NamedTuple):
 
     `meta` is cell zero's record with the per-cell fields dropped, because the
     rest of it --- dataset, variables, sample size, seeds --- is by
-    construction identical across the grid, and is what `collect` needs to
-    regenerate the common evaluation set without storing a copy of it in every
-    cell.
+    construction identical across the grid, and `collect` uses it to
+    regenerate the common evaluation set without storing a copy of it in
+    every cell.
     """
 
     weights: NDArray[np.double]

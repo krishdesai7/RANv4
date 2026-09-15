@@ -15,27 +15,22 @@ if TYPE_CHECKING:
 # The one floating type the pipeline carries, end to end.
 #
 # The jet inputs justify it: `mass` and `mult` are bit-exact through a float32
-# round trip, and the other four observables lose exactly half a ULP, so there
-# is no structure below float32 to preserve. An ensemble of 20 paired seeds put
-# float32 and float64 within +/-0.5 percentage points of unfolding improvement
-# (TOST p=0.015); see `benchmarks/precision.py`. Everything downstream --- the
-# containers, the models, `JAX_ENABLE_X64` --- follows from this line.
+# round trip, and the other observables lose at most half a ULP, so there is
+# no structure below float32 to preserve. 320 paired seeds put float32 and
+# float64 within 3.5 sigma of each other on unfolding improvement -- see
+# docs/claude/precision.md and `benchmarks/precision.py`. Everything
+# downstream -- the containers, the models, `JAX_ENABLE_X64` -- follows from
+# this line.
 EVENT_DTYPE: Final[type[np.single]] = np.single
 
-# Everything RAN can regenerate lives under one root: the dataset `.npz` caches
-# and the XLA compilation cache. `RAN_CACHE_DIR` relocates the whole tree, which
-# is what a cluster needs --- on Perlmutter `$HOME` is small, quota'd and shared
-# across nodes, `$SCRATCH` is none of those, and hardcoding either would be
-# wrong for everyone not on that machine.
+# Everything RAN can regenerate lives under one root: the dataset `.npz`
+# caches and the XLA compilation cache. `RAN_CACHE_DIR` relocates the whole
+# tree, which a cluster needs (on Perlmutter `$HOME` is small and quota'd;
+# `$SCRATCH` is not) -- see docs/claude/caching.md for the full argument,
+# including why this is not derived from `XDG_CACHE_HOME`.
 #
-# It is deliberately its own variable rather than a read of `XDG_CACHE_HOME`.
-# That one is already set (or defaults to `~/.cache`) on most Linux systems, so
-# deriving from it would silently move every existing checkout's cache the first
-# time this version ran, orphaning the ~2GB of Zenodo jet data already on disk.
-# A project-local `.cache/` stays the default because `.gitignore` covers it.
-#
-# Read once, at import: the module-level constant is what the `cache_dir=`
-# defaults below bind to, and those bind at import either way.
+# Read once, at import, since the `cache_dir=` defaults throughout `ran.data`
+# bind to this module-level constant at import either way.
 CACHE_ENV_VAR: Final[LiteralString] = "RAN_CACHE_DIR"
 CACHE_DIR: Final[Path] = Path(os.environ.get(CACHE_ENV_VAR) or ".cache").expanduser()
 
@@ -68,16 +63,10 @@ def artifacts_dir(run_dir: Path, /) -> Path:
 ZENODO_RECORD: Final[int] = 3548091
 GENERATORS: Final[tuple[LiteralString, LiteralString]] = ("Pythia26", "Herwig")
 N_FILES: Final[int] = 17
-# A tuple, emphatically not a `frozenset`. These names select *columns*, and
-# `load_jet_dataset` fills column `i` from the `i`-th name --- so the container
-# holding them is an ordering, and a set has none. It used to be a frozenset,
-# whose iteration order depends on the per-process randomized hashes of the
-# strings inside it: `ran train` built its columns in one order and recorded
-# that order in `config.json`, then `ran baseline ibu` and `ran evaluate`
-# rebuilt the same dataset in a *different* order in their own processes and
-# labelled it with the recorded one. Same six observables, six wrong names ---
-# and worse, a generator trained on one column order evaluated against another.
-# The order here matches `JET_OBS` below.
+# A tuple, emphatically not a `frozenset`: these names select *columns*, and
+# `load_jet_dataset` fills column `i` from the `i`-th name, so the container
+# holding them is an ordering and a set has none (see docs/claude/data-model.md
+# for what a set costs here). The order here matches `JET_OBS` below.
 SUBSTRUCTURE_VARIABLES: Final[tuple[LiteralString, ...]] = (
     "m",
     "M",
@@ -126,14 +115,13 @@ class JetVarInfo(NamedTuple):
 # events fall past it. `SDM_XLIM` is a separate number for that reason -- an
 # axis limit chosen for where the bulk lives, not derived from the sentinel.
 #
-# It is left where it is, having been measured rather than assumed. The
-# degenerate jets are a spike superimposed on a smooth tail, and the fraction
-# is generator-dependent (detector level: Herwig 0.034%, Pythia 0.057%), which
-# is exactly the shape of thing `benchmarks/response.py` is built to detect.
-# But the most information an "is it at the floor?" bit can carry at those
-# rates is 1.5e-5 nats, against a measured I(S; X | Z) of 3.6e-3 -- 0.42% of
-# the effect. Moving the sentinel would shift the standardization statistics
-# for a correction two orders of magnitude below what it would fix.
+# The degenerate jets are a spike superimposed on a smooth tail, and the
+# fraction is generator-dependent (detector level: Herwig 0.034%, Pythia
+# 0.057%) -- exactly the shape of thing `benchmarks/response.py` is built to
+# detect. But the most information an "is it at the floor?" bit can carry at
+# those rates is 1.5e-5 nats, against a measured I(S; X | Z) of 3.6e-3 --
+# 0.42% of the effect. Moving the sentinel would shift the standardization
+# statistics for a correction two orders of magnitude below what it would fix.
 #
 # The spike is never ambiguous, either: reaching exactly -14.0 from a
 # continuous log is measure-zero, so an event at the sentinel is a degenerate
@@ -176,10 +164,9 @@ JET_OBS: Final[dict[str, JetVarInfo]] = {
 }
 
 # How the observables are *presented*. This is not `SUBSTRUCTURE_VARIABLES`,
-# and must never become it: that tuple is the column order, the cache key and
-# what `config.json` records, and the Jet Column Order section of `CLAUDE.md`
-# documents what happened the last time it was allowed to float. The column
-# order carries no physics; this one does, and is applied at render time only.
+# and must never become it: that tuple is the column order and the cache key
+# (see docs/claude/data-model.md). The column order carries no physics; this
+# one does, and is applied at render time only.
 #
 # m -> ln rho -> lambda^1_0.5 -> w -> lambda^1_2 -> z_g -> tau_21
 #   -> M -> n_ch -> f_ch -> p_T^D -> q
@@ -216,45 +203,27 @@ JET_VARIABLE_GROUPS: Final[tuple[tuple[str, tuple[LiteralString, ...]], ...]] = 
 
 # The level figures' page layout.
 #
-# The panel ASPECT is what makes these readable, and it was the thing wrong
-# with them: a hist-over-ratio cell wants to be WIDER than tall, roughly 5:4,
-# the shape a hand-written notebook reaches for (a 30x16in figure of 3x2
-# cells is 10x8 per cell). A 4x6 cell is the same panel turned on its end,
-# and no amount of paginating fixes it.
+# A panel's width on the rendered page is `linewidth / PANEL_COLUMNS`
+# regardless of the figure's own inch size, because `\includegraphics` scales
+# the whole figure by exactly as much as widening it grew the figure -- so
+# the column count alone sets panel width. The figure's *absolute* inches,
+# unaffected by that scaling, instead set the rendered text size:
+# `font.size * linewidth_pt / (72 * figure_width_in)`. So `PANEL_COLUMNS`
+# sizes the panels and `PANEL_WIDTH_INCHES` sizes their labels, independently.
 #
-# Two facts constrain the rest. A panel's width on the page is
-# `linewidth / columns` whatever the figure measures in inches -- widening a
-# cell shrinks the `\includegraphics` scale by exactly as much -- so the
-# column count alone sets it. And every font scales with that same factor,
-# so the cell's absolute inches set the rendered text size and nothing else:
-# at 3 columns in a landscape block, a 4in cell renders 18pt labels at 13pt,
-# a 6in cell at 8.7pt. The latter is a normal figure text size in print.
+# A hist-over-ratio cell reads best WIDER than tall, roughly 5:4. At 3
+# columns against a 749.4pt landscape text block, `PANEL_WIDTH_INCHES = 7.0`
+# renders the 18pt base font at 8.9pt, a normal figure text size in print;
+# paired with `_LevelStyle.height_per_dim = 6.6`, a page of six spans 83% of
+# the block's height. `PANELS_PER_PAGE = 6` (3x2) is the largest grid that
+# keeps panels 5:4-ish without either shrinking them (2x2, more pages) or
+# splitting twelve observables awkwardly (3x3, a 9+3 page pair).
 #
-# Hence 6.0 x 4.8in cells, three across and two down -- six to a page, the
-# arrangement a hand-written notebook reaches for -- giving 2.9 x 2.3in
-# panels with 8.7pt text. Six 5:4 cells in a 3x2 grid make a figure of
-# aspect 1.875 against a landscape block's 1.222, so a third of the page
-# height goes unused. That is inherent to the arrangement, not a defect:
-# filling it means either 2x2 (bigger panels, more pages) or 3x3 (an
-# awkward 9 + 3 split for twelve observables).
-#
-# `report.py` needs the same numbers to know how many
-# `\includegraphics` pages to emit, and must stay free of matplotlib, so
-# they live here rather than in `plotting`.
+# `report.py` needs these same numbers to know how many `\includegraphics`
+# pages to emit, and must stay free of matplotlib, so they live here rather
+# than in `plotting`.
 PANEL_COLUMNS: Final[int] = 3
 PANELS_PER_PAGE: Final[int] = 6
-# Width in inches; the height comes from `_LevelStyle.height_per_dim`, which
-# is 6.6 for both levels -- a 7:6.6 cell, chosen so a page of six spans 83%
-# of the landscape block's height instead of the 65% a 5:4 cell left.
-#
-# Two independent knobs hide in one number. A panel's width on the page is
-# `linewidth / PANEL_COLUMNS` whatever the figure's inch size, because
-# `\includegraphics[width=\linewidth]` scales the figure by exactly as much
-# as widening it grew the figure. What the inches DO set is the rendered text
-# size: `font.size * linewidth_pt / (72 * figure_width_in)`. So the column
-# count sizes the panels and this constant sizes their labels, downwards.
-# At 7.0 in x 3 columns against the 749.4pt landscape block, the 18pt base
-# renders at 8.9pt.
 PANEL_WIDTH_INCHES: Final[float] = 7.0
 
 

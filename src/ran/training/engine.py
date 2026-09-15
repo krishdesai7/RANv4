@@ -99,8 +99,8 @@ class TrainResult(NamedTuple):
     # of where selection happened to land. Defaulted so `TrainResult` stays
     # constructible from a stub.
     best_epoch: int = -1
-    # Every epoch's weights, stacked -- what makes host-side selection
-    # possible at all.
+    # Every epoch's weights, stacked, so host-side selection has something
+    # to select from.
     params: EpochParams = EpochParams(
         g_trainable=[], g_non_trainable=[], d_trainable=[], d_non_trainable=[]
     )
@@ -131,8 +131,8 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
 
     Without this, `EpochParams` dies with the process that produced it and any
     question about an epoch other than the selected one costs a full retrain.
-    It is what makes a *different* selection criterion a re-read rather than a
-    rerun -- which is the whole reason `scan` emits the stack.
+    A different selection criterion then becomes a re-read rather than a
+    rerun, which is why `scan` emits the stack.
 
     ~27 MB for 100 epochs of both networks at 3x128, uncompressed for the same
     reason the dataset caches are: these are incompressible floats.
@@ -453,8 +453,7 @@ def _make_pass(
         state: TrainState, group_idx: Int[Array, "s b"]
     ) -> tuple[TrainState, tuple[Float[Array, " s"], Float[Array, ""]]]:
         state, d_losses = lax.scan(f=_disc_body, init=state, xs=group_idx)
-        # The generator updates once per group, on the group's first batch --
-        # what the host loop used to write as `step % n_disc_steps == 0`.
+        # The generator updates once per group, on the group's first batch.
         z, x, y = gather(train, group_idx[0])
         state, g_loss = gen_step(state, z, x, y, jnp.ones_like(a=y))
         return state, (d_losses, -g_loss)
@@ -513,8 +512,8 @@ def _make_epoch(
     """Build the pure ``(RunCarry, epoch) -> (RunCarry, outputs)`` scan body.
 
     Nothing about model quality is decided here. The loop trains, records, and
-    emits; selection is a host-side read of what it emitted, which is what
-    keeps `z_true` out of the traced program entirely.
+    emits; selection is a host-side read of what it emitted, keeping `z_true`
+    out of the traced program entirely.
     """
 
     def _log(
@@ -590,10 +589,10 @@ def _run(
         if is_enabled():
             # Ahead-of-time, so the timer can see where compile ends and
             # execution begins. `lower().compile()` then calling the compiled
-            # object is what `run(carry, steps)` does internally, persistent
-            # cache included -- it is the same work, split at a boundary an
-            # ordinary call does not expose. Gated, so the default path stays
-            # the single call `TestFusion` pins.
+            # object does the same work `run(carry, steps)` does internally,
+            # persistent cache included, split at a boundary an ordinary call
+            # does not expose. Gated, so the default path stays the single
+            # call `TestFusion` pins.
             with phase("compile") as timer:
                 compiled: Compiled = timer.block(run.lower(carry, steps).compile())
             with phase("epochs") as timer:

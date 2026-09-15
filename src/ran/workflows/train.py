@@ -82,12 +82,10 @@ def _prepare_gaussian(
     builder: RANDataset = RANDataset(batch_size=batch_size, seed=data_seed)
     if saved_config is not None:
         gaussian_params: GaussianConfig = saved_config
-        # Reload: use stored params from config.json
         splits: DatasetSplits = builder.generate_gaussian_dataset(
             params=saved_config, n_samples=n_samples
         )
     else:
-        # Fresh run: parse YAML config
         if config is None:
             raise ValueError("Gaussian mode requires --config path/to/config.yaml")
         gaussian_params = parse_gaussian_config(config)
@@ -231,8 +229,8 @@ def _write_run_dir(
     g.save(artifacts / "generator.keras")
     d.save(artifacts / "discriminator.keras")
     # Every epoch's parameters, not just the selected one's. `scan` already
-    # emitted the stack; dropping it on the floor is what made re-scoring a run
-    # under a different criterion cost a full retrain.
+    # emitted the stack, so dropping it on the floor would make re-scoring a
+    # run under a different criterion cost a full retrain.
     _ = save_params(run_dir, params)
     np.savez(
         file=artifacts / "history.npz",
@@ -347,8 +345,8 @@ def _load_baseline_weights(
 
     Presence is the whole mechanism, and it is deliberate: neither baseline
     runs on the `ran train` path, so the figures a fresh run draws have no
-    overlay, and re-drawing them after a baseline has run is what puts one
-    there. `ran train --load-run <run_dir>` is that re-draw --- it reloads the
+    overlay, and re-drawing them after a baseline has run puts one there.
+    `ran train --load-run <run_dir>` is that re-draw --- it reloads the
     saved generator instead of training, and picks up whatever `*_weights.npz`
     files exist by then.
 
@@ -526,7 +524,7 @@ def _pipeline(
     saved_gaussian_config: GaussianConfig | None = None
     # No `TrainResult` on the reload path, so `best_epoch` has to come from
     # what training recorded. Absent on a run saved before this branch, same
-    # as `val_mmd`/`val_ess` themselves -- see R15 in the task brief.
+    # as `val_mmd`/`val_ess` themselves.
     saved_best_epoch: int = -1
     if load_run is not None:
         run_dir = Path(load_run)

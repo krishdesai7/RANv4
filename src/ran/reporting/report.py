@@ -638,8 +638,6 @@ def _compile(source: Path, artifacts: Path, run_dir: Path, /) -> None:
         raise RuntimeError(msg)
 
     for _pass in range(2):
-        # Fixed argv, no shell, and the only interpolated element is a path
-        # this process just wrote.
         completed: subprocess.CompletedProcess[str] = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             args=[*_LATEX_ARGS, f"-output-directory={run_dir}", source.name],
             cwd=artifacts,

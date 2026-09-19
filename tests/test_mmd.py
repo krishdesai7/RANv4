@@ -219,10 +219,17 @@ class TestCurve:
         mmds, esss = mmd_curve(cache, w)
         assert mmds.shape == (7,)
         assert esss.shape == (7,)
+        # `rtol` is 1e-4 rather than 1e-5 for the reason `TestFusedMetrics`
+        # gives: the batched path and the single-row path reduce the same
+        # 512x512 float32 kernel matrix in different orders, and sharing one
+        # reduction between them would delete the question being asked. The
+        # gap was measured over 70 rows at 3.4e-5 (jax 0.7) and 1.3e-5 (jax
+        # 0.11) -- so 1e-5 was already under the noise on the floor that
+        # shipped, and passed only on the seeds this test happens to use.
         for i in range(7):
             one_mmd, one_ess = weighted_mmd(cache, w[i])
-            np.testing.assert_allclose(mmds[i], float(one_mmd), rtol=1e-5)
-            np.testing.assert_allclose(esss[i], float(one_ess), rtol=1e-5)
+            np.testing.assert_allclose(mmds[i], float(one_mmd), rtol=1e-4)
+            np.testing.assert_allclose(esss[i], float(one_ess), rtol=1e-4)
 
 
 class TestSubsample:

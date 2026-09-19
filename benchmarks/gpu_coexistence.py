@@ -128,7 +128,7 @@ def nvidia_free_mib() -> tuple[int, int] | None:
             .stdout.strip()
             .splitlines()[0]
         )
-    except OSError, subprocess.SubprocessError, IndexError:
+    except (OSError, subprocess.SubprocessError, IndexError):
         return None
     try:
         free, total = (int(v.strip()) for v in out.split(","))
@@ -184,10 +184,11 @@ def _cuda_lines(stderr: str, limit: int = 40) -> list[str]:
 def run_worker() -> dict[str, object]:
     """Spawn the TensorFlow worker and parse its one line of JSON.
 
-    `--no-project` is not decoration. Without it uv would try to resolve the
-    script against this repository's `pyproject.toml`, whose `requires-python`
-    is `>=3.14` -- irreconcilable with the worker's `==3.13.*`. That fails
-    loudly rather than silently, which is the good case, but it fails.
+    `--no-project` is not decoration. Without it uv would resolve the script
+    against this repository's `pyproject.toml` and run it in the project
+    environment -- the one environment that must never hold TensorFlow, and
+    whose interpreter is not the `==3.13.*` the worker pins. That fails loudly
+    rather than silently, which is the good case, but it fails.
     """
     # Fixed argv, no shell; the only interpolated element is a path inside
     # this file's own directory. `uv` is a bare name on purpose -- it is what

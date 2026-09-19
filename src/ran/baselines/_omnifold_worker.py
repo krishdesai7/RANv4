@@ -11,11 +11,14 @@
 
 This file is inside the package but is not part of it. Nothing imports it, and
 nothing can: it runs under Python 3.13 with Keras bound to the TensorFlow
-backend, and `ran` requires 3.14 with Keras bound to JAX. Those two facts are
-irreconcilable inside one interpreter, which is the whole reason OmniFold is a
-subprocess rather than a module. The PEP 723 header above is the quarantine;
-`uv run --no-project` provisions it, and `ran.baselines.omnifold` on the other
-side of an `.npz` file is the only caller.
+backend, and `ran` binds Keras to JAX. Keras binds its backend once per
+interpreter, so those two facts are irreconcilable inside one interpreter --
+which is the whole reason OmniFold is a subprocess rather than a module. The
+project floor is `>=3.12` and so no longer excludes 3.13 on its own; the
+backend binding, and the rule that the project environment never holds
+TensorFlow, are what keep this file out of process. The PEP 723 header above
+is the quarantine; `uv run --no-project` provisions it, and
+`ran.baselines.omnifold` on the other side of an `.npz` file is the only caller.
 
 Three constraints the header encodes, each of which is load-bearing:
 

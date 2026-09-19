@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from itertools import starmap
 from pathlib import (
     Path,  # ruff: ignore[typing-only-standard-library-import] -- needed by typer
 )
@@ -193,7 +194,7 @@ def _report_level(
     logger.info(
         "    %-6s %+.1f%%",
         "mean",
-        float(np.mean(a=list(map(_improvement, before, after, strict=True)))),
+        float(np.mean(a=list(starmap(_improvement, zip(before, after, strict=True))))),
     )
 
 

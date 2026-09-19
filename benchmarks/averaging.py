@@ -48,6 +48,7 @@ os.environ.setdefault(key="KERAS_BACKEND", value="jax")  # pyrefly: ignore[unuse
 
 import json
 import logging
+from itertools import starmap
 from typing import TYPE_CHECKING, Annotated, NamedTuple
 
 import jax.numpy as jnp
@@ -194,7 +195,9 @@ def _report(
     ):
         before: NDArray[np.double] = _wd_per_dim(ref=ref, comp=comp)
         after: NDArray[np.double] = _wd_per_dim(ref=ref, comp=comp, weights=w)
-        per_var: list[float] = list(map(_improvement, before, after, strict=True))
+        per_var: list[float] = list(
+            starmap(_improvement, zip(before, after, strict=True))
+        )
         means.append(float(np.mean(a=per_var)))
         detail: str = "  ".join(
             f"{v}={p:+.1f}%" for v, p in zip(variables, per_var, strict=True)

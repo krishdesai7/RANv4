@@ -337,7 +337,7 @@ def _existing(path: Path, /) -> dict[str, Any]:
     """
     try:
         payload: Any = json.loads(s=path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return {}
     return cast("dict[str, Any]", payload) if _is_valid_payload(payload) else {}
 

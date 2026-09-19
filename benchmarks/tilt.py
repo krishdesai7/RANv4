@@ -66,7 +66,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-from itertools import combinations_with_replacement
+from itertools import combinations_with_replacement, starmap
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
 
@@ -317,7 +317,7 @@ def _report_level(
             after[i],
             _improvement(before[i], after[i]),
         )
-    mean = float(np.mean(list(map(_improvement, before, after, strict=True))))
+    mean = float(np.mean(list(starmap(_improvement, zip(before, after, strict=True)))))
     logger.info("    %-6s %+.1f%%", "mean", mean)
     return mean
 

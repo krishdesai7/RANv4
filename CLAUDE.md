@@ -354,17 +354,23 @@ package, so uploading under that name returns 403 regardless of the token.
 
 `ran baseline omnifold` is the second comparison baseline, and the only part of
 this repository that does not run in this repository's environment. Three facts
-make that necessary: OmniFold needs TensorFlow, TensorFlow publishes no wheels
-for Python 3.14, and Keras binds its backend once per interpreter. All three
-are **intra-interpreter** constraints, so all three dissolve at a process
-boundary.
+make that necessary: OmniFold needs TensorFlow, the project environment must
+never hold TensorFlow, and Keras binds its backend once per interpreter. All
+three are **intra-interpreter** constraints, so all three dissolve at a process
+boundary. (TensorFlow also publishes no wheels for 3.14, which is why the
+worker pins `==3.13.*`; that is a fact about the worker's environment, not
+about the project floor, which is `>=3.12`.)
 
 `src/ran/baselines/_omnifold_worker.py` carries a PEP 723 header pinning
 `requires-python = "==3.13.*"` plus `omnifold` and `tensorflow`, and
 `uv run --no-project` provisions exactly that, in an interpreter that cannot
 import `ran`. The two halves exchange one `.npz` file. `--no-project` is
-load-bearing: without it uv resolves the script against this project, whose
-`>=3.14` floor cannot be reconciled with the worker's pin.
+load-bearing: without it uv resolves the script against this project and runs
+it in the project environment --- the one environment that must never hold
+TensorFlow, and whose interpreter is whatever the checkout is pinned to
+(3.14 via `.python-version`), not the worker's `==3.13.*`. Lowering the floor
+to `>=3.12` did not change this: a floor is not a pin, and it is the resolved
+environment rather than the floor that the script would land in.
 
 The worker is inside the package but is not part of it. Nothing imports it and
 nothing may: its module-level `KERAS_BACKEND=tensorflow` would race the
@@ -374,12 +380,16 @@ documented --- `pyproject.toml` pins `[tool.ruff.per-file-target-version]` for
 `tests/test_omnifold.py::TestQuarantine` asserts the module is absent from
 `sys.modules` and that TensorFlow is not importable at all.
 
-**The ruff pin is not hygiene.** Ruff infers `py314` from `requires-python`, and
-its formatter rewrites `except (A, B):` into PEP 758's unparenthesized form ---
-a `SyntaxError` on 3.13, which killed the worker at import the first time it was
-formatted. This is the mirror image of the `timing.py` note under Tech Stack,
-where the same syntax is deliberate. A test compiles the worker to catch a
-regression.
+**The ruff pin is not hygiene, though it is currently not armed.** Ruff infers
+its target from `requires-python`. At the old `>=3.14` floor it inferred
+`py314` and its formatter rewrote `except (A, B):` into PEP 758's
+unparenthesized form --- a `SyntaxError` on 3.13, which killed the worker at
+import the first time it was formatted. At today's `>=3.12` floor ruff infers
+`py312`, so nothing in the repository is formatted into PEP 758 syntax and the
+trap is disarmed at the source. The `py313` pin stays because it states the
+worker's real target exactly, and is what keeps the trap disarmed for the
+worker if the project floor ever rises again. A test compiles the worker to
+catch a regression.
 
 **`uv` must be on `PATH` at runtime**, since it is what provisions the worker.
 Its absence is translated into a readable message rather than a
@@ -753,10 +763,18 @@ YAML files in `params/` use keys: `mu_gen`, `mu_true`, `sigma_gen`, `sigma_true`
 
 ## Tech Stack
 
-- Python >= 3.14, managed with `uv` (no pip). Not 3.13: `src/ran/timing.py`
-  uses PEP 758's unparenthesized `except OSError, ValueError:`, which is a
-  `SyntaxError` on anything earlier -- and ruff's formatter canonicalises the
-  parenthesized form to it, so it will come back if someone "fixes" it
+- Python >= 3.12, managed with `uv` (no pip). 3.12 is the floor because
+  `plotting.py`, `rantypes/types.py` and `timing.py` use PEP 695 (`type X =`,
+  `def block[T]`), which 3.11 cannot parse. The floor was `>=3.14` until the
+  pre-release compatibility pass; what held it there was PEP 758's
+  unparenthesized `except OSError, ValueError:` in `report.py` and `timing.py`
+  (now parenthesized) and one `hashlib.sha256(data=...)` keyword in
+  `data/datasets.py` (now positional, hashing identical bytes, so existing
+  caches stay valid). **Do not reintroduce either**: with ruff's target
+  inferred from `requires-python` the formatter no longer canonicalises to
+  PEP 758, but hand-written 3.13+ syntax would silently raise the floor.
+  Development still happens on 3.14 (`.python-version`); the suite is run on
+  3.12, 3.13 and 3.14
 - Keras 3 on the **JAX** backend for training; `jax[cuda13]` on x86_64 Linux
 - Typer for the CLI, Rich for logging and metrics tables
 - Matplotlib for publication-quality plots; `pdflatex` (TeX Live, with

@@ -137,11 +137,13 @@ class TestQuarantine:
     def test_the_worker_compiles_under_this_interpreter(self) -> None:
         """Syntax-only check, without importing it.
 
-        It guards the PEP 758 trap: ruff formats to the project's 3.14 target,
-        and an unparenthesized `except (A, B)` would be a SyntaxError on the
-        3.13 the worker actually runs under. `pyproject.toml` pins
-        `per-file-target-version` for `*_worker.py` to prevent that; this is the
-        assertion that the pin is working.
+        It guards the PEP 758 trap: at a `>=3.14` project floor ruff inferred a
+        py314 target and formatted `except (A, B)` into the unparenthesized
+        form, a SyntaxError on the 3.13 the worker actually runs under. The
+        floor is `>=3.12` now so ruff infers py312 and the trap is not armed,
+        but `pyproject.toml` still pins `per-file-target-version` for
+        `*_worker.py`; this is the assertion that the worker stays compilable
+        whichever way the floor moves.
         """
         with omnifold.worker_script() as script:
             _ = compile(script.read_text(), str(script), "exec")

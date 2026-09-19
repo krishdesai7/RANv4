@@ -207,8 +207,10 @@ class RANDataset:
             # Without this a float32 and a float64 run share one file
             "dtype": str(object=self.dtype),
         }
+        # Positional, not `data=`: that keyword name only exists from 3.13,
+        # and this is the one call in the package that would raise the floor.
         return hashlib.sha256(
-            data=json.dumps(obj=key_data, sort_keys=True).encode(encoding="utf-8")
+            json.dumps(obj=key_data, sort_keys=True).encode(encoding="utf-8")
         ).hexdigest()[:16]
 
     def _cache_path(self, parsed: GaussianConfig, n_samples: int) -> Path:

@@ -115,8 +115,12 @@ def _invoke(worker: Path, in_path: Path, out_path: Path) -> None:
     """Run the worker, translating the two failures a caller can act on."""
     # Fixed argv, no shell; the interpolated elements are paths this process
     # created. `--no-project` is essential rather than defensive: without it uv
-    # resolves the script against this project, whose `requires-python` is
-    # `>=3.14` and cannot be reconciled with the worker's `==3.13.*`.
+    # resolves the script against this project and runs it in the project
+    # environment -- which is the one environment that must never contain
+    # TensorFlow, and whose interpreter is whatever the project is checked out
+    # at (3.14 by `.python-version`), not the `==3.13.*` the worker pins. The
+    # project floor being `>=3.12` does not help: a floor is not a pin, and it
+    # is the resolved environment, not the floor, that the script would land in.
     command: list[str] = [
         "uv",
         "run",

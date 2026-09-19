@@ -66,7 +66,7 @@ def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
             filename="ran/models.py",
             mode="exec",
         ),
-        globals=namespace,
+        namespace,
     )
     return (
         cast(typ="ModelBuilder", val=namespace["build_generator"]),

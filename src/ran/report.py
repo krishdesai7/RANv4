@@ -475,7 +475,7 @@ def skipped_variables(
     path: Path = run_dir / ARTIFACTS_DIR / "ibu_outcomes.json"
     try:
         outcomes: list[dict[str, Any]] = json.loads(s=path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         if ibu is None:
             return frozenset()
         return frozenset(
@@ -502,7 +502,7 @@ def _read(path: Path, /) -> dict[str, Any] | None:
         return cast(
             typ="dict[str, Any]", val=json.loads(s=path.read_text(encoding="utf-8"))
         )
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return None
 
 

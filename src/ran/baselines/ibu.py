@@ -455,7 +455,7 @@ def evaluate_single(
         # built by f-string, so their type is plain `str`.
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
-        },
+        },  # ty: ignore[invalid-argument-type]
     )
     logger.info(
         "%s: saved IBU metrics to %s and weights to %s",

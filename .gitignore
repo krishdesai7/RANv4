@@ -15,6 +15,7 @@ wheels/
 # Generated outputs
 plots/
 weights/
+.coverage
 #runs/
 
 # Logs

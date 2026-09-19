@@ -51,6 +51,7 @@ dev = [
 # Running tests, benchmarks or legacy code requires this dependency group
 test = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
     "scipy>=1.13.0",
     "scipy-stubs>=1.14.1.1",
 ]
@@ -78,7 +79,7 @@ filterwarnings = [
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
     # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
 ]
-addopts = "-xqn8"
+addopts = ["-xqn8", "--dist loadscope", "--cov ran"]
 env = [
     "OMP_NUM_THREADS = 1",
     "OPENBLAS_NUM_THREADS = 1",

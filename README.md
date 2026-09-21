@@ -37,12 +37,12 @@ Requires Python >= 3.13. Uses [`uv`](https://docs.astral.sh/uv/) for dependency 
 
 ```shell
 git clone https://github.com/krishdesai7/anamorph.git
-cd Anamorph
+cd anamorph
 uv sync
 ```
 
 This installs the `anamorph` console script into `.venv/bin`. Commands below are
-written as `ran ...`; from a checkout without an activated virtualenv, prefix
+written as `anamorph ...`; from a checkout without an activated virtualenv, prefix
 them with `uv run` (`uv run anamorph train --config params/1d_default.yaml`).
 Tab completion for subcommands, flags and enum values is available with:
 
@@ -226,7 +226,7 @@ bit-identical between the clean and poisoned arms.
 
 JAX is the only backend in the build; TensorFlow is not a dependency, direct or transitive.
 
-`src/anamorph/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/anamorph/train.py` raises a clear error if the backend has been initialized to something else.
+`src/anamorph/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `anamorph.*` import must come before `import keras`**. `src/anamorph/train.py` raises a clear error if the backend has been initialized to something else.
 
 ### Precision
 

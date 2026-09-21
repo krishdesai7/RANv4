@@ -388,7 +388,7 @@ it is then scored against reports a match it will not reproduce anywhere else,
 which is the failure the diagnostic exists to rule out.
 
 This reads `z_true` and hands it to a network, which is why it lives here and
-not under `src/anamorph/`: nothing importable as `ran.*` should be able to do that by
+not under `src/anamorph/`: nothing importable as `anamorph.*` should be able to do that by
 accident. It is legitimate only because the stated goal is to tune against truth
 and say so.
 

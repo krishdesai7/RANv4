@@ -15,14 +15,18 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
-from matplotlib.axes import Axes
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.backends.backend_pdf import FigureCanvasPdf
-from matplotlib.figure import Figure
-from matplotlib.ticker import MaxNLocator
-from ran import plotting
-from ran.data import ArrayDataset
-from ran.plotting import (
+from anamorph import plotting
+from anamorph.coretypes import (
+    JET_OBS,
+    PANEL_COLUMNS,
+    PANELS_PER_PAGE,
+    SUBSTRUCTURE_VARIABLES,
+    Events,
+    Populations,
+    figure_pages,
+)
+from anamorph.data import ArrayDataset
+from anamorph.plotting import (
     _DETECTOR,
     _hist_ratio_panel,
     _plot_level,
@@ -33,22 +37,18 @@ from ran.plotting import (
     plot_losses,
     plot_selection,
 )
-from ran.rantypes import (
-    JET_OBS,
-    PANEL_COLUMNS,
-    PANELS_PER_PAGE,
-    SUBSTRUCTURE_VARIABLES,
-    Events,
-    Populations,
-    figure_pages,
-)
+from matplotlib.axes import Axes
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.backends.backend_pdf import FigureCanvasPdf
+from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+    from anamorph.coretypes import AnamorphModel
     from numpy.typing import NDArray
-    from ran.rantypes import RANModel
 
 type DrawnCalls = list[tuple[tuple[Any, ...], dict[str, Any]]]
 
@@ -80,7 +80,7 @@ def test_filled_histograms_use_one_artist_per_distribution() -> None:
 
 
 def test_a_panel_is_labelled_even_without_a_baseline() -> None:
-    """No `*_weights.npz` exists on the default `ran train` path, so a panel
+    """No `*_weights.npz` exists on the default `anamorph train` path, so a panel
     drawn with no overlays must still get a y-label, a title and a legend --
     not only one drawn against a baseline."""
     figure = Figure()
@@ -105,7 +105,7 @@ def test_a_panel_is_labelled_even_without_a_baseline() -> None:
     assert ax.get_ylabel() == "Events"
     assert ax.get_title() == "Detector level"
     _, labels = ax.get_legend_handles_labels()
-    assert labels == ["Data", "Sim", "RAN"]
+    assert labels == ["Data", "Sim", "Anamorph"]
 
 
 def test_the_legend_lists_every_baseline_that_is_drawn() -> None:
@@ -135,16 +135,16 @@ def test_the_legend_lists_every_baseline_that_is_drawn() -> None:
     )
 
     _, labels = ax.get_legend_handles_labels()
-    assert labels == ["Data", "Sim", "RAN", "IBU", "OmniFold"]
+    assert labels == ["Data", "Sim", "Anamorph", "IBU", "OmniFold"]
 
 
 def test_ran_is_drawn_more_prominently_than_the_baseline() -> None:
-    """RAN's step line was fainter than IBU's. On the same panel."""
-    assert plotting.ALPHA_RAN > plotting.ALPHA_IBU > plotting.ALPHA_FILL
+    """Anamorph's step line was fainter than IBU's. On the same panel."""
+    assert plotting.ALPHA_ANAMORPH > plotting.ALPHA_IBU > plotting.ALPHA_FILL
 
 
 def test_ran_has_a_colour_of_its_own() -> None:
-    assert plotting.COLOR_RAN not in {
+    assert plotting.COLOR_ANAMORPH not in {
         plotting.COLOR_NATURE,
         plotting.COLOR_MC,
         plotting.COLOR_IBU,
@@ -202,7 +202,7 @@ def test_multilevel_figure_keeps_rendered_content_inside_page(
         del save_path
         captured.extend(figures)
 
-    monkeypatch.setattr("ran.plotting._save_pages", capture)
+    monkeypatch.setattr("anamorph.plotting._save_pages", capture)
     values = np.array(
         [[-1.0, -0.5], [0.0, 0.2], [0.5, 0.8], [1.0, 1.2]], dtype=np.single
     )
@@ -283,7 +283,7 @@ def _plot_twelve_dim_level(save_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("anamorph.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -306,7 +306,7 @@ def _panel_titles_for(
     mc = rng.normal(size=(64, dim)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single) for _ in range(dim)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("anamorph.plotting._save_pages", _capture_save)
     _plot_level(
         nature,
         mc,
@@ -332,7 +332,7 @@ def _one_dim_level(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Figure:
     mc = rng.normal(size=(64, 1)).astype(np.single)
     w = np.ones(64, dtype=np.single)
     baselines = [ibu_overlay([np.ones(64, dtype=np.single)])]
-    monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+    monkeypatch.setattr("anamorph.plotting._save_pages", _capture_save)
     _plot_level(nature, mc, w, _DETECTOR, tmp_path / "levels.pdf", None, baselines)
     return _last_drawn_figure()
 
@@ -470,7 +470,7 @@ def test_plot_levels_evaluates_generator_once_per_chunk(tmp_path: Path) -> None:
 
     detector = tmp_path / "detector.pdf"
     particle = tmp_path / "particle.pdf"
-    plot_levels(dataset, cast("RANModel", generator), detector, particle)
+    plot_levels(dataset, cast("AnamorphModel", generator), detector, particle)
 
     assert calls == 2
     assert detector.exists()
@@ -496,10 +496,10 @@ def test_plot_levels_uses_the_same_page_height_for_matching_panel_counts(
     def generator(z: NDArray[np.single]) -> NDArray[np.single]:
         return np.ones((len(z), 1), dtype=np.single)
 
-    monkeypatch.setattr("ran.plotting._save_pages", capture)
+    monkeypatch.setattr("anamorph.plotting._save_pages", capture)
     plot_levels(
         dataset,
-        cast("RANModel", generator),
+        cast("AnamorphModel", generator),
         tmp_path / "detector.pdf",
         tmp_path / "particle.pdf",
     )
@@ -892,10 +892,10 @@ class TestBaselineOverlays:
         assert ibu.marker != omnifold.marker
 
     def test_ran_is_painted_above_every_baseline(self) -> None:
-        """RAN is the method being showcased; it must not sit under a baseline.
+        """Anamorph is the method being showcased; it must not sit under a baseline.
 
-        The overlays are drawn *after* RAN so they read last in the legend, and
-        at linewidth 4 the last one drawn would otherwise bury RAN wherever the
+        The overlays are drawn *after* Anamorph so they read last in the legend, and
+        at linewidth 4 the last one drawn would otherwise bury Anamorph wherever the
         curves agree --- which on a converged run is everywhere. Caught by
         rendering the figure and looking at it, not by a green suite.
         """
@@ -927,15 +927,15 @@ class TestBaselineOverlays:
             label: artist
             for artist, label in zip(*ax.get_legend_handles_labels(), strict=True)
         }
-        ran_z = by_label["RAN"].get_zorder()
-        assert ran_z > by_label["IBU"].get_zorder()
-        assert ran_z > by_label["OmniFold"].get_zorder()
+        anamorph_z = by_label["Anamorph"].get_zorder()
+        assert anamorph_z > by_label["IBU"].get_zorder()
+        assert anamorph_z > by_label["OmniFold"].get_zorder()
 
     def test_every_panel_of_a_page_carries_both_baselines(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The overlays are indexed per panel; an off-by-one would drop one."""
-        monkeypatch.setattr("ran.plotting._save_pages", _capture_save)
+        monkeypatch.setattr("anamorph.plotting._save_pages", _capture_save)
         rng = np.random.default_rng(0)
         dim = 3
         nature = rng.normal(size=(64, dim)).astype(np.single)
@@ -959,4 +959,4 @@ class TestBaselineOverlays:
         assert len(panels) == dim
         for panel in panels:
             _, labels = panel.get_legend_handles_labels()
-            assert labels == ["Data", "Sim", "RAN", "IBU", "OmniFold"]
+            assert labels == ["Data", "Sim", "Anamorph", "IBU", "OmniFold"]

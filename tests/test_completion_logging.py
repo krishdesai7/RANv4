@@ -26,7 +26,7 @@ def _completion_records(
 def test_raw_download_records_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from ran.data import download
+    from anamorph.data import download
     from rich.progress import Progress
 
     destination: Path = tmp_path / "sample.npz"
@@ -41,14 +41,14 @@ def test_raw_download_records_completion(
     progress = Progress(disable=True)
     task_id = progress.add_task(destination.name, total=None)
 
-    with caplog.at_level(logging.INFO, logger="ran.data.download"):
+    with caplog.at_level(logging.INFO, logger="anamorph.data.download"):
         download._download_file(
             "https://example.test/sample.npz", destination, progress, task_id
         )
 
     messages = [
         record.getMessage()
-        for record in _completion_records(caplog, "ran.data.download")
+        for record in _completion_records(caplog, "anamorph.data.download")
     ]
     assert any(
         "Downloaded" in message and str(destination) in message for message in messages
@@ -60,8 +60,8 @@ def test_evaluation_records_metrics_artifact_completion(
 ) -> None:
     import keras
     import numpy as np
-    from ran import evaluate
-    from ran.rantypes import ZXY, Events
+    from anamorph import evaluate
+    from anamorph.coretypes import ZXY, Events
 
     run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
@@ -98,12 +98,13 @@ def test_evaluation_records_metrics_artifact_completion(
     )
     monkeypatch.setattr(evaluate, "render_metrics", lambda *_args, **_kwargs: None)
 
-    with caplog.at_level(logging.INFO, logger="ran.evaluate"):
+    with caplog.at_level(logging.INFO, logger="anamorph.evaluate"):
         _ = evaluate.evaluate_run(run_dir)
 
     out_path: Path = run_dir / "artifacts" / "metrics.json"
     messages = [
-        record.getMessage() for record in _completion_records(caplog, "ran.evaluate")
+        record.getMessage()
+        for record in _completion_records(caplog, "anamorph.evaluate")
     ]
     assert out_path.exists()
     assert any(
@@ -116,8 +117,8 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     import numpy as np
-    from ran.baselines import _shared as shared
-    from ran.baselines import ibu
+    from anamorph.baselines import _shared as shared
+    from anamorph.baselines import ibu
 
     run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
@@ -166,14 +167,14 @@ def test_ibu_records_metric_and_weight_artifact_completion(
     )
     monkeypatch.setattr(ibu, "render_metrics", lambda *_args, **_kwargs: None)
 
-    with caplog.at_level(logging.INFO, logger="ran.baselines.ibu"):
+    with caplog.at_level(logging.INFO, logger="anamorph.baselines.ibu"):
         _ = ibu.evaluate_single(run_dir)
 
     metrics_path: Path = run_dir / "artifacts" / "metrics_ibu.json"
     weights_path: Path = run_dir / "artifacts" / "ibu_weights.npz"
     messages = [
         record.getMessage()
-        for record in _completion_records(caplog, "ran.baselines.ibu")
+        for record in _completion_records(caplog, "anamorph.baselines.ibu")
     ]
     assert metrics_path.exists()
     assert weights_path.exists()

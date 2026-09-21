@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/RANv4
+PROJECT_DIR=/global/u1/k/kdesai/Anamorph
 SEED_START=200
 SEED_END=271
 

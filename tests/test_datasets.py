@@ -11,8 +11,7 @@ if TYPE_CHECKING:
 import numpy as np
 import pytest
 import yaml
-from ran.data import RANDataset
-from ran.rantypes import (
+from anamorph.coretypes import (
     EVENT_DTYPE,
     TRUTH_SENTINEL,
     ZXY,
@@ -23,6 +22,7 @@ from ran.rantypes import (
     Split,
     constants,
 )
+from anamorph.data import AnamorphDataset
 
 
 def _write_config(params: dict[str, Any], tmp_path: Path) -> Path:
@@ -52,7 +52,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": 0.5,
         }
         path = _write_config(cfg, tmp_path)
-        ds = RANDataset(batch_size=64, seed=42)
+        ds = AnamorphDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=1000)
         assert splits.train is not None
         assert splits.val is not None
@@ -69,7 +69,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": [0.5, 0.8],
         }
         path = _write_config(cfg, tmp_path)
-        ds = RANDataset(batch_size=64, seed=42)
+        ds = AnamorphDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=2000)
         events = splits.test.as_arrays().events
         assert events.z.shape[1] == 2
@@ -86,7 +86,7 @@ class TestGenerateGaussianDataset:
             cov_true=np.array([[0.9]]),
             cov_detector=np.array([[0.5]]),
         )
-        ds = RANDataset(batch_size=64, seed=42)
+        ds = AnamorphDataset(batch_size=64, seed=42)
         splits = ds.generate_gaussian_dataset(params=params, n_samples=1000)
         assert splits.train is not None
 
@@ -99,8 +99,8 @@ class TestGenerateGaussianDataset:
             cov_true=np.array([[0.9]]),
             cov_detector=np.array([[0.5]]),
         )
-        ds = RANDataset(cache_dir=tmp_path)
-        assert_type(ds, RANDataset)
+        ds = AnamorphDataset(cache_dir=tmp_path)
+        assert_type(ds, AnamorphDataset)
 
         splits = ds.generate_gaussian_dataset(params=params, n_samples=100)
 
@@ -126,7 +126,7 @@ class TestGenerateGaussianDataset:
             cov_true=np.array([[0.81]]),
             cov_detector=np.array([[0.25]]),
         )
-        ds = RANDataset(batch_size=64, seed=42)
+        ds = AnamorphDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
             _ = ds.generate_gaussian_dataset(
                 config_path=path, params=params, n_samples=100
@@ -134,7 +134,7 @@ class TestGenerateGaussianDataset:
 
     def test_neither_config_nor_params_raises(self) -> None:
         """Providing neither config_path nor params should error."""
-        ds = RANDataset(batch_size=64, seed=42)
+        ds = AnamorphDataset(batch_size=64, seed=42)
         with pytest.raises(ValueError, match="Exactly one"):
             _ = ds.generate_gaussian_dataset(n_samples=100)
 
@@ -149,11 +149,11 @@ class TestGenerateGaussianDataset:
         }
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
-        ds = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds = AnamorphDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         _ = ds.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files = list(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files) == 1
-        ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds2 = AnamorphDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         _ = ds2.generate_gaussian_dataset(config_path=path, n_samples=500)
 
     @pytest.mark.writes_default_cache
@@ -167,7 +167,7 @@ class TestGenerateGaussianDataset:
             "sigma_detector": [0.1, 0.1],
         }
         path = _write_config(cfg, tmp_path)
-        ds = RANDataset(batch_size=10000, seed=42)
+        ds = AnamorphDataset(batch_size=10000, seed=42)
         splits = ds.generate_gaussian_dataset(config_path=path, n_samples=10000)
         events = splits.test.as_arrays().events
         for d in range(2):
@@ -193,7 +193,7 @@ class TestGenerateGaussianDataset:
         path = _write_config(cfg, tmp_path)
         cache_dir = tmp_path / "cache"
 
-        ds1 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds1 = AnamorphDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         _ = ds1.generate_gaussian_dataset(config_path=path, n_samples=500)
         cache_files_after_yaml = set(cache_dir.glob("gaussian_*.npz"))
         assert len(cache_files_after_yaml) == 1
@@ -206,7 +206,7 @@ class TestGenerateGaussianDataset:
             cov_true=np.array([[0.81, -0.5], [-0.5, 1.69]]),
             cov_detector=np.array([[0.25, 0.0], [0.0, 0.64]]),
         )
-        ds2 = RANDataset(batch_size=64, seed=42, cache_dir=cache_dir)
+        ds2 = AnamorphDataset(batch_size=64, seed=42, cache_dir=cache_dir)
         _ = ds2.generate_gaussian_dataset(params=reload_params, n_samples=500)
 
         cache_files_after_params = set(cache_dir.glob("gaussian_*.npz"))
@@ -219,7 +219,7 @@ def test_splits_from_data_builds_three_nonempty_splits() -> None:
     x = np.random.default_rng(1).normal(size=(2 * n, 1)).astype(np.single)
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
 
-    splits = RANDataset(batch_size=32).splits_from_data(ZXY(Events(z, x), y))
+    splits = AnamorphDataset(batch_size=32).splits_from_data(ZXY(Events(z, x), y))
 
     for ds in (splits.train, splits.val, splits.test):
         data = ds.as_arrays()
@@ -231,7 +231,7 @@ def _toy_splits(n: int = 200, batch_size: int = 32, **kwargs: Any) -> DatasetSpl
     z = np.arange(2 * n, dtype=np.single).reshape(-1, 1)
     x = -z
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    return RANDataset(batch_size=batch_size, **kwargs).splits_from_data(
+    return AnamorphDataset(batch_size=batch_size, **kwargs).splits_from_data(
         ZXY(Events(z, x), y)
     )
 
@@ -425,7 +425,7 @@ class TestLabelledAndPhysicsForms:
 
 
 class TestCacheDirIsRelocatable:
-    """`RAN_CACHE_DIR` moves the whole regenerable tree at once.
+    """`ANAMORPH_CACHE_DIR` moves the whole regenerable tree at once.
 
     The default is wrong in both directions on a cluster: `$HOME` is quota'd and
     shared across nodes, and a checkout's `.cache/` may sit on a filesystem the
@@ -434,7 +434,7 @@ class TestCacheDirIsRelocatable:
     rather than each carrying their own knob.
 
     These reload the module because `CACHE_DIR` is resolved at import; that is
-    deliberate, since the `cache_dir=` defaults throughout `ran.data` bind to it
+    deliberate, since the `cache_dir=` defaults throughout `anamorph.data` bind to it
     at import too.
     """
 
@@ -468,11 +468,11 @@ class TestCacheDirIsRelocatable:
 
     def test_a_tilde_expands(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A SLURM `--export` carries the string through without a shell to
-        expand it, so `~/ran-cache` would otherwise become a literal directory
+        expand it, so `~/anamorph-cache` would otherwise become a literal directory
         named `~`."""
-        expected: Path = Path.home() / "ran-cache"
+        expected: Path = Path.home() / "anamorph-cache"
 
-        assert self._with("~/ran-cache", monkeypatch) == expected
+        assert self._with("~/anamorph-cache", monkeypatch) == expected
 
     def test_empty_falls_back_rather_than_meaning_cwd(
         self, monkeypatch: pytest.MonkeyPatch

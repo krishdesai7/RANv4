@@ -12,28 +12,28 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 import typer
-from jax import Array
-from ran.data import load_jet_dataset
-from ran.evaluate import _improvement, _wd_per_dim
-from ran.logging_config import configure_logging
-from ran.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
-from ran.models import build_discriminator, build_generator
-from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split, artifacts_dir
-from ran.train import (
+from anamorph.coretypes import SUBSTRUCTURE_VARIABLES, Split, artifacts_dir
+from anamorph.data import load_jet_dataset
+from anamorph.evaluate import _improvement, _wd_per_dim
+from anamorph.logging_config import configure_logging
+from anamorph.mmd import bandwidths, build_cache, subsample_indices, weighted_mmd
+from anamorph.models import build_discriminator, build_generator
+from anamorph.train import (
     MMD_SUBSAMPLE,
     PARAMS_FILE,
     load_params,
     normalize_weights,
     weighted_bce,
 )
+from jax import Array
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Final
 
+    from anamorph.coretypes import AnamorphModel, DatasetSplits, EventArray, Populations
+    from anamorph.mmd import MMDCache
     from numpy.typing import NDArray
-    from ran.mmd import MMDCache
-    from ran.rantypes import DatasetSplits, EventArray, Populations, RANModel
 
 LOG2: Final[np.double] = np.log(2.0)
 
@@ -82,7 +82,7 @@ def _fit_classifier(
     """Converge a plain binary classifier and report its held-out BCE floor.
 
     `build_discriminator` is reused rather than reimplemented so that the number
-    this returns is comparable to RAN's `val_d` -- same depth, same width, same
+    this returns is comparable to Anamorph's `val_d` -- same depth, same width, same
     activations, same sigmoid output, and therefore the same Keras epsilon
     clipping in the loss. Only the training regime differs, which is the point:
     no adversary, no per-event weights, and a fixed target.
@@ -91,7 +91,7 @@ def _fit_classifier(
     x_val, y_val = _labelled(val_pos, val_neg)
     # Keras reduces a weighted loss with `sum_over_batch_size` -- it divides by
     # the row count, not by the weight sum -- which is exactly what
-    # `ran.train.weighted_bce` does. The two are the same quantity, so a
+    # `anamorph.train.weighted_bce` does. The two are the same quantity, so a
     # sample-weighted fit here early-stops on the same number C then scores.
     fit_w: dict[str, NDArray[np.single]] | None = (
         None if train_w is None else {"sample_weight": train_w}
@@ -143,7 +143,7 @@ def _likelihood_ratio(model: keras.Model, z: EventArray, /) -> NDArray[np.double
     """`p / (1 - p)` from a calibrated classifier, normalized to preserve count.
 
     The normalization matches `train.normalize_weights` so the weights entering
-    the metrics below are on the same footing as the ones RAN produces.
+    the metrics below are on the same footing as the ones Anamorph produces.
     """
     p: NDArray[np.double] = (
         np.asarray(a=model.predict(z, batch_size=8192, verbose=0))
@@ -219,7 +219,7 @@ def diagnostic_a(
 ) -> Fit:
     """How much detector-level signal is there for `d` to find?
 
-    Deliberately fitted on train and scored on val, the same two splits RAN's
+    Deliberately fitted on train and scored on val, the same two splits Anamorph's
     `val_d` is built from, so the two numbers are directly comparable.
     """
     logger.info(msg="")
@@ -271,7 +271,7 @@ def diagnostic_b(
 
 def _generator_at(
     run_dir: Path, config: dict[str, Any], epoch: int | None, /
-) -> RANModel:
+) -> AnamorphModel:
     """The run's generator, either as saved or rebuilt at an arbitrary epoch.
 
     `generator.keras` holds `best_epoch` alone. Auditing any *other* epoch is
@@ -289,7 +289,7 @@ def _generator_at(
             "Re-run training to get params.npz, or drop --epoch.",
         )
         raise typer.Exit(code=-1)
-    g: RANModel = build_generator(
+    g: AnamorphModel = build_generator(
         dim=int(config["dim"]),
         hidden_units=int(config["hidden_units"]),
         n_layers=int(config["n_layers"]),
@@ -312,7 +312,7 @@ def _run_weights(
     """`(x, y, w)` for one split, weighted by a saved run's generator.
 
     Rows are `[x_data ; x_sim]`, so `y` is 1 on nature and 0 on MC and the
-    weights come back through `ran.train.normalize_weights` -- the same
+    weights come back through `anamorph.train.normalize_weights` -- the same
     normalization the training loop applies, rather than a re-derivation of it.
     """
     g: keras.Model = cast(typ=keras.Model, val=_generator_at(run_dir, config, epoch))
@@ -373,7 +373,7 @@ def diagnostic_c(
     epoch: int | None = None,
     **kwargs: dict[str, Any],
 ) -> None:
-    """Did `g` really match detector level, or was RAN's `d` just too weak?"""
+    """Did `g` really match detector level, or was Anamorph's `d` just too weak?"""
     logger.info(msg="")
     logger.info(msg="C. A fresh discriminator against a finished run's weights")
     logger.info(
@@ -424,7 +424,7 @@ def diagnostic_c(
         "  fresh d, scored as val_d   %.6f  (log2 - BCE = %+.6f)", bce, LOG2 - bce
     )
     logger.info(
-        "  RAN's own d at epoch %-3d   %.6f  (log2 - BCE = %+.6f)",
+        "  Anamorph's own d at epoch %-3d   %.6f  (log2 - BCE = %+.6f)",
         best_epoch,
         ran_val_d,
         LOG2 - ran_val_d,
@@ -438,7 +438,7 @@ def diagnostic_c(
     logger.info(
         "  Of the %.6f nats of detector-level mismatch present before "
         "reweighting, g removed %.1f%%, leaving %.6f that a converged d can "
-        "still find. RAN's own d found %.6f less than that.",
+        "still find. Anamorph's own d found %.6f less than that.",
         present,
         100.0 * (1.0 - found / present),
         found,
@@ -488,7 +488,7 @@ def diagnostic_d(
     seed: int,
     /,
 ) -> None:
-    """Does the selection criterion prefer the oracle, or prefer RAN?
+    """Does the selection criterion prefer the oracle, or prefer Anamorph?
 
     A and C establish that detector level is nearly saturated after
     reweighting. That leaves one question the resolution of the estimator
@@ -521,7 +521,9 @@ def diagnostic_d(
     if run_dir is not None:
         config: dict[str, Any] = json.loads(s=(run_dir / "config.json").read_text())
         _, y, w = _run_weights(run_dir, test_pop, config=config)
-        rows.append((f"RAN {run_dir.name}", np.asarray(a=w[y == 0], dtype=np.single)))
+        rows.append(
+            (f"Anamorph {run_dir.name}", np.asarray(a=w[y == 0], dtype=np.single))
+        )
 
     logger.info(
         "   m = %d of %d nature / %d mc test events, median-heuristic bandwidths",
@@ -641,7 +643,8 @@ def main(
         LOG2 - a.val_bce,
     )
     logger.info(
-        msg="  Compare against `val_d` in a run's history.npz. RAN's `d` scoring far"
+        msg="  Compare against `val_d` in a run's history.npz. Anamorph's `d`"
+        " scoring far"
     )
     logger.info(
         msg="  above this floor means `d` is the bottleneck, not `g`; scoring at it"

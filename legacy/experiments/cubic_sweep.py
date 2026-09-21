@@ -9,9 +9,9 @@ import matplotlib as mpl
 import numpy as np
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure
-from ran.baselines import unfold_variable
-from ran.data import RANDataset
-from ran.rantypes import (
+from anamorph.baselines import unfold_variable
+from anamorph.data import AnamorphDataset
+from anamorph.coretypes import (
     DEFAULT_PURITY_THRESHOLD,
     EVENT_DTYPE,
     Events,
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
     from matplotlib.axes import Axes
     from numpy.typing import NDArray
-    from ran.baselines import VariableUnfolding
-    from ran.rantypes import DatasetSplits, EventArray, VariableOutcome
+    from anamorph.baselines import VariableUnfolding
+    from anamorph.coretypes import DatasetSplits, EventArray, VariableOutcome
 
 logger: Logger = logging.getLogger(name=__name__)
 mpl.use(backend="Agg")
@@ -114,13 +114,13 @@ def _finite(w: EventArray) -> EventArray:
 
 
 def _ibu_point(pops: Populations) -> tuple[np.double, VariableOutcome]:
-    """Unfold one sweep point with IBU and score it the way RAN is scored.
+    """Unfold one sweep point with IBU and score it the way Anamorph is scored.
 
     Both arms now run at the pipeline's single precision, so there is no cast
     here and nothing to keep in step: the same array reaches both unfolders.
 
     The fit uses `mc.z`, `mc.x` and `data` --- what a real measurement has ---
-    and is applied to the same `mc.z` that RAN's weights are applied to.
+    and is applied to the same `mc.z` that Anamorph's weights are applied to.
     `truth` reaches neither method, and appears only in the score.
     """
     unfolding: VariableUnfolding = unfold_variable(
@@ -150,16 +150,16 @@ def run_ran(
     ran_epochs: int = 100,
     init_seed: int | None = None,
 ) -> dict[str, Any]:
-    # Deferred so that `ran sweep collect`, which only reads JSON and plots,
+    # Deferred so that `anamorph sweep collect`, which only reads JSON and plots,
     # does not pay for importing keras and jax.
-    from ran.train import train
+    from anamorph.train import train
 
     if TYPE_CHECKING:
-        from ran.train import TrainResult
+        from anamorph.train import TrainResult
 
     s, pops = _sweep_point(s_index, n_points, n_samples, seed)
 
-    splits: DatasetSplits = RANDataset(
+    splits: DatasetSplits = AnamorphDataset(
         batch_size=batch_size, seed=seed
     ).splits_from_data(pops.interleave())
     result: TrainResult = train(
@@ -182,7 +182,7 @@ def run_ran(
     ibu_wd, ibu_outcome = _ibu_point(pops)
 
     logger.info(
-        "s=%.4f  RAN=%.6f  IBU=%.6f  (init seed %d, %d IBU bins)",
+        "s=%.4f  Anamorph=%.6f  IBU=%.6f  (init seed %d, %d IBU bins)",
         s,
         ran_wd,
         ibu_wd,
@@ -241,7 +241,7 @@ def _plot_sweep(
     figure = Figure(figsize=(7, 5))
     figure.canvas = FigureCanvasPdf(figure)
     ax: Axes = figure.subplots()
-    _ = ax.plot(s, ran, "o-", label="RAN")
+    _ = ax.plot(s, ran, "o-", label="Anamorph")
     _ = ax.plot(s, ibu, "s--", label="IBU")
     _ = ax.set_xlabel(xlabel=r"$s$ (cubic distortion strength)")
     _ = ax.set_ylabel(ylabel=r"Wasserstein($z_\mathrm{truth}$, $z_\mathrm{unfolded}$)")

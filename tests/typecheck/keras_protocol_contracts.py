@@ -3,29 +3,29 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_type
 
-from jax._src.basearray import Array as JaxArray
-from ran.evaluate import _get_weights as evaluate_weights
-from ran.models import build_discriminator, build_generator
-
-# Specifically what this test is checking
-from ran.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
-from ran.rantypes import (
+from anamorph.coretypes import (
+    AnamorphModel,
     KerasVariable,
-    RANModel,
     Variables,
 )
-from ran.train import TrainResult, _make_steps
-from ran.workflow import _load_artifacts
+from anamorph.evaluate import _get_weights as evaluate_weights
+from anamorph.models import build_discriminator, build_generator
+
+# Specifically what this test is checking
+from anamorph.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
+from anamorph.train import TrainResult, _make_steps
+from anamorph.workflow import _load_artifacts
+from jax._src.basearray import Array as JaxArray
 
 if TYPE_CHECKING:
     from typing import Any
 
+    from anamorph.coretypes import EvalStep, StatelessOptimizer, TrainStep
     from numpy.typing import ArrayLike, NDArray
-    from ran.rantypes import EvalStep, StatelessOptimizer, TrainStep
 
 
 def check_protocol_surfaces(
-    model: RANModel,
+    model: AnamorphModel,
     optimizer: StatelessOptimizer,
     variable: KerasVariable,
     inputs: ArrayLike,
@@ -49,21 +49,23 @@ def check_protocol_surfaces(
     assert_type(optimizer_state, Variables)
 
 
-def check_training_boundary(model: RANModel, optimizer: StatelessOptimizer) -> None:
-    assert_type(build_generator(), RANModel)
-    assert_type(build_discriminator(), RANModel)
+def check_training_boundary(
+    model: AnamorphModel, optimizer: StatelessOptimizer
+) -> None:
+    assert_type(build_generator(), AnamorphModel)
+    assert_type(build_discriminator(), AnamorphModel)
     _: tuple[TrainStep, TrainStep, EvalStep] = _make_steps(
         g=model, d=model, opt_g=optimizer, opt_d=optimizer, lambda_dispersion=0.0
     )
 
 
 def check_model_consumers(
-    model: RANModel,
+    model: AnamorphModel,
     inputs: NDArray[Any],
     result: TrainResult,
 ) -> None:
     _ = evaluate_weights(g=model, z_gen=inputs)
     _ = plotting_weights(g=model, z_gen=inputs)
-    assert_type(result.g, RANModel)
+    assert_type(result.g, AnamorphModel)
     loaded, _ = _load_artifacts(run_dir=Path("run"))
-    assert_type(loaded, RANModel)
+    assert_type(loaded, AnamorphModel)

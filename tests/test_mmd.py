@@ -10,8 +10,7 @@ from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 import numpy as np
-from jax._src.basearray import Array  # ruff: ignore[typing-only-third-party-import]
-from ran.mmd import (
+from anamorph.mmd import (
     MMDCache,
     bandwidths,
     build_cache,
@@ -21,6 +20,7 @@ from ran.mmd import (
     subsample_indices,
     weighted_mmd,
 )
+from jax._src.basearray import Array  # ruff: ignore[typing-only-third-party-import]
 
 if TYPE_CHECKING:
     from numpy.random._generator import Generator

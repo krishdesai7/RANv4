@@ -3,12 +3,12 @@
 This is the fail-fast check standing in front of any decision to bring OmniFold
 into this repository. The quarantine itself is settled -- a PEP 723 script run
 through `uv run --no-project` provisions Python 3.13 and TensorFlow in an
-interpreter that cannot see `ran`, which is proven and cheap. What is *not*
+interpreter that cannot see `anamorph`, which is proven and cheap. What is *not*
 settled is whether the two processes can share one A100, and that question only
 has an answer on a machine with an A100 in it.
 
 The hazard is in the Precision section of CLAUDE.md: **JAX preallocates ~75% of
-GPU memory on its first device allocation.** A `ran baseline omnifold` parent
+GPU memory on its first device allocation.** A `anamorph baseline omnifold` parent
 reaches the device long before it spawns a worker -- `load_populations` alone
 does it -- so by the time TensorFlow starts, three quarters of the card is
 already spoken for and does not come back. Deleting the array does not release
@@ -83,7 +83,9 @@ class Arm:
 ARMS: tuple[Arm, ...] = (
     Arm("control", touch_jax=False, note="worker alone on the card"),
     Arm(
-        "preallocate-default", touch_jax=True, note="what `ran baseline` would do today"
+        "preallocate-default",
+        touch_jax=True,
+        note="what `anamorph baseline` would do today",
     ),
     Arm(
         "preallocate-false",
@@ -491,7 +493,7 @@ def main() -> None:
     # Set before any arm runs so it reaches the worker through both
     # subprocess layers, which inherit the environment.
     if args.preload_wheels:
-        os.environ["RAN_PROBE_PRELOAD_WHEELS"] = "1"
+        os.environ["ANAMORPH_PROBE_PRELOAD_WHEELS"] = "1"
 
     by_name = {a.name: a for a in ARMS}
 

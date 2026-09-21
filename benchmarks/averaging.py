@@ -51,18 +51,24 @@ import logging
 from itertools import starmap
 from typing import TYPE_CHECKING, Annotated, NamedTuple
 
+import anamorph  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 import jax.numpy as jnp
 import numpy as np
-import ran  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 import typer
-from ran.data import RANDataset, load_jet_dataset
-from ran.data.config import gaussian_config_from_run_config
-from ran.evaluate import _improvement, _wd_per_dim
-from ran.logging_config import configure_logging
-from ran.mmd import MMDCache, bandwidths, build_cache, subsample_indices, weighted_mmd
-from ran.models import build_generator
-from ran.rantypes import Split, artifacts_dir
-from ran.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
+from anamorph.coretypes import Split, artifacts_dir
+from anamorph.data import AnamorphDataset, load_jet_dataset
+from anamorph.data.config import gaussian_config_from_run_config
+from anamorph.evaluate import _improvement, _wd_per_dim
+from anamorph.logging_config import configure_logging
+from anamorph.mmd import (
+    MMDCache,
+    bandwidths,
+    build_cache,
+    subsample_indices,
+    weighted_mmd,
+)
+from anamorph.models import build_generator
+from anamorph.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -70,8 +76,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
+    from anamorph.coretypes import AnamorphModel, DatasetSplits, EventArray, Populations
     from numpy.typing import NDArray
-    from ran.rantypes import DatasetSplits, EventArray, Populations, RANModel
 
 
 logger: Logger = logging.getLogger(name="ran.averaging")
@@ -219,11 +225,11 @@ def _load_splits(config: dict[str, Any], /) -> tuple[DatasetSplits, tuple[str, .
         return splits, variables
     # `_save_run` records the *parsed* config, not the path it came from, so
     # the run reproduces even if the YAML has since moved or changed. Rebuilt
-    # through the same helper `ran evaluate` uses: `model_dump` turns the
+    # through the same helper `anamorph evaluate` uses: `model_dump` turns the
     # covariance arrays into lists, and the constructor does not coerce them
     # back, so `GaussianConfig(**dumped)` yields a config whose fields are
     # lists and fails on the first `.tolist()`.
-    splits: DatasetSplits = RANDataset(
+    splits: DatasetSplits = AnamorphDataset(
         batch_size=config["batch_size"], seed=config["data_seed"]
     ).generate_gaussian_dataset(
         params=gaussian_config_from_run_config(
@@ -249,7 +255,7 @@ def main(
     test_pop: Populations = splits.select(Split.TEST).partition()
 
     # The architecture only; `load_params` supplies every epoch's values.
-    generator: RANModel = build_generator(
+    generator: AnamorphModel = build_generator(
         dim=config["dim"],
         hidden_units=config["hidden_units"],
         n_layers=config["n_layers"],

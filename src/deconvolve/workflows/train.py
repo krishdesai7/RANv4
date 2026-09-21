@@ -11,47 +11,59 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 
-from .baselines import parse_run_config
-from .coretypes import (
+from ..baselines._shared import parse_run_config
+from ..coretypes import (
     JET_OBS,
     DatasetName,
     GaussianConfig,
     VarInfo,
     artifacts_dir,
 )
-from .data import (
+from ..data import (
     DeconvolveDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
     parse_gaussian_config,
 )
-from .evaluate import evaluate_run
-from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices
-from .plotting import (
+from ..evaluation import (
     BaselineOverlay,
+    evaluate_run,
     ibu_overlay,
     omnifold_overlay,
     plot_levels,
     plot_losses,
     plot_selection,
 )
-from .timing import phase, report, write
-from .train import MMD_SUBSAMPLE, _weights_per_epoch, save_params, train
+from ..instrumentation import phase, report, write
+from ..training import (
+    MMD_SUBSAMPLE,
+    bandwidths,
+    build_cache,
+    mmd_curve,
+    save_params,
+    subsample_indices,
+    train,
+)
+from ..training.engine import _weights_per_epoch
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
-    from .coretypes import (
+    from jax._src.basearray import Array
+    from numpy.typing import NDArray
+
+    from ..coretypes import (
         DatasetSplits,
         DeconvolveModel,
         EventArray,
         Populations,
         RunConfig,
     )
-    from .train import EpochParams, TrainResult
+    from ..training import EpochParams, TrainResult
 
-logger: Logger = logging.getLogger(__name__)
+
+logger: Logger = logging.getLogger(name=__name__)
 
 # `json.dump(indent=2)` has no way to keep one array inline, and a twelve-name
 # variable list costs fourteen lines of a config a person is meant to read.
@@ -82,12 +94,10 @@ def _prepare_gaussian(
     )
     if saved_config is not None:
         gaussian_params: GaussianConfig = saved_config
-        # Reload: use stored params from config.json
         splits: DatasetSplits = builder.generate_gaussian_dataset(
             params=saved_config, n_samples=n_samples
         )
     else:
-        # Fresh run: parse YAML config
         if config is None:
             raise ValueError("Gaussian mode requires --config path/to/config.yaml")
         gaussian_params = parse_gaussian_config(config)
@@ -154,7 +164,7 @@ def _new_run_dir(explicit: Path | None) -> Path:
             candidate.mkdir(parents=True)
         except FileExistsError:
             suffix += 1
-            candidate = candidate.with_name(f"{stamp}-{suffix}")
+            candidate = candidate.with_name(name=f"{stamp}-{suffix}")
         else:
             return candidate
 
@@ -186,6 +196,7 @@ def _save_run(
     variables: tuple[str, ...],
     hyperparameters: dict[str, Any],
     run_dir: Path | None = None,
+    origins: dict[str, str] | None = None,
 ) -> Path:
     with phase("save"):
         return _write_run_dir(
@@ -203,6 +214,7 @@ def _save_run(
             variables=variables,
             hyperparameters=hyperparameters,
             run_dir=run_dir,
+            origins=origins,
         )
 
 
@@ -221,18 +233,19 @@ def _write_run_dir(
     gaussian_params: GaussianConfig | None,
     variables: tuple[str, ...],
     hyperparameters: dict[str, Any],
-    run_dir: Path | None = None,
+    run_dir: Path | None,
+    origins: dict[str, str] | None = None,
 ) -> Path:
     """Everything `_save_run` puts on disk. Split out only so the timer wraps a
     call rather than an indented body."""
-    run_dir = _new_run_dir(run_dir)
+    run_dir = _new_run_dir(explicit=run_dir)
 
     artifacts: Path = artifacts_dir(run_dir)
-    g.save(artifacts / "generator.keras")
-    d.save(artifacts / "discriminator.keras")
+    g.save(filepath=artifacts / "generator.keras")
+    d.save(filepath=artifacts / "discriminator.keras")
     # Every epoch's parameters, not just the selected one's. `scan` already
-    # emitted the stack; dropping it on the floor is what made re-scoring a run
-    # under a different criterion cost a full retrain.
+    # emitted the stack, so dropping it on the floor would make re-scoring a
+    # run under a different criterion cost a full retrain.
     _ = save_params(run_dir, params)
     np.savez(
         file=artifacts / "history.npz",
@@ -258,6 +271,12 @@ def _write_run_dir(
         config_out["gaussian_params"] = gaussian_params.model_dump()
     else:
         config_out["variables"] = list(variables)
+    if origins:
+        # Leading underscore: metadata *about* the run, not a parameter *of*
+        # it. `baselines/_shared.py:parse_run_config` reads known keys by name
+        # and keeps the rest in `source`, so older readers are unaffected and
+        # older run dirs simply have no `_origin`.
+        config_out["_origin"] = origins
     _ = (run_dir / "config.json").write_text(
         data=_compact_variables(json.dumps(obj=config_out, indent=2))
     )
@@ -336,7 +355,7 @@ def _draw_figures(
     if "val_mmd" in history:
         plot_selection(history, best_epoch, save_path=artifacts / "selection.pdf")
     else:
-        logger.debug("No val_mmd in history, skipping selection.pdf")
+        logger.debug(msg="No val_mmd in history, skipping selection.pdf")
 
 
 def _load_baseline_weights(
@@ -347,8 +366,8 @@ def _load_baseline_weights(
 
     Presence is the whole mechanism, and it is deliberate: neither baseline
     runs on the `deconvolve train` path, so the figures a fresh run draws have no
-    overlay, and re-drawing them after a baseline has run is what puts one
-    there. `deconvolve train --load-run <run_dir>` is that re-draw --- it reloads the
+    overlay, and re-drawing them after a baseline has run puts one there.
+    `deconvolve train --load-run <run_dir>` is that re-draw --- it reloads the
     saved generator instead of training, and picks up whatever `*_weights.npz`
     files exist by then.
 
@@ -360,14 +379,16 @@ def _load_baseline_weights(
 
     ibu_path: Path = artifacts / "ibu_weights.npz"
     if ibu_path.exists():
-        ibu_data: dict[str, Any] = np.load(ibu_path)
+        ibu_data: dict[str, Any] = np.load(file=ibu_path)
         # One vector per observable: IBU unfolds each separately.
-        baselines.append(ibu_overlay([ibu_data[f"weights_{i}"] for i in range(dim)]))
+        baselines.append(
+            ibu_overlay(weights=[ibu_data[f"weights_{i}"] for i in range(dim)])
+        )
         logger.info("Loaded IBU weights from %s", ibu_path)
 
     omnifold_path: Path = artifacts / "omnifold_weights.npz"
     if omnifold_path.exists():
-        omnifold_data: dict[str, Any] = np.load(omnifold_path)
+        omnifold_data: dict[str, Any] = np.load(file=omnifold_path)
         # One vector for all observables: OmniFold reweights events, not
         # observables, so `omnifold_overlay` repeats it across the dimensions.
         baselines.append(omnifold_overlay(omnifold_data["weights"], dim))
@@ -386,28 +407,29 @@ def _particle_curve(
     against. Selection has already happened by the time this runs, so nothing
     the generator saw depends on it.
 
-    Unlike `train.py`'s detector-level selection, calling `.partition()` here
+    Unlike `engine.py`'s detector-level selection, calling `.partition()` here
     is correct: this runs outside the trace, after selection, and needs the
-    answer key `train.py` must never see.
+    answer key `engine.py` must never see.
     """
     pops: Populations = splits.val.as_arrays().partition()
     if not pops.has_truth:
         return None
     z_true: EventArray = pops.require_truth()
     z_gen: EventArray = pops.mc.z
-    # Seeded off `splits.train.seed` (`data_seed`), the way `train.py`'s own
+    # Seeded off `splits.train.seed` (`data_seed`), the way `engine.py`'s own
     # detector-level draws are: `s`/`s+1` val-detector and `s+2`/`s+3`
     # test-detector are already spoken for, so this uses `s+4`/`s+5`.
     seed: int = splits.train.seed
-    i_t = subsample_indices(seed + 4, z_true.shape[0], MMD_SUBSAMPLE)
-    i_g = subsample_indices(seed + 5, z_gen.shape[0], MMD_SUBSAMPLE)
+    i_t: NDArray[np.intp] = subsample_indices(seed + 4, z_true.shape[0], MMD_SUBSAMPLE)
+    i_g: NDArray[np.intp] = subsample_indices(seed + 5, z_gen.shape[0], MMD_SUBSAMPLE)
     z_gen_sub: EventArray = z_gen[i_g]
-    ref, comp = jnp.asarray(z_true[i_t]), jnp.asarray(z_gen_sub)
+    ref: Array = jnp.asarray(z_true[i_t])
+    comp: Array = jnp.asarray(z_gen_sub)
     sigmas: tuple[float, ...] = bandwidths(ref)
-    curve, _ = mmd_curve(
+    curve: NDArray[np.double] = mmd_curve(
         build_cache(ref, comp, sigmas=sigmas),
         _weights_per_epoch(result.g, result.params, z_gen_sub),
-    )
+    )[0]
     return curve.tolist(), sigmas
 
 
@@ -418,7 +440,9 @@ def _finish_run(
 ) -> tuple[dict[str, list[float]], dict[str, Any]]:
     """Merge the particle diagnostic in, and assemble what gets recorded."""
     history: dict[str, list[float]] = dict(result.history)
-    particle = _particle_curve(splits, result)
+    particle: tuple[list[float], tuple[float, ...]] | None = _particle_curve(
+        splits, result
+    )
     sigmas_particle: tuple[float, ...] = ()
     if particle is not None:
         history["val_mmd_particle"], sigmas_particle = particle
@@ -443,14 +467,15 @@ def run(
     seed: int | None,
     data_seed: int,
     *,
-    n_epochs: int = 100,
-    n_disc_steps: int = 5,
-    lr_g: float = 3e-5,
-    lr_d: float = 1e-4,
-    lambda_dispersion: float = 0.015,
-    log_every: int = 1,
-    plots: bool = True,
-    run_dir: Path | None = None,
+    n_epochs: int,
+    n_disc_steps: int,
+    lr_g: float,
+    lr_d: float,
+    lambda_dispersion: float,
+    log_every: int,
+    plots: bool,
+    run_dir: Path | None,
+    origins: dict[str, str] | None = None,
 ) -> None:
     """Train (or reload) one run, then report where its wall clock went.
 
@@ -486,6 +511,7 @@ def run(
             log_every=log_every,
             plots=plots,
             run_dir=run_dir,
+            origins=origins,
         )
     finally:
         report()
@@ -513,6 +539,7 @@ def _pipeline(
     log_every: int,
     plots: bool,
     run_dir: Path | None,
+    origins: dict[str, str] | None = None,
 ) -> Path:
     """The run itself, returning the directory its artifacts landed in."""
     # Each dataset fills in only its own metadata, but the plots and the saved
@@ -526,7 +553,7 @@ def _pipeline(
     saved_gaussian_config: GaussianConfig | None = None
     # No `TrainResult` on the reload path, so `best_epoch` has to come from
     # what training recorded. Absent on a run saved before this branch, same
-    # as `val_mmd`/`val_ess` themselves -- see R15 in the task brief.
+    # as `val_mmd`/`val_ess` themselves.
     saved_best_epoch: int = -1
     if load_run is not None:
         run_dir = Path(load_run)
@@ -567,14 +594,11 @@ def _pipeline(
         else:
             raise ValueError(f"Unknown dataset: {dataset!r}")
 
-    g: DeconvolveModel
-    history: dict[str, list[float]]
-    best_epoch: int
     if load_run is not None:
         run_dir = Path(load_run)
         with phase("load"):
             g, history = _load_artifacts(run_dir)
-        best_epoch = saved_best_epoch
+        best_epoch: int = saved_best_epoch
     else:
         with phase("train"):
             result: TrainResult = train(
@@ -590,7 +614,7 @@ def _pipeline(
                 lambda_dispersion=lambda_dispersion,
                 log_every=log_every,
             )
-        g = result.g
+        g: DeconvolveModel = result.g
         best_epoch = result.best_epoch
         with phase("particle_mmd"):
             history, mmd_record = _finish_run(splits, result)
@@ -618,6 +642,7 @@ def _pipeline(
                 **mmd_record,
             },
             run_dir=run_dir,
+            origins=origins,
         )
 
     with phase("plots"):

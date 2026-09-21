@@ -1,6 +1,6 @@
 # Baselines
 
-This directory contains the comparison baselines for the Deconvolve project.
+This directory contains the comparison baselines for the RAN project.
 
 Comparison baselines: **IBU** and **OmniFold**
 
@@ -19,9 +19,9 @@ needs and the silent CPU fallback it prevents.
 
 ## Shared
 
-Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics Deconvolve is scored by.
+Module `._shared` holds the part of a baseline that is not the unfolding method: reading a run's config, rebuilding its populations, and scoring the resulting weights with the same metrics RAN is scored by.
 
-A baseline attempts the same task Deconvolve does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else. Both baselines are callers, which is what the split was for: adding OmniFold was a matter of writing an unfolder and a subprocess, and neither arm's scoring moved.
+A baseline attempts the same task RAN does — generate weights that reweight Generation, using only the relationship between Data and Simulation — so it needs the same run config, the same event populations, and the same metric record. Keeping those here means a comparison is a comparison of unfolding methods and nothing else; both IBU and OmniFold are callers into this shared scoring path.
 
 ### `_shared::parse_run_config`
 
@@ -44,9 +44,9 @@ Checks the shape assumptions a baseline relies on, then partitions.
 Returns an `UnfoldingPopulations`, which unpacks as `(fit, test)`. Both are `Populations`, and they are disjoint. `fit` is train+val and supplies the response (`fit.mc.z` and `fit.mc.x`, paired per event) and the measurement (`fit.data`). `test` is the held-out split alone, where the metrics are computed: detector level scores `test.data` against `test.mc.x`, particle level scores `test.truth` against `test.mc.z`. `test.truth` is the only place a baseline touches the answer key, and it appears only in scoring.
 
 By construction, `fit` is `Split.TRAIN | Split.VAL`, not `Split.ALL`. A baseline fitted on every event and then
-scored on the test split would be scored on data it had already used and would be handed information Deconvolve is denied: `train` does read the test split now, to compute a test-level MMD diagnostic, but nothing weight-bearing depends on that read, so the test split still cannot influence the returned model or its selection (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`). The comparison is only a comparison if both sides see the same events.
+scored on the test split would be scored on data it had already used and would be handed information RAN is denied: `train` does read the test split now, to compute a test-level MMD diagnostic, but nothing weight-bearing depends on that read, so the test split still cannot influence the returned model or its selection (`tests/test_train.py::TestTrainingNeverSeesTheTestSplit`). The comparison is only a comparison if both sides see the same events.
 
-Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU used to narrow to float32 at this boundary, to match the arithmetic its published results were produced with; now that the whole pipeline is float32 that cast is a no-op and is gone, along with the generics that existed to let the two precisions coexist. One thing still does widen: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
+Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. One thing still widens: the two population-count checks and the mean-one postcondition accumulate in float64, because they compare against exact integer counts and float32 stops representing those past 2^24. Those are assertions about the data, not arithmetic on it.
 
 #### Arguments
 
@@ -59,7 +59,7 @@ Arrays arrive at the pipeline's pinned `EVENT_DTYPE` and are not cast here. IBU 
 
 ### function `load_populations(RunConfig) -> UnfoldingPopulations`
 
-Rebuild the run's dataset and split it into the baseline populations. It provides the run's dataset as populations, at the float64 Deconvolve generated it in. Baselines that need another precision call `astype` at their own boundary.
+Rebuild the run's dataset and split it into the baseline populations. It provides the run's dataset as populations, at the float64 RAN generated it in. Baselines that need another precision call `astype` at their own boundary.
 
 #### Arguments
 
@@ -85,17 +85,17 @@ Score one dimension before and after reweighting `comparison`.
 
 ## IBU
 
-IBU (Iterative Bayesian Unfolding) baseline to compare with Deconvolve. It is a simple unfolding method that uses a Bayesian approach to unfold the data.
+IBU (Iterative Bayesian Unfolding) baseline to compare with RAN. It is a simple unfolding method that uses a Bayesian approach to unfold the data.
 
 It is implemented in the [**`ibu.py`**](ibu.py) file.
 Usage:
 
 ```shell
-deconvolve baseline ibu --run-dir runs/2026-...
-deconvolve baseline ibu --run-dir runs # all runs
+ran baseline ibu --run-dir runs/2026-...
+ran baseline ibu --run-dir runs # all runs
 ```
 
-IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as Deconvolve.
+IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN.
 
 ## `class _BinnedReweighting`
 
@@ -103,7 +103,7 @@ A per-bin correction, learned from one population and applied to another.
 
 IBU produces one multiplicative factor per bin of the particle-level axis. Which events it is then applied to is a separate choice: here the unfolding is fit on train+val and applied to the held-out test split, so the sample it scores is genuinely not the sample it learned from.
 
-That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information Deconvolve is denied: `deconvolve.train` reads the test split only to compute a diagnostic that cannot influence the returned model, and never to fit or select. A comparison is only a comparison if both sides see the same events.
+That is deliberately not what the unfolding literature usually does. Fitting the response and iterating the prior on every event, then quoting metrics on a subset of those same events, is conventional for both IBU and <span style="font-variant: small-caps;">OmniFold</span> — and it scores an estimator on data it has already seen. It also hands the baseline information RAN is denied: `deconvolve.training.engine` reads the test split only to compute a diagnostic that cannot influence the returned model, and never to fit or select. A comparison is only a comparison if both sides see the same events.
 
 ### `ibu::_assign_bins`
 
@@ -201,7 +201,7 @@ Run IBU baseline on a single run. It fits on train+val, then scores the held-out
 
 ### `ibu::evaluate_runs`
 
-Run IBU baseline on completed Deconvolve runs.
+Run IBU baseline on completed RAN runs.
 
 #### Arguments
 

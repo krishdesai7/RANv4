@@ -1,8 +1,8 @@
-# Deconvolve Types
+# RAN Types
 
 Records, constants and aliases shared across the package.
 
-Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `deconvolve.train`.
+Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `deconvolve.training.engine`.
 
 ## module: `configs`
 
@@ -28,7 +28,7 @@ Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the defau
 
 ### Constants: `CACHE_ENV_VAR`, `CACHE_DIR`, `COMPILE_CACHE_DIR`
 
-Everything Deconvolve can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `DECONVOLVE_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
+Everything RAN can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `DECONVOLVE_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, relocating the tree to e.g. `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
 
 It is deliberately not derived from `XDG_CACHE_HOME`. That variable is already set, or defaults to `~/.cache`, on most Linux systems — deriving from it would silently move every existing checkout's cache and orphan the jet data already on disk.
 
@@ -50,7 +50,7 @@ $-2^{15}$ is that number: absurd on sight for any standardized observable, exact
 
 ## module: `enums`
 
-CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `deconvolve.data` implements, and `LogLevel` one that `deconvolve.logging_config` does.
+CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `deconvolve.data` implements, and `LogLevel` one that `deconvolve.instrumentation.logging_config` does.
 
 ## module: `events`
 
@@ -112,10 +112,6 @@ A real measurement has no answer key. Filling the field rather than dropping it 
 **Returns:**
 
 - `Populations`: The sample.
-
-**Returns:**
-
-- `Populations`: The sample at the new precision.
 
 ##### `require_truth() -> EventArray`
 

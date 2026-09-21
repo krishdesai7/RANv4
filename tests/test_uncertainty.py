@@ -453,6 +453,13 @@ def _write_cell(
     weights: np.ndarray,
     *,
     n_eval: int | None = None,
+    n_epochs: int = 100,
+    n_layers: int = 2,
+    hidden_units: int = 64,
+    n_disc_steps: int = 5,
+    lr_g: float = 3e-5,
+    lr_d: float = 1e-4,
+    lambda_dispersion: float = 0.015,
 ) -> None:
     b, s = spec.cell_of_index(index)
     design_dir.mkdir(parents=True, exist_ok=True)
@@ -474,6 +481,13 @@ def _write_cell(
                     "dataset": "jets",
                     "variables": ["m", "w"],
                     "gaussian_params": None,
+                    "hidden_units": hidden_units,
+                    "n_layers": n_layers,
+                    "n_epochs": n_epochs,
+                    "n_disc_steps": n_disc_steps,
+                    "lr_g": lr_g,
+                    "lr_d": lr_d,
+                    "lambda_dispersion": lambda_dispersion,
                     "mmd_test": 1e-4,
                 }
             )
@@ -527,6 +541,34 @@ class TestLoadCells:
         with pytest.raises(expected_exception=ValueError, match="not from one design"):
             _ = load_cells(tmp_path, spec)
 
+    def test_a_cell_trained_under_different_settings_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        """I-2's regression test: a sanctioned `--flag` override must leave a trace.
+
+        A hand-rerun of one failed cell at a different `n_epochs` than the
+        rest of the array must not be silently averaged into the
+        decomposition as if it were noise.
+        """
+        spec = DesignSpec(n_datasets=2, n_seeds=2)
+        for index in range(spec.n_cells):
+            _write_cell(tmp_path, spec, index, weights=np.ones(shape=4))
+        # Cell 3 was hand-rerun at a different setting than the rest.
+        _write_cell(tmp_path, spec, index=3, weights=np.ones(shape=4), n_epochs=250)
+
+        with pytest.raises(expected_exception=ValueError, match="n_epochs"):
+            _ = load_cells(tmp_path, spec)
+
+    def test_cells_agreeing_on_settings_load_cleanly(self, tmp_path: Path) -> None:
+        """The guard must not fire on an ordinary, uniformly-trained design."""
+        spec = DesignSpec(n_datasets=2, n_seeds=2)
+        for index in range(spec.n_cells):
+            _write_cell(tmp_path, spec, index, weights=np.ones(shape=4))
+
+        design: Design = load_cells(tmp_path, spec)
+
+        assert design.weights.shape == (2, 2, 4)
+
 
 class TestRunCell:
     """The wiring, with training stubbed out: what each cell is handed.
@@ -539,10 +581,10 @@ class TestRunCell:
 
     @staticmethod
     def _stub(monkeypatch: pytest.MonkeyPatch, seen: list[dict[str, Any]]) -> None:
-        import deconvolve.evaluate
-        import deconvolve.train
+        import deconvolve.evaluation.evaluate
+        import deconvolve.training.engine
         import deconvolve.uncertainty.design as design_module
-        from deconvolve.train import TrainResult
+        from deconvolve.training import TrainResult
 
         monkeypatch.setattr(
             target=design_module,
@@ -574,11 +616,13 @@ class TestRunCell:
                 mmd_test=1.5e-4,
             )
 
-        monkeypatch.setattr(target=deconvolve.train, name="train", value=fake_train)
         monkeypatch.setattr(
-            target=deconvolve.evaluate,
+            target=deconvolve.training.engine, name="train", value=fake_train
+        )
+        monkeypatch.setattr(
+            target=deconvolve.evaluation.evaluate,
             name="_get_weights",
-            value=lambda _g, z, **_kw: np.ones(shape=len(z), dtype=np.single),  # pyrefly: ignore[unknown-argument-type]
+            value=lambda _g, z_gen, **_kw: np.ones(shape=len(z_gen), dtype=np.single),  # pyrefly: ignore[unknown-argument-type]
         )
 
     def test_every_cell_holds_out_the_same_evaluation_events(

@@ -3,7 +3,7 @@
 This is the fail-fast check standing in front of any decision to bring OmniFold
 into this repository. The quarantine itself is settled -- a PEP 723 script run
 through `uv run --no-project` provisions Python 3.13 and TensorFlow in an
-interpreter that cannot see `deconvolve`, which is proven and cheap. What is *not*
+interpreter that cannot see `ran`, which is proven and cheap. What is *not*
 settled is whether the two processes can share one A100, and that question only
 has an answer on a machine with an A100 in it.
 
@@ -285,7 +285,7 @@ def _worker_status(row: dict[str, object]) -> str:
 def verdict(row: dict[str, object]) -> tuple[str, str]:
     status = _worker_status(row)
     return {
-        "ok": ("[green]PASS[/green]", "worker ran on the GPU"),
+        "ok": ("[green]PASS[/green]", "worker deconvolve on the GPU"),
         "oom": ("[red]FAIL[/red]", "worker could not get memory"),
         "cpu_fallback": (
             "[yellow]SILENT[/yellow]",
@@ -493,7 +493,7 @@ def main() -> None:
     # Set before any arm runs so it reaches the worker through both
     # subprocess layers, which inherit the environment.
     if args.preload_wheels:
-        os.environ["DECONVOLVE_PROBE_PRELOAD_WHEELS"] = "1"
+        os.environ["RAN_PROBE_PRELOAD_WHEELS"] = "1"
 
     by_name = {a.name: a for a in ARMS}
 

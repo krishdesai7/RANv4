@@ -60,8 +60,8 @@ def test_evaluation_records_metrics_artifact_completion(
 ) -> None:
     import keras
     import numpy as np
-    from deconvolve import evaluate
     from deconvolve.coretypes import ZXY, Events
+    from deconvolve.evaluation import evaluate
 
     run_dir: Path = tmp_path / "sample-run"
     run_dir.mkdir()
@@ -98,13 +98,13 @@ def test_evaluation_records_metrics_artifact_completion(
     )
     monkeypatch.setattr(evaluate, "render_metrics", lambda *_args, **_kwargs: None)
 
-    with caplog.at_level(logging.INFO, logger="deconvolve.evaluate"):
+    with caplog.at_level(logging.INFO, logger="deconvolve.evaluation.evaluate"):
         _ = evaluate.evaluate_run(run_dir)
 
     out_path: Path = run_dir / "artifacts" / "metrics.json"
     messages = [
         record.getMessage()
-        for record in _completion_records(caplog, "deconvolve.evaluate")
+        for record in _completion_records(caplog, "deconvolve.evaluation.evaluate")
     ]
     assert out_path.exists()
     assert any(

@@ -1,24 +1,24 @@
-# Deconvolve
+# RAN: Reweighting Adversarial Networks
 
-`deconvolve` is a library for training and evaluating reweighting adversarial networks: a generator that learns per-event weights, scored by a detector-level discriminator.
+`ran` is a library for training and evaluating reweighting adversarial networks (RANs).
 
-Importing anything under `deconvolve` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
+Importing anything under `ran` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
 
-`deconvolve` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`deconvolve.coretypes.constants`, with its annotation twin `EventArray` in :mod:`deconvolve.coretypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`deconvolve.models` follow from it.
+`ran` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`deconvolve.coretypes.constants`, with its annotation twin `EventArray` in :mod:`deconvolve.coretypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`deconvolve.training.models` follow from it.
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
-Import the submodule needed (`from deconvolve.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
+Import the submodule needed (`from deconvolve.workflows.train import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
 
-## module `evaluate`
+Only `cli.py` sits beside `__init__.py` and `__main__.py`; everything else lives in a subpackage by pipeline stage: `training/` (models, the fused loop, MMD), `evaluation/` (metrics and plots), `workflows/` (the orchestration behind `deconvolve train` and `deconvolve leakage-check`), `reporting/` (the LaTeX dossier and its template) and `instrumentation/` (timing and logging setup). Dependencies point one way: `workflows` imports `training`, `evaluation` and `baselines`, and none of those import `workflows`. Keep it that way — `workflows/train.py` and `workflows/leakage.py` are the orchestration layer precisely because they need both `training` and `evaluation`; putting either inside `training/` or `evaluation/` instead would make one of those packages import the other's sibling, closing a cycle. `workflows/__init__.py` re-exports `run` and `run_leakage_check` so `from deconvolve.workflows import run` works without knowing which submodule it lives in.
 
-Computes distance metrics on test sets for completed runs.
+## module `evaluation.evaluate`
 
-Computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and triangular discriminators, both before and after reweighting.
+Computes distance metrics on test sets for completed runs: per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and triangular discriminators, both before and after reweighting.
 
-**Every one of them runs on device.** The metrics were scipy and `np.histogram` in a Python loop over columns, which at the shipped 500k jet configuration was 63% of the `evaluate` phase and half of it Wasserstein alone. They are now `jnp`, vectorized across dimensions so one dispatch does every column, and the only thing that crosses back to the host is the handful of numbers per dimension they reduce to. Measured at 100k-vs-100k in 6D: 1.23s of metrics became ~0.28s of compute plus a one-time XLA compile, before any GPU.
+**Every one of them runs on device.** The `jnp` implementation is vectorized across dimensions, so one dispatch computes every column, and only the per-dimension reduced scalars cross back to the host. Measured at 100k-vs-100k in 6D: ~0.28s of compute plus a one-time XLA compile.
 
-Two things did _not_ change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move _toward_ float64 truth, because `np.histogram` accumulates in the weights' dtype and Deconvolve's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
+Scores stay float64. Only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
 
 Usage:
 
@@ -60,19 +60,19 @@ Load the dataset splits from the config.
 
 `(dim, n_bins + 1)` uniform edges spanning each dimension's combined range, built on the host with `np.linspace` so both histograms bin against exactly the same numbers.
 
-They are **float32 on purpose**. `JAX_ENABLE_X64=0` truncates a float64 array on its way into a traced function, so float64 edges would be re-rounded at the boundary and the bin a value lands in would stop matching the edges the host computed. Deciding the width in the dtype the comparison happens in is what keeps the two ends one function.
+They are **float32 on purpose**: `JAX_ENABLE_X64=0` truncates a float64 array on its way into a traced function, so float64 edges would be re-rounded at the boundary and the bin a value lands in would stop matching the edges the host computed.
 
 ### `_counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray`
 
 Weighted bin counts per column, `(dim, n_bins)`. `searchsorted(..., "right") - 1` reproduces `np.histogram`'s placement against explicit edges, and the clip is its closed last bin, where the maxima land.
 
-The weights are **centered before they are scattered** and the mean added back through the exact count. Scattering them raw sums ~200 magnitudes per bin in float32 --- which is what `np.histogram` did --- while centering leaves the scatter summing residuals, an order of magnitude smaller, and the integer count is exact in float32 out to 2\*\*24. The mean carries its own error and does not matter: it multiplies every bin of a column by the same factor, which `_normalize` divides straight back out.
+The weights are **centered before they are scattered** and the mean added back through the exact count. Scattering them raw sums ~200 magnitudes per bin in float32, while centering leaves the scatter summing residuals an order of magnitude smaller, and the integer count is exact in float32 out to 2\*\*24. The mean carries its own error and does not matter: it multiplies every bin of a column by the same factor, which `_normalize` divides straight back out.
 
 ### `_cdf_gap_integral(ref: JaxArray, comp: JaxArray, weights: JaxArray) -> JaxArray`
 
 $\int |F_{ref} - F_{comp}| \, dt$ per column: the 1D Wasserstein-1 distance, vectorized over columns so one dispatch does every dimension.
 
-The two CDFs are **never accumulated separately**. Each climbs to 1 while their difference stays at the order of the distance being measured, so subtracting them afterwards cancels away most of a float32 mantissa. Cumulatively summing the signed weights instead keeps the running value at the size of the answer, which makes the float32 error relative to it rather than to 1 --- and costs one scan instead of two.
+The two CDFs are **never accumulated separately**. Each climbs to 1 while their difference stays at the order of the distance being measured, so subtracting them afterwards cancels away most of a float32 mantissa. Cumulatively summing the signed weights instead keeps the running value at the size of the answer, which makes the float32 error relative to it rather than to 1, and costs one scan instead of two.
 
 ### `_wd_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> NDArray[np.double]`
 
@@ -80,7 +80,7 @@ The two CDFs are **never accumulated separately**. Each climbs to 1 while their 
 
 ### `_normalized_histograms(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> tuple[NDArray[np.double], NDArray[np.double]]`
 
-Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, which is what makes the divergence metrics comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
+Returns two $(dimensions, n_bins)$ arrays containing the $(p, q)$ probability histograms for each dimension of `ref`/`comp`. Both histograms share one binning per dimension, `n_bins` uniform bins over the combined range, so the divergence metrics are comparable across dimensions. `weights` reweights `comp` only, and an all-zero histogram is left unnormalized rather than divided by zero.
 
 **Arguments:**
 
@@ -107,13 +107,13 @@ where $p_i, q_i$ are histogram probability masses. The bin-width factor cancels 
 
 ### `class MetricSet(NamedTuple)`
 
-Every metric `metrics.json` records --- `wasserstein`, `jensenshannon`, `triangular` --- one entry per dimension. The field order is the order the keys are written in.
+Every metric `metrics.json` records -- `wasserstein`, `jensenshannon`, `triangular` -- one entry per dimension. The field order is the order the keys are written in.
 
 ### `_metrics_per_dim(ref: EventArray, comp: EventArray, weights: EventArray | JaxArray | None = None, n_bins: int = 100) -> MetricSet`
 
 All three metrics in one device pass, and the path `evaluate_run` takes.
 
-The two divergences read the **same** pair of histograms. Called through `_js_per_dim` and `_triangular_per_dim` they would each build their own --- two identical scatters over the full sample, for two reductions over `dim x n_bins` values. The single-metric helpers stay for the callers that want one number: `leakage`, the IBU baseline, and the benchmarks.
+The two divergences read the **same** pair of histograms, since `_js_per_dim` and `_triangular_per_dim` would each otherwise build their own -- two identical scatters over the full sample, for two reductions over `dim x n_bins` values. The single-metric helpers stay for the callers that want one number: `leakage`, the IBU baseline, and the benchmarks.
 
 ### `evaluate_run(run_dir: Path = RUN_DIR, force: bool = False) -> None`
 
@@ -128,17 +128,7 @@ Compute distance metrics for completed runs.
 
 - `None`
 
-## module `leakage`
-
-Quick leakage check: poison z_true and verify training is unaffected.
-
-Sets z_true to a silly value in one arm and compares against a clean arm; if any
-network can see z_true, the two diverge.
-
-Both arms must use the same `init_seed` or the comparison is meaningless: with
-random initialization the run-to-run spread swamps the effect being tested.
-
-## module `plotting`
+## module `evaluation.plotting`
 
 ### `plot_detector_level(test_dataset: ArrayDataset, g: keras.Model, save_path: Path = Path("plots/detector_level.pdf"), var_info: list[VarInfo] | None = None, ibu_weights: list[NDArray[np.double]] | None = None) -> None:`
 
@@ -172,22 +162,22 @@ Generate particle level plots.
 
 - `None`
 
-## :mod:`deconvolve.train`
+## :mod:`deconvolve.training.engine`
 
-Adversarial training loop for Deconvolve, on Keras 3 with the JAX backend, as a single fused XLA program.
+Adversarial training loop for RAN, on Keras 3 with the JAX backend, as a single fused XLA program.
 
 The min-max game needs two optimizers driven at different cadences against a shared loss, which does not fit `Model.fit`, so this module implements a hand-rolled loop. It follows the standard Keras 3 + JAX pattern: model state lives in JAX pytrees (:class:`TrainState`) for the duration of training, updates go through `stateless_call`/`stateless_apply`, and each step is a single jitted function. Values are written back into the Keras models at the end so the returned objects are ordinary, saveable `keras.Model`s.
 
-The training loop is not a Python loop over batches. The dataset is moved to device once (:mod:`deconvolve.data.device`), one epoch is a `lax.scan` over grouped batch indices, and the epoch loop with its early stopping is a `lax.while_loop`, so a whole run compiles to one program and the batch gathers fuse into the first `Dense`.
+The training loop is not a Python loop over batches: the dataset is moved to device once (:mod:`deconvolve.data.device`), one epoch is a `lax.scan` over grouped batch indices, and the epoch loop is a `lax.scan` with a fixed trip count, so a whole run compiles to one program and the batch gathers fuse into the first `Dense`. Every epoch's parameters are retained so a checkpoint can be selected on the host once the scan is done, by detector-level MMD against a validation subsample.
 
-The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace. `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX.
+The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace. `lax.scan` and `jax.random` are both native JAX.
 
 :func:`train(fused=False)` runs the very same epoch function from an ordinary Python `while`. It is still one XLA program per epoch, but it keeps breakpoints,
 readable tracebacks and host-side logging, which can be helpful for debugging when a run goes wrong.
 
 ### :data:`_HISTORY_KEYS`
 
-Every column is the weighted BCE on the same scale `_make_pass` negates `g_loss` back before recording it, so `train_g` is the BCE at the generator's batch rather than the objective g descends. What separates the columns is therefore _where_ the BCE was measured, and validation measures it in exactly one place: `eval_step` runs once per epoch and both networks are scored by that number. A "val_g" column could only be `val_d` again, two identical curves on `losses.pdf`.
+Every column is the weighted BCE on the same scale (`_make_pass` negates `g_loss` back before recording it, so `train_g` is the BCE at the generator's batch rather than the objective g descends). Validation measures the BCE in exactly one place: `eval_step` runs once per epoch and both networks are scored by that number.
 
 ### :class:`TrainResult(NamedTuple)`
 
@@ -210,10 +200,7 @@ Held outside the `keras.Model`s so jitted steps stay pure and no host/device syn
 
 What crosses an epoch boundary in the `lax.scan` over epochs. Everything else
 -- the per-epoch `(train_d, train_g, val_d)` row and the full `EpochParams`
--- is a `scan` output, not carried state, which is what lets selection move
-to the host: `train` picks the epoch minimizing detector-level MMD against a
-validation subsample once the scan is done, rather than tracking a "best"
-state inside the trace.
+-- is a `scan` output, not carried state.
 
 **Fields:**
 
@@ -228,7 +215,7 @@ Per-batch weights: fixed at 1 for nature, renormalized to count for MC.
 
 `raw_w` is the raw generator output for every event in the batch. Data events (y=1) are pinned to weight 1; MC events (y=0) are rescaled so their weights sum to the MC event count, preserving the per-class normalization.
 
-The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the result, so `g`'s output on data rows, which are `z_true`, cannot reach the loss or its gradient. That is what keeps `z_true` out of the model.
+The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the result, so `g`'s output on data rows, which are `z_true`, never reaches the loss or its gradient.
 
 **Arguments:**
 
@@ -242,12 +229,7 @@ The y=1 entries of `raw_w` are multiplied by (1 - y) = 0 in both the sum and the
 
 ### :func:`bce_sums(Float[Array | NDArray, " n"], Real[Array | NDArray, " n"], Float[Array | NDArray, " n"], Float[Array | NDArray, " n"]) -> tuple[Float[Array, ""], Float[Array, ""]]`
 
-Masked weighted BCE, unnormalized, paired with the count it divides by.
-
-Handing back both halves is what lets a scan accumulate across batches and
-divide once. Reduce with `jnp.sum(...) / n` rather than a mean: the float64
-hazard in `keras.ops.mean` is gone now that this is plain `jnp`, but the
-explicit form is what the guard test pins.
+Masked weighted BCE, unnormalized, paired with the count it divides by, so a scan can accumulate across batches and divide once with `jnp.sum(...) / n` rather than a mean.
 
 **Arguments:**
 
@@ -262,9 +244,7 @@ explicit form is what the guard test pins.
 
 ### :func:`weighted_bce(d_out, y, w)`
 
-Weighted binary cross-entropy.
-
-Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops.mean` picks a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error, which would silently undo the precision policy this project runs on. This module no longer touches `keras.ops`, but the explicit sum-and-divide is what the guard test pins, and anything reaching for `keras.ops` again needs to know. `ops.sum` is unaffected.
+Weighted binary cross-entropy, reduced with `jnp.sum(...) / n` rather than a mean -- `keras.ops.mean` is not used anywhere in this module, since for float64 input it picks a float32 compute dtype internally and returns a result carrying ~1e-8 relative error, which would silently undo the project's precision policy (see the top-level README's Precision section). `ops.sum` is unaffected.
 
 **Arguments:**
 
@@ -274,11 +254,7 @@ Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops
 
 **Returns:**
 
-- `Float[Array, ""]` The scalar loss. Declaring it scalar is what catches a dropped reduction.
-
-**Returns:**
-
-- The weighted binary cross-entropy loss.
+- `Float[Array, ""]` The scalar loss; the shape annotation catches a dropped reduction.
 
 ### :func:`_make_steps(DeconvolveModel, DeconvolveModel, StatelessOptimizer, StatelessOptimizer) -> tuple[TrainStep, TrainStep, EvalStep]`
 
@@ -346,7 +322,17 @@ running best inside the trace.
 
 - `TrainResult` The training result.
 
-## module `workflow`
+## module `workflows.leakage`
+
+Quick leakage check: poison z_true and verify training is unaffected.
+
+Sets z_true to a silly value in one arm and compares against a clean arm; if any
+network can see z_true, the two diverge.
+
+Both arms must use the same `init_seed` or the comparison is meaningless: with
+random initialization the run-to-run spread swamps the effect being tested.
+
+## module `workflows.train`
 
 ### def `_prepare_gaussian(config: Path | None, saved_config: GaussianConfig | None, batch_size: int, n_samples: int, data_seed: int) -> tuple[DatasetSplits, int, GaussianConfig]`
 
@@ -413,11 +399,10 @@ Main entry point.
 
 Point XLA's persistent cache at :data:`COMPILE_CACHE_DIR`.
 
-Compilation is the largest single time cost in a short run. `benchmarks/boundary.py` on an A100 measures 4.60s of compile time against 0.034s per epoch, so a 100-epoch run spends half its wall clock in XLA and only a third of it training. The cache keys on lowered HLO rather than on Python identity. Hence the fresh `jax.jit(lambda ...)` in :func:`_run` can use it regardless and it lives on disk, which is where it pays: an ensemble is N separate interpreters
-compiling the same architecture N times over.
+Compilation is the largest single time cost in a short run: `benchmarks/boundary.py` on an A100 measures 4.60s of compile time against 0.034s per epoch, so a 100-epoch run spends half its wall clock in XLA. The cache keys on lowered HLO rather than on Python identity, so the fresh `jax.jit(lambda ...)` in :func:`_run` hits it regardless. It lives on disk, so an ensemble of N interpreters compiling the same architecture pays the cost once instead of N times.
 
-It has two separate settings because JAX's default `min_compile_time_secs` of 1.0s leaves Deconvolve's cache _entirely empty_, because the run compiles a few dozen executables that total 4.6s and no single one of them clears a second. The threshold separates a populated cache from a silent no-op.
+It sets `min_compile_time_secs` to zero rather than leaving JAX's default of 1.0s, which would leave RAN's cache entirely empty: the run compiles a few dozen executables that total 4.6s and no single one of them clears a second.
 
 Whatever the caller configured wins, so `JAX_COMPILATION_CACHE_DIR`, or a `jax.config.update` before :func:`train` still overrides this, and an unwritable directory costs a warning from JAX rather than the run.
 
-The path is resolved before it is handed over. JAX opens the cache once and keeps the string, so the default's leading `.` would follow any later `chdir` and turn every write into a `FileNotFoundError`, which JAX also reports as a warning rather than an error, so the run would go on quietly recompiling. Resolving pins it to the directory the datasets came from.
+The path is resolved before it is handed over: JAX opens the cache once and keeps the string, so the default's leading `.` would follow any later `chdir` and turn every write into a `FileNotFoundError` -- which JAX also reports as a warning rather than an error, so the run would go on quietly recompiling. Resolving pins it to the directory the datasets came from.

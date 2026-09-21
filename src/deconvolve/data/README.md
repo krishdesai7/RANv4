@@ -50,7 +50,7 @@ The same events are described two ways, at opposite ends of the pipeline.
 
 `Populations` is the physics form: `mc` (an `Events` pair of generated particle level `mc.z` and simulated detector level `mc.x`, aligned per event), `data` (the measurement), and `truth` (the particle-level answer key). Sources produce it, and analysis consumes it. `truth` sits outside `mc` on purpose, so a function handed the simulation cannot reach the one array no network may see.
 
-`ZXY` is the transport form: an `Events` pair plus a per-event label, `y = 1` for nature and `y = 0` for MC. It is what gets shuffled, split, batched and trained on.
+`ZXY` is the transport form: an `Events` pair plus a per-event label, `y = 1` for nature and `y = 0` for MC. It gets shuffled, split, batched and trained on.
 
 Every dataset here is a closure test, so `truth` is always known; a real measurement is the case where it is not. `Populations.create(mc, data)` covers that by filling `truth` with `TRUTH_SENTINEL`, and `has_truth` distinguishes the two. The stand-in is a number (-2^15) and not NaN because `interleave` puts `truth` into the nature rows of `z`, which the generator forward-passes: `normalize_weights` discards those rows by multiplying by `1 - y = 0`, and that annihilates a number but not a NaN. Metrics computed against a sentinel `truth` are finite and meaningless, so the particle-level comparisons read the answer key through `require_truth()`, which returns it or refuses. `has_truth` is the same question without the exception.
 
@@ -64,9 +64,9 @@ Every dataset here is a closure test, so `truth` is always known; a real measure
 
 Draw the four Gaussian populations: `(z_true, z_gen, x_data, x_sim)`.
 
-Runs on the default device, and no longer pins itself to CPU. It used to, because JAX preallocates ~75% of a card on its first allocation and TensorFlow was there to collide with; with TensorFlow out of the build there is nothing on the card to protect. Sharing a node is still a real concern, but it is handled where it belongs — the launchers give each step exactly one visible GPU via `srun --gpus-per-task=1`, so a sibling run cannot have the card swallowed out from under it.
+Runs on the default device. Sharing a node is handled by the launchers, which give each step exactly one visible GPU via `srun --gpus-per-task=1`, so a sibling run cannot have the card swallowed out from under it.
 
-The draw pins its matmul precision to `HIGHEST`. Two dots produce this sample — the `@` against the Cholesky smear, and one inside `multivariate_normal(method="svd")` — and XLA runs both at TF32 on an A100 by default, which would make the sample a function of the hardware as well as of the config and the seed. Neither dot cancels, so TF32 costs only an honest ~5e-4 relative here rather than the unbounded error the same default caused in `deconvolve.mmd`; what the pin buys is that a `.npz` drawn on a login node and one drawn on a GPU node are the same sample. The cache key is otherwise a pure function of the physics config, so `_RNG_VERSION` carries `jax-v2` to keep a pre-pin file from being silently reused.
+The draw pins its matmul precision to `HIGHEST`. Two dots produce this sample — the `@` against the Cholesky smear, and one inside `multivariate_normal(method="svd")` — and XLA runs both at TF32 on an A100 by default, which would make the sample a function of the hardware as well as of the config and the seed. The pin makes a `.npz` drawn on a login node and one drawn on a GPU node the same sample. The cache key is otherwise a pure function of the physics config, so `_RNG_VERSION` carries `jax-v2` to keep a pre-pin file from being silently reused.
 
 No `check_valid` equivalent is needed: `parse_gaussian_config` has already asserted positive-definiteness with a Cholesky factorization.
 
@@ -111,7 +111,7 @@ Every split holds a view onto one shared pair of base arrays; slicing is done wi
 
 ### `class DeconvolveDataset`
 
-Dataset class for Deconvolve.
+Dataset class for RAN.
 
 #### Fields
 
@@ -283,7 +283,7 @@ Move a host `DatasetSplits` to device. The one H2D transfer.
 
 Split one pass over `n` events into `(groups, disc steps per group)`.
 
-`n_disc_steps` is clamped to the number of whole batches available. A split too small to fill one group still trains --- it becomes a single group with every batch in it, and one generator update --- which is what the host loop did when `step % n_disc_steps == 0` fired only at step 0.
+`n_disc_steps` is clamped to the number of whole batches available. A split too small to fill one group still trains --- it becomes a single group with every batch in it, and one generator update.
 
 **Arguments**:
 
@@ -343,7 +343,7 @@ The usual alternative is to nudge the denominator or the log argument by an epsi
 2. It depends on the dtype the raw arrays happen to arrive in. For example $10^{-50}$ (used in <span style="font-variant: small-caps;">OmniFold</span>) is below the smallest `float32` denormal, so if arrays were stored as `float32`, it would round away and hand back `NaN` for exactly the jets it was meant to protect.
 3. An epsilon scaled to the data, such as $10^{-12} \times \text{mean}(p_T^2)$ (used in <span style="font-variant: small-caps;">OmniFold</span>), is a _different_ epsilon for each of the four arrays, which puts the floor of $\ln\rho$ in a different place for nature than for MC. Several hundred jets per array sit on that floor and thousands more are compressed against it, so the discriminator gets handed a spike whose position differs between the classes for reasons that have nothing to do with physics. The four arrays are two samples that get compared to each other; an observable that means something slightly different in each is not a comparison.
 
-For $\beta = 1$ the jet width is $\tau_1$, so $\tau_{21} = \frac{\tau_2}{\tau_1}$. A jet of one constituent has neither: both vanish and the ratio is 0/0. Zero is what <span style="font-variant: small-caps;">OmniFold</span>'s published results assign it and so is what this code reproduces, but it is a convention rather than a measurement. Zero is also the limit a cleanly two-pronged jet approaches, which a one-constituent jet is obviously not.
+For $\beta = 1$ the jet width is $\tau_1$, so $\tau_{21} = \frac{\tau_2}{\tau_1}$. A jet of one constituent has neither: both vanish and the ratio is 0/0. This code assigns zero, matching <span style="font-variant: small-caps;">OmniFold</span>'s published convention, though it is a convention rather than a measurement -- and not obviously the right limit, since zero is what a cleanly two-pronged jet approaches, which a one-constituent jet is not.
 
 ### `deconvolve.data.download::_get_var`
 
@@ -378,7 +378,7 @@ Fetch every shard for one generator and concatenate the keys needed. Appends eac
 
 ## Jets
 
-Load jet substructure data for Deconvolve training.
+Load jet substructure data for RAN training.
 
 Checks `CACHE_DIR` (`.cache/`, or wherever `DECONVOLVE_CACHE_DIR` points) for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `DeconvolveDataset`.
 
@@ -395,7 +395,7 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 - `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files. Defaults to `.cache`, relocatable with `DECONVOLVE_CACHE_DIR`.
 - `variables: Sequence[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use, **in column order**.
 
-  The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, that order is what `_save_run` records in `config.json`, and it is what a later `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
+  The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, `_save_run` records that order in `config.json`, and a later `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce it to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
 
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
   There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline.

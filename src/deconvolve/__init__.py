@@ -1,11 +1,32 @@
+# pyrefly: ignore-errors[unused-call-result]
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 
-os.environ.setdefault(key="KERAS_BACKEND", value="jax")  # pyrefly: ignore[unused-call-result]
-os.environ.setdefault(key="JAX_ENABLE_X64", value="0")  # pyrefly: ignore[unused-call-result]
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Final
 
-from .cli import app as app
-from .cli import configure as configure
-from .cli import evaluate_command as evaluate_command
-from .cli import ibu_command as ibu_command
-from .cli import leakage_check_command as leakage_check_command
-from .cli import train_command as train_command
+os.environ.setdefault(key="KERAS_BACKEND", value="jax")
+os.environ.setdefault(key="JAX_ENABLE_X64", value="0")
+
+from . import cli
+from .cli import (
+    app,
+    configure,
+    evaluate_command,
+    ibu_command,
+    leakage_check_command,
+    train_command,
+)
+
+__all__: Final[Sequence[str]] = (
+    "app",
+    "cli",
+    "configure",
+    "evaluate_command",
+    "ibu_command",
+    "leakage_check_command",
+    "train_command",
+)

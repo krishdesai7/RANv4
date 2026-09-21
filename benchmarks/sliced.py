@@ -1,7 +1,8 @@
 """Are the per-axis metrics missing joint structure?
 
-Every number in `deconvolve.evaluate` is computed one coordinate axis at a time --
-`_wd_per_dim`, `_js_per_dim`, `_triangular_per_dim` all loop over columns. That
+Every number in `deconvolve.evaluation.evaluate` is computed one coordinate
+axis at a time -- `_wd_per_dim`, `_js_per_dim`, `_triangular_per_dim` all
+loop over columns. That
 makes the whole metric suite blind to correlation by construction: two
 distributions with identical marginals and different joint structure score
 identically on all of it. A reweighting that fixes every marginal and leaves
@@ -13,12 +14,12 @@ Axis-aligned metrics are the special case where the directions are the basis
 vectors; drawing them uniformly on the sphere is what makes the metric see the
 off-diagonal structure.
 
-**Weighted, because Deconvolve emits weights rather than events.** The textbook
+**Weighted, because RAN emits weights rather than events.** The textbook
 `mean(|sort(x) - sort(y)|)` is the equal-size uniform-weight case. Using it
 here would mean discarding `w` -- measuring the wrong distribution -- or
 resampling events to represent it, which injects sampling noise into the
 quantity being measured. `w1_weighted` is the same estimator `scipy` computes
-and `deconvolve.evaluate` already relies on, vectorised over projections.
+and `deconvolve.evaluation.evaluate` already relies on, vectorised over projections.
 
 **Standardised against the reference.** Directions are drawn on the sphere, so
 the axes have to be commensurable; without it whichever observable carries the
@@ -59,7 +60,7 @@ import numpy as np
 from deconvolve.coretypes import Split, artifacts_dir
 from deconvolve.data import DeconvolveDataset, load_jet_dataset
 from deconvolve.data.config import gaussian_config_from_run_config
-from deconvolve.logging_config import configure_logging
+from deconvolve.instrumentation.logging_config import configure_logging
 from rich.console import Console
 from rich.table import Table
 
@@ -69,7 +70,7 @@ if TYPE_CHECKING:
     from deconvolve.coretypes import DatasetSplits, Populations
     from numpy.typing import NDArray
 
-logger = logging.getLogger("ran.sliced")
+logger: logging.Logger = logging.getLogger("deconvolve.sliced")
 
 
 def w1_weighted(

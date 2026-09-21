@@ -13,15 +13,13 @@ from beartype import beartype
 from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
-from deconvolve.data.device import EvalSplit
-
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time
-from .coretypes import COMPILE_CACHE_DIR, Variables, artifacts_dir
-from .data.device import DeviceSplits, gather, train_indices
+from ..coretypes import COMPILE_CACHE_DIR, Variables, artifacts_dir
+from ..data import DeviceSplits, EvalSplit, gather, train_indices
+from ..instrumentation import is_enabled, phase
 from .mmd import bandwidths, build_cache, mmd_curve, subsample_indices, weighted_mmd
 from .models import build_discriminator, build_generator
-from .timing import is_enabled, phase
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -34,7 +32,7 @@ if TYPE_CHECKING:
     from jaxtyping import PRNGKeyArray
     from numpy.typing import NDArray
 
-    from .coretypes import (
+    from ..coretypes import (
         ZXY,
         DatasetSplits,
         DeconvolveModel,
@@ -46,28 +44,24 @@ if TYPE_CHECKING:
         StatelessOptimizer,
         TrainStep,
     )
-    from .data.device import EvalSplit, TrainSplit
-    from .mmd import MMDCache
+    from ..data import TrainSplit
+    from . import MMDCache
 
 
 logger: Logger = logging.getLogger(name=__name__)
 
 if keras.backend.backend() != "jax":
-    # Importing `keras` before `deconvolve` wins the race for the backend, and the
+    # Importing `keras` before `ran` wins the race for the backend, and the
     # jitted steps below fail deep inside a trace.
     raise RuntimeError(
-        f"deconvolve.train requires the JAX backend, got {keras.backend.backend()!r}. "
-        "Import `deconvolve` (or any deconvolve.* module) before `keras`, or set "
+        "deconvolve.training.engine requires the JAX backend, got "
+        f"{keras.backend.backend()!r}. "
+        "Import `ran` (or any deconvolve.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )
 
 EPS: Final[float] = keras.config.epsilon()
 _HISTORY_KEYS: Final[tuple[str, str, str]] = ("train_d", "train_g", "val_d")
-
-# The min-max equilibrium: `d` at chance, so the reweighted distributions are
-# indistinguishable to it. No longer what selection scores against -- kept for
-# the test that shows the old BCE criterion disagrees with MMD selection.
-LOG2: Final[float] = np.log(2.0)
 
 # Fixed subsample size for the detector-level MMD comparison selection reads.
 # The unbiased estimator has a resolution floor around 5e-4 in MMD^2, measured
@@ -104,8 +98,8 @@ class TrainResult(NamedTuple):
     # of where selection happened to land. Defaulted so `TrainResult` stays
     # constructible from a stub.
     best_epoch: int = -1
-    # Every epoch's weights, stacked -- what makes host-side selection
-    # possible at all.
+    # Every epoch's weights, stacked, so host-side selection has something
+    # to select from.
     params: EpochParams = EpochParams(
         g_trainable=[], g_non_trainable=[], d_trainable=[], d_non_trainable=[]
     )
@@ -136,8 +130,8 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
 
     Without this, `EpochParams` dies with the process that produced it and any
     question about an epoch other than the selected one costs a full retrain.
-    It is what makes a *different* selection criterion a re-read rather than a
-    rerun -- which is the whole reason `scan` emits the stack.
+    A different selection criterion then becomes a re-read rather than a
+    rerun, which is why `scan` emits the stack.
 
     ~27 MB for 100 epochs of both networks at 3x128, uncompressed for the same
     reason the dataset caches are: these are incompressible floats.
@@ -148,7 +142,7 @@ def save_params(run_dir: Path, params: EpochParams, /) -> Path:
         for i, a in enumerate(iterable=arrays)
     }
     path: Path = artifacts_dir(run_dir) / PARAMS_FILE
-    # Same unpack-into-savez suppression `workflow._save_run` carries: a
+    # Same unpack-into-savez suppression `workflows.train._save_run` carries: a
     # str-keyed dict could in principle hold "allow_pickle", which is declared
     # bool. These keys are all `field:index`, so it cannot.
     np.savez(file=path, **flat)  # ty:ignore[invalid-argument-type]
@@ -216,10 +210,10 @@ def weight_dispersion(
 
     The variance of the normalised MC weights. It is the natural regulariser
     here because it has a **target** rather than being a free dial:
-    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against Deconvolve's
-    73.3%, so Deconvolve's weights are more dispersed than the truth's. For weights of
+    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against RAN's
+    73.3%, so RAN's weights are more dispersed than the truth's. For weights of
     mean 1 the identity is `ESS/n = 1 / (1 + Var(w))`, putting the oracle at
-    0.249 and Deconvolve at 0.364 — a coefficient can be tuned to close that gap.
+    0.249 and RAN at 0.364 — a coefficient can be tuned to close that gap.
 
     Nature's rows are excluded, not merely down-weighted: `normalize_weights`
     pins them to exactly 1 and no gradient reaches `g` through them, so
@@ -334,7 +328,7 @@ def _make_steps(
         )
         # g maximizes the BCE that d minimizes, so its loss is the negation.
         adversarial: Float[Array, ""] = -weighted_bce(
-            jnp.squeeze(d_out, axis=-1), y, w, mask
+            jnp.squeeze(a=d_out, axis=-1), y, w, mask
         )
         # The penalty steers the gradient but is kept out of the reported
         # number: CLAUDE.md's Training Loop documents the history's three
@@ -458,8 +452,7 @@ def _make_pass(
         state: TrainState, group_idx: Int[Array, "s b"]
     ) -> tuple[TrainState, tuple[Float[Array, " s"], Float[Array, ""]]]:
         state, d_losses = lax.scan(f=_disc_body, init=state, xs=group_idx)
-        # The generator updates once per group, on the group's first batch --
-        # what the host loop used to write as `step % n_disc_steps == 0`.
+        # The generator updates once per group, on the group's first batch.
         z, x, y = gather(train, group_idx[0])
         state, g_loss = gen_step(state, z, x, y, jnp.ones_like(a=y))
         return state, (d_losses, -g_loss)
@@ -518,8 +511,8 @@ def _make_epoch(
     """Build the pure ``(RunCarry, epoch) -> (RunCarry, outputs)`` scan body.
 
     Nothing about model quality is decided here. The loop trains, records, and
-    emits; selection is a host-side read of what it emitted, which is what
-    keeps `z_true` out of the traced program entirely.
+    emits; selection is a host-side read of what it emitted, keeping `z_true`
+    out of the traced program entirely.
     """
 
     def _log(
@@ -544,11 +537,11 @@ def _make_epoch(
         state, train_d, train_g = one_pass(carry.state, subkey)
         val_d: Float[Array, ""] = evaluate(state, data.val)
         lax.cond(
-            (epoch_idx % log_every) == 0,
-            lambda: jax.debug.callback(
+            pred=(epoch_idx % log_every) == 0,
+            true_fun=lambda: jax.debug.callback(
                 _log, epoch_idx, train_d, train_g, val_d, ordered=True
             ),
-            lambda: None,
+            false_fun=lambda: None,
         )
         row: Float[Array, " metrics"] = jnp.stack(arrays=[train_d, train_g, val_d])
         params = EpochParams(
@@ -598,10 +591,10 @@ def _run(
         if is_enabled():
             # Ahead-of-time, so the timer can see where compile ends and
             # execution begins. `lower().compile()` then calling the compiled
-            # object is what `run(carry, steps)` does internally, persistent
-            # cache included -- it is the same work, split at a boundary an
-            # ordinary call does not expose. Gated, so the default path stays
-            # the single call `TestFusion` pins.
+            # object does the same work `run(carry, steps)` does internally,
+            # persistent cache included, split at a boundary an ordinary call
+            # does not expose. Gated, so the default path stays the single
+            # call `TestFusion` pins.
             with phase("compile") as timer:
                 compiled: Compiled = timer.block(run.lower(carry, steps).compile())
             with phase("epochs") as timer:
@@ -684,7 +677,7 @@ def _weights_per_epoch(
 
     n_epochs: int = params.g_trainable[0].shape[0]
     return jnp.stack(
-        [
+        arrays=[
             one(
                 [leaf[i] for leaf in params.g_trainable],
                 [leaf[i] for leaf in params.g_non_trainable],

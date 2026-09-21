@@ -81,9 +81,9 @@ def squared_distances(
 ) -> Float[Array, "n m"]:
     """Pairwise squared distances via expansion, never an (n, m, d) tensor."""
     return (
-        jnp.sum(a**2, axis=1)[:, None]
-        + jnp.sum(b**2, axis=1)[None, :]
-        - 2.0 * jnp.matmul(a, b.T, precision=_PRECISION)
+        jnp.sum(a=a**2, axis=1)[:, None]
+        + jnp.sum(a=b**2, axis=1)[None, :]
+        - 2.0 * jnp.matmul(a, b=b.T, precision=_PRECISION)
     )
 
 
@@ -106,7 +106,9 @@ def bandwidths(
 
 def subsample_indices(seed: int, n: int, m: int, /) -> NDArray[np.intp]:
     """A fixed, reproducible draw of at most `m` of `n` rows, without replacement."""
-    return np.random.default_rng(seed).permutation(n)[: min(m, n)].astype(np.intp)
+    return (
+        np.random.default_rng(seed).permutation(x=n)[: min(m, n)].astype(dtype=np.intp)
+    )
 
 
 def _kernel(
@@ -133,13 +135,13 @@ def build_cache(
     k_xx: Float[Array, "n n"] = _kernel(x_data, x_data, sigmas)
     # The standard unbiased U-statistic: the diagonal is a self-comparison and
     # carries no information about the distribution.
-    term_xx: Float[Array, ""] = (jnp.sum(k_xx) - jnp.trace(k_xx)) / (n * (n - 1))
+    term_xx: Float[Array, ""] = (jnp.sum(a=k_xx) - jnp.trace(a=k_xx)) / (n * (n - 1))
     del k_xx
     k_yy: Float[Array, "m m"] = _kernel(y_mc, y_mc, sigmas)
     return MMDCache(
         k_yy=k_yy,
-        v_xy=jnp.mean(_kernel(x_data, y_mc, sigmas), axis=0),
-        diag_yy=cast("Array", jnp.diagonal(k_yy)),
+        v_xy=jnp.mean(a=_kernel(x_data, y_mc, sigmas), axis=0),
+        diag_yy=cast(typ="Array", val=jnp.diagonal(k_yy)),
         term_xx=term_xx,
     )
 
@@ -159,19 +161,21 @@ def weighted_mmd(
     maximized at a simplex vertex, concentration is a thing to *measure*, not
     to mix into the number being minimized.
     """
-    w: Float[Array, " m"] = raw_w / jnp.sum(raw_w)
-    sum_w_sq: Float[Array, ""] = jnp.sum(w**2)
+    w: Float[Array, " m"] = raw_w / jnp.sum(a=raw_w)
+    sum_w_sq: Float[Array, ""] = jnp.sum(a=w**2)
     denom: Float[Array, ""] = 1.0 - sum_w_sq
 
     # Double `where`: the guarded branch must not be evaluated at denom = 0,
     # because jnp.where computes both sides and a NaN would propagate.
     safe: Float[Array, ""] = jnp.where(denom > _MIN_DENOM, denom, 1.0)
-    k_w: Float[Array, " m"] = jnp.matmul(cache.k_yy, w, precision=_PRECISION)
+    k_w: Float[Array, " m"] = jnp.matmul(a=cache.k_yy, b=w, precision=_PRECISION)
     term_yy: Float[Array, ""] = (
-        jnp.matmul(w, k_w, precision=_PRECISION) - jnp.sum(w**2 * cache.diag_yy)
+        jnp.matmul(a=w, b=k_w, precision=_PRECISION) - jnp.sum(a=w**2 * cache.diag_yy)
     ) / safe
     mmd2: Float[Array, ""] = (
-        cache.term_xx + term_yy - 2.0 * jnp.matmul(cache.v_xy, w, precision=_PRECISION)
+        cache.term_xx
+        + term_yy
+        - 2.0 * jnp.matmul(a=cache.v_xy, b=w, precision=_PRECISION)
     )
     return jnp.where(denom > _MIN_DENOM, mmd2, jnp.inf), 1.0 / sum_w_sq
 
@@ -181,4 +185,4 @@ def mmd_curve(
 ) -> tuple[NDArray[np.double], NDArray[np.double]]:
     """`weighted_mmd` over a stack of per-epoch weight vectors."""
     mmds, esss = jax.vmap(weighted_mmd, in_axes=(None, 0))(cache, raw_w)
-    return np.asarray(mmds, dtype=np.double), np.asarray(esss, dtype=np.double)
+    return np.asarray(a=mmds, dtype=np.double), np.asarray(esss, dtype=np.double)

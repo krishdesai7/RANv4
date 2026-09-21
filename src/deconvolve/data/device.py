@@ -72,8 +72,8 @@ class EvalSplit:
         dim: int = data.z.shape[1]
 
         def _pad2d(arr: EventArray) -> Float[Array, "nb bs d"]:
-            # Edge padding repeats a real row; `mask` is what keeps it out of
-            # every sum, so the value only has to be finite.
+            # Edge padding repeats a real row; `mask` keeps it out of every
+            # sum, so the value only has to be finite.
             wide: Float[Array, "nb bs d"] = jnp.pad(
                 array=jnp.asarray(a=arr, dtype=EVENT_DTYPE),
                 pad_width=((0, pad), (0, 0)),

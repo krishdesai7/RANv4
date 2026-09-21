@@ -14,8 +14,8 @@ from ..coretypes import (
     VariableOutcome,
     artifacts_dir,
 )
-from ..evaluate import apply_to_runs, render_metrics
-from ..train import EPS
+from ..evaluation import apply_to_runs, render_metrics
+from ..training import EPS
 from ._shared import (
     evaluate_dimension,
     load_populations,
@@ -64,7 +64,7 @@ def _assign_bins(values: EventArray, edges: EventArray, /) -> NDArray[np.intp]:
         raise ValueError("bin edges must be a strictly increasing 1D array")
     n_bins: int = edges.size - 1
     return (
-        np.clip(np.digitize(x=values, bins=edges), a_min=1, a_max=n_bins) - 1
+        np.clip(a=np.digitize(x=values, bins=edges), a_min=1, a_max=n_bins) - 1
     ).astype(dtype=np.intp, copy=False)
 
 
@@ -90,9 +90,7 @@ def _unfolded_to_bin_weights(unfolded: EventArray, prior: EventArray) -> EventAr
         raise ValueError("unfolded and prior must be finite")
     if np.any(a=unfolded < 0) or np.any(a=prior < 0):
         raise ValueError("unfolded and prior must be nonnegative")
-    zero_prior_mass: NDArray[np.bool_] = cast(
-        "NDArray[np.bool_]", (prior == 0) & (unfolded > EPS)
-    )
+    zero_prior_mass: NDArray[np.bool] = (prior == 0) & (unfolded > EPS)
     if np.any(a=zero_prior_mass):
         raise ValueError("unfolded mass in a zero-prior bin")
 
@@ -173,9 +171,7 @@ def _next_pure_edge(
         where=n_truth != 0,
     )
 
-    resolved: NDArray[np.bool_] = cast(
-        "NDArray[np.bool_]", (n_truth != 0) & (purity > purity_threshold)
-    )
+    resolved: NDArray[np.bool] = (n_truth != 0) & (purity > purity_threshold)
     qualifying: NDArray[np.intp] = np.flatnonzero(a=resolved)
     if qualifying.size == 0:
         return None
@@ -199,7 +195,6 @@ def _purity_bins(
     if max_bins <= 0:
         raise ValueError("max_bins must be positive")
 
-    # One-time preprocessing.
     gen_sorted: EventArray = np.sort(a=gen)
 
     lower: EventArray = np.minimum(gen, sim)
@@ -261,9 +256,7 @@ def _ibu(
 
     for _ in range(n_iterations):
         marginal: EventArray = response.T @ posterior
-        unsupported: NDArray[np.bool_] = cast(
-            "NDArray[np.bool_]", (marginal == 0) & (data_hist != 0)
-        )
+        unsupported: NDArray[np.bool] = (marginal == 0) & (data_hist != 0)
         if strict and np.any(a=unsupported):
             raise ValueError(
                 "Observed data has zero support under the response and prior"
@@ -384,10 +377,8 @@ def _run_and_evaluate(
             weights=test_weights,
         )
 
-    # Every detector entry, then every particle entry -- the order
-    # `evaluate.evaluate_run` writes. Two files in the same nominal format with
-    # different key orders is the shape of bug that surfaces the first time
-    # someone zips them positionally.
+    # Every detector entry, then every particle entry, matching the key order
+    # `evaluation.evaluate.evaluate_run` writes to metrics.json.
     metrics: dict[str, MetricRecord] = detector | particle
 
     return IBUResult(
@@ -408,8 +399,8 @@ def evaluate_single(
 
     The cache hit requires both `metrics_ibu.json` and `ibu_outcomes.json` to
     exist -- a directory holding only the former is an incomplete result (an
-    older run, or one interrupted between the two writes), and Task 12 needs
-    the outcomes file to mark variables IBU refused to unfold. Missing either
+    older run, or one interrupted between the two writes), and the outcomes
+    file is needed to mark variables IBU refused to unfold. Missing either
     file is treated as a cache miss and recomputes both.
     """
     out_path: Path = artifacts_dir(run_dir) / "metrics_ibu.json"
@@ -417,7 +408,9 @@ def evaluate_single(
 
     if out_path.exists() and outcomes_path.exists() and not force:
         logger.info("%s: metrics_ibu.json exists, skipping (use --force)", run_dir.name)
-        return cast("dict[str, MetricRecord]", json.loads(s=out_path.read_text()))
+        return cast(
+            typ="dict[str, MetricRecord]", val=json.loads(s=out_path.read_text())
+        )
 
     raw_config: object = json.loads(s=(run_dir / "config.json").read_text())
     config: RunConfig = parse_run_config(raw_config)
@@ -450,9 +443,7 @@ def evaluate_single(
 
     weights_path: Path = artifacts_dir(run_dir) / "ibu_weights.npz"
     np.savez(
-        weights_path,
-        # savez is `savez(file, *args, allow_pickle:bool=True, **kwds)`. The keys are
-        # built by f-string, so their type is plain `str`.
+        file=weights_path,
         **{
             f"weights_{i}": weights for i, weights in enumerate(iterable=result.weights)
         },  # ty: ignore[invalid-argument-type]

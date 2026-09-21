@@ -15,7 +15,7 @@ from ..coretypes import (
     Events,
     Populations,
 )
-from ..timing import note
+from ..instrumentation import note
 from .datasets import DeconvolveDataset
 from .download import download_jet_data
 
@@ -66,19 +66,17 @@ def load_jet_dataset(
     """Build jet splits with column `i` taken from `variables[i]`.
 
     `variables` is a `Sequence` and the order is load-bearing: it is the column
-    order of every array downstream, it is what `_save_run` records, and it is
-    what a later `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce
-    exactly to label those columns --- or to feed a trained generator its own
-    features.
+    order of every array downstream, `_save_run` records it, and a later
+    `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce it exactly
+    to label those columns --- or to feed a trained generator its own features.
     Passing a `set` or `frozenset` here is a bug, not a convenience.
     """
     _reject_unordered(variables)
-    # The npz caches on disk are float64, which is what the Zenodo release ships
-    # and what the standardization statistics are computed in. Narrowing happens
+    # The npz caches on disk are float64 (what the Zenodo release ships, and
+    # what the standardization statistics are computed in). Narrowing happens
     # once here, on the way into the pipeline.
     scalar: np.dtype[np.single] = np.dtype(EVENT_DTYPE)
 
-    # Check cache, download if needed
     missing: list[str] = [
         v for v in variables if not (cache_dir / f"{CACHE_FILENAMES[v]}.npz").exists()
     ]
@@ -91,26 +89,25 @@ def load_jet_dataset(
 
     n_features: int = len(variables)
 
-    # Check available samples
     with np.load(file=cache_dir / f"{CACHE_FILENAMES[variables[0]]}.npz") as f:
         n_avail: int = min(
-            len(cast("NDArray[Any]", f["z_true"])),
-            len(cast("NDArray[Any]", f["z_gen"])),
+            len(cast(typ="NDArray[Any]", val=f["z_true"])),
+            len(cast(typ="NDArray[Any]", val=f["z_gen"])),
         )
     if n_samples > n_avail:
         raise ValueError(f"Requested {n_samples} samples but only {n_avail} available")
 
-    # Initialize arrays
     z_true: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     x_data: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     z_gen: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
     x_sim: EventArray = np.empty(shape=(n_samples, n_features), dtype=scalar)
 
-    # Load, subsample, and standardize each variable
     std_params: dict[str, tuple[np.single, np.single]] = {}
     for i, var in enumerate(iterable=variables):
         with np.load(file=cache_dir / f"{CACHE_FILENAMES[var]}.npz") as f:
-            col: Mapping[str, NDArray[Any]] = cast("Mapping[str, NDArray[Any]]", f)
+            col: Mapping[str, NDArray[Any]] = cast(
+                typ="Mapping[str, NDArray[Any]]", val=f
+            )
             z_true[:, i] = col["z_true"][:n_samples]
             x_data[:, i] = col["x_data"][:n_samples]
             z_gen[:, i] = col["z_gen"][:n_samples]

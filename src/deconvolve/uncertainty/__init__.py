@@ -1,19 +1,60 @@
-from .design import Design as Design
-from .design import DesignSpec as DesignSpec
-from .design import EvaluationSet as EvaluationSet
-from .design import base_populations as base_populations
-from .design import bootstrap as bootstrap
-from .design import cell_path as cell_path
-from .design import load_cells as load_cells
-from .design import reserve_evaluation_set as reserve_evaluation_set
-from .design import run_cell as run_cell
-from .report import collect as collect
-from .report import multinomial_off_diagonal as multinomial_off_diagonal
-from .variance import Covariances as Covariances
-from .variance import VarianceComponents as VarianceComponents
-from .variance import binned_spectra as binned_spectra
-from .variance import component_covariances as component_covariances
-from .variance import correlation as correlation
-from .variance import decompose as decompose
-from .variance import quantile_edges as quantile_edges
-from .variance import weighted_means as weighted_means
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from . import design, report, variance
+from .design import (
+    Design,
+    DesignSpec,
+    EvaluationSet,
+    base_populations,
+    bootstrap,
+    cell_path,
+    freeze_design,
+    load_cells,
+    load_frozen,
+    reserve_evaluation_set,
+    run_cell,
+)
+from .report import collect, multinomial_off_diagonal
+from .variance import (
+    Covariances,
+    VarianceComponents,
+    binned_spectra,
+    component_covariances,
+    correlation,
+    decompose,
+    quantile_edges,
+    weighted_means,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Final
+
+__all__: Final[Sequence[str]] = (
+    "Covariances",
+    "Design",
+    "DesignSpec",
+    "EvaluationSet",
+    "VarianceComponents",
+    "base_populations",
+    "binned_spectra",
+    "bootstrap",
+    "cell_path",
+    "collect",
+    "component_covariances",
+    "correlation",
+    "decompose",
+    "design",
+    "freeze_design",
+    "load_cells",
+    "load_frozen",
+    "multinomial_off_diagonal",
+    "quantile_edges",
+    "report",
+    "reserve_evaluation_set",
+    "run_cell",
+    "variance",
+    "weighted_means",
+)

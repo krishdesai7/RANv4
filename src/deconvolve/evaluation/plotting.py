@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
@@ -13,7 +12,8 @@ from matplotlib.figure import Figure
 from matplotlib.font_manager import fontManager
 from matplotlib.ticker import MaxNLocator
 
-from .coretypes import (
+from ..coretypes import (
+    LOG2,
     PANEL_COLUMNS,
     PANEL_WIDTH_INCHES,
     PANELS_PER_PAGE,
@@ -31,8 +31,8 @@ if TYPE_CHECKING:
     from matplotlib.patches import Polygon
     from numpy.typing import NDArray
 
-    from .coretypes import DeconvolveModel, EventArray, Populations, VarInfo
-    from .data import ArrayDataset
+    from ..coretypes import DeconvolveModel, EventArray, Populations, VarInfo
+    from ..data import ArrayDataset
 
 type AxesHist = tuple[
     NDArray[np.double],
@@ -48,6 +48,12 @@ if "Cochineal" in available_fonts:
     mpl.rcParams["font.serif"] = ["Cochineal"]
 mpl.rcParams["font.size"] = 18
 mpl.rcParams["text.usetex"] = False
+# TrueType rather than matplotlib's default Type 3. Both are vector, but Type 3
+# embeds glyphs as bare charprocs with no dependable encoding, so text in the
+# saved PDF cannot be searched, copied or re-edited as text -- and arXiv and
+# several publishers reject it outright. Read at save time, so this one setting
+# covers `_save_fig` and `_save_pages` alike.
+mpl.rcParams["pdf.fonttype"] = 42
 mpl.rcParams["axes.grid"] = True
 mpl.rcParams["grid.color"] = "0.85"
 mpl.rcParams["grid.linewidth"] = 0.5
@@ -57,25 +63,24 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 
 
 # One place for the figure's visual hierarchy, rather than seven literals
-# scattered through `_hist_ratio_panel`. Deconvolve's step line used to be black at
-# alpha 0.35 while IBU's ratio line was at 0.75 -- the baseline drawn twice as
-# prominently as the method being showcased, on the same panel.
+# scattered through `_hist_ratio_panel`: RAN's curve must read as the method
+# under test, not a baseline drawn at equal or greater prominence.
 COLOR_NATURE: Final[str] = "C0"  # Data / Truth
 COLOR_MC: Final[str] = "C1"  # Sim / Gen
 COLOR_IBU: Final[str] = "green"
 COLOR_OMNIFOLD: Final[str] = "#E31A1C"  # crimson; the third baseline curve
-COLOR_DECONVOLVE: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
+COLOR_RAN: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
 
 ALPHA_FILL: Final[float] = 0.35  # the two filled background histograms
 ALPHA_IBU: Final[float] = 0.75
 ALPHA_OMNIFOLD: Final[float] = 0.75
-ALPHA_DECONVOLVE: Final[float] = 0.90
+ALPHA_RAN: Final[float] = 0.90
 
-# Paint order, which is not legend order: baselines are created after Deconvolve so
+# Paint order, which is not legend order: baselines are created after RAN so
 # they read last in the legend, but must not paint over it. Matplotlib's
 # default for lines is 2.
 Z_BASELINE: Final[int] = 2
-Z_DECONVOLVE: Final[int] = 3
+Z_RAN: Final[int] = 3
 
 
 # `weighted_mmd` is the unbiased U-statistic estimator, which is negative
@@ -96,8 +101,6 @@ SELECTION_MMD_LINTHRESH: Final[float] = 5e-4
 # this is a legibility aid, not a smoothing of the reported criterion.
 SELECTION_SMOOTHING_WINDOW: Final[int] = 5
 
-
-LN2: Final[float] = math.log(2)
 # The equilibrium band. Every series a converged run produces sits within a
 # fraction of a percent of `ln 2`, and autoscaling that band to the height of
 # the axes makes a 0.4% drift look like a divergence. Fixed limits also make
@@ -141,16 +144,14 @@ class _PanelOverlay(NamedTuple):
 class BaselineOverlay(NamedTuple):
     """A comparison baseline's weights, and how its curve is drawn.
 
-    This replaced a bare `ibu_weights: list[EventArray] | None` that was
-    threaded through six functions. With two baselines that parameter would
-    have had to become two, and every signature between `plot_levels` and
-    `_hist_ratio_panel` would carry both --- so the shape is a list instead,
-    and a third baseline costs one constructor rather than six signatures.
+    A list of these threads through `plot_levels` and `_hist_ratio_panel`,
+    so a third baseline costs one constructor rather than a new parameter in
+    every signature between them.
 
     `weights` holds one full-length weight vector **per dimension**, because
     IBU unfolds each observable separately and its weights genuinely differ
     between them. A method producing one vector for every observable, as
-    OmniFold and Deconvolve do, repeats it; `from_shared` is that, said once.
+    OmniFold and RAN do, repeats it; `from_shared` is that, said once.
     """
 
     label: str
@@ -263,18 +264,17 @@ def _hist_ratio_panel(
             bins=cast(typ=Sequence[float], val=h_nature[1]),
             weights=w_ran,
             histtype="step",
-            color=COLOR_DECONVOLVE,
+            color=COLOR_RAN,
             linestyle="-",
             linewidth=4,
-            alpha=ALPHA_DECONVOLVE,
-            label="Deconvolve",
-            # Above every baseline. The overlays are drawn after this call --
-            # which is what puts them last in the legend, where they belong --
-            # and at linewidth 4 the last one drawn would otherwise bury Deconvolve
-            # wherever the curves agree, which on a converged run is
-            # everywhere. `zorder` separates paint order from legend order;
-            # without it the method being showcased sits under the baselines.
-            zorder=Z_DECONVOLVE,
+            alpha=ALPHA_RAN,
+            label="RAN",
+            # Above every baseline. Overlays draw after this call, putting
+            # them last in the legend, but at linewidth 4 the last curve
+            # drawn would otherwise bury RAN wherever they agree -- which on
+            # a converged run is everywhere. `zorder` keeps paint order
+            # separate from legend order.
+            zorder=Z_RAN,
         ),
     )
 
@@ -305,11 +305,11 @@ def _hist_ratio_panel(
     _ = ax_r.plot(
         centres,
         ratio_ran,
-        color=COLOR_DECONVOLVE,
+        color=COLOR_RAN,
         marker="o",
         linestyle="--",
-        alpha=ALPHA_DECONVOLVE,
-        zorder=Z_DECONVOLVE,
+        alpha=ALPHA_RAN,
+        zorder=Z_RAN,
     )
 
     for overlay in overlays:
@@ -341,12 +341,9 @@ def _hist_ratio_panel(
             alpha=overlay.alpha,
             zorder=Z_BASELINE,
         )
-    # Every panel gets a label, a title and a legend, not only one drawn
-    # against a baseline -- no `*_weights.npz` exists on the default
-    # `deconvolve train` path, and until one did every panel was unlabelled, untitled
-    # and legend-less. `ax.legend()` runs once here, after the overlay loop, so
-    # it picks up whichever baseline handles that loop created and omits the
-    # rest.
+    # Every panel gets a label, a title and a legend, whether or not a
+    # baseline overlay was drawn: `ax.legend()` runs once here, after the
+    # overlay loop, and picks up whichever handles that loop created.
     _ = ax.set_ylabel(ylabel="Events")
     _ = ax.set_title(label=title)
     _ = ax.legend()
@@ -371,14 +368,11 @@ def _hist_ratio_panel(
 def _save_fig(figure: Figure, save_path: Path) -> None:
     """Save `figure`, trimmed to its rendered contents.
 
-    Without `bbox_inches="tight"` the y-labels are clipped by the page edge.
-    `plot_losses` always passed it and never clipped; `plot_selection` and
-    `_plot_level` did not and did -- wide tick labels (e.g. five-digit event
-    counts) push the y-label further left than `_plot_level`'s fixed
-    `GridSpec` margins reserve for it, so a real run's `detector_level.pdf`
-    and `particle_level.pdf` clip even though a narrower synthetic figure
-    does not. All three now go through this one save path instead of calling
-    `figure.savefig` themselves.
+    Without `bbox_inches="tight"` the y-labels are clipped by the page edge:
+    wide tick labels (e.g. five-digit event counts) can push a y-label
+    further left than a fixed `GridSpec` margin reserves for it. Every save
+    path goes through here rather than calling `figure.savefig` directly, so
+    the bbox handling cannot drift out of sync between figures.
     """
     save_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(fname=save_path, bbox_inches="tight")
@@ -390,7 +384,7 @@ def _save_pages(figures: Sequence[Figure], /, *, save_path: Path) -> None:
 
     One file rather than `detector_level_1.pdf`, `_2.pdf`, ...: the run
     directory keeps a single artifact per level, `\\includegraphics[page=k]`
-    selects a page, and `coretypes.figure_pages` tells the report how many
+    selects a page, and `rantypes.figure_pages` tells the report how many
     there are without opening the file. Each page is trimmed exactly as
     `_save_fig` trims a single figure -- see that docstring for why the tight
     bbox is not optional.
@@ -465,11 +459,10 @@ def _panel_spec(
             if dim > 1
             else f"{style.symbol} ({style.level} level)"
         ),
-        # `_plot_level`'s `figure.suptitle` now states `style.title_prefix`
-        # once for the whole figure, so a panel title repeating it here --
-        # even the single-dimension case's old bare `style.title_prefix` --
-        # would duplicate it. `dim > 1` still names which dimension a panel
-        # is; `dim == 1` has nothing left to say.
+        # `_plot_level`'s `figure.suptitle` already states `style.title_prefix`
+        # once for the whole figure, so a panel title would duplicate it.
+        # `dim > 1` still names which dimension a panel is; `dim == 1` has
+        # nothing left to say.
         title=(f"Dim {i}" if dim > 1 else ""),
     )
 
@@ -524,7 +517,7 @@ def _page_figure(
 ) -> Figure:
     """One page of the level figure: up to `PANELS_PER_PAGE` panels."""
     ncols: int = min(PANEL_COLUMNS, len(indices))
-    nrows: int = math.ceil(len(indices) / ncols)
+    nrows = int(np.ceil(len(indices) / ncols))
     figure = Figure(figsize=(PANEL_WIDTH_INCHES * ncols, style.height_per_dim * nrows))
     figure.canvas = FigureCanvasPdf(figure)
     # Absolute margins in inches do not survive a figure whose height varies
@@ -537,8 +530,8 @@ def _page_figure(
     # visible as axis labels rendered off the left edge of the page.
     outer_grid: GridSpec = figure.add_gridspec(nrows=nrows, ncols=ncols)
     # States the level once per page instead of on every panel title -- see
-    # `_panel_spec`. The page counter only appears when there is more than one
-    # page, so a single-page figure reads exactly as it did before.
+    # `_panel_spec`. The page counter only appears when there is more than
+    # one page.
     title: str = (
         style.title_prefix
         if pages == 1
@@ -583,12 +576,11 @@ def _plot_level(
     identity for a non-jet run) rather than by raw column index, and split
     `PANELS_PER_PAGE` to a page across the pages of ONE multi-page PDF.
 
-    Pagination is what makes the panels legible: `\includegraphics` scales a
-    figure to fit its text block and every font scales with it, so a
-    twelve-panel 12x24in figure renders its 18pt labels at 5pt. `constants`
-    carries the arithmetic and the measured table; `figure_pages` is the same
-    count, and is what `report.py` uses to know how many
-    `\includegraphics[page=...]` blocks to emit without opening the file.
+    Pagination keeps the panels legible: `\includegraphics` scales a figure
+    to fit its text block and every font scales with it, so a twelve-panel
+    12x24in figure would render its 18pt labels at 5pt. `figure_pages` gives
+    the same per-page count `report.py` needs to know how many
+    `\includegraphics[page=...]` blocks to emit, without opening the file.
     """
     dim: int = nature.shape[1]
     order: Sequence[int] = display_order(
@@ -703,6 +695,7 @@ def plot_losses(
 
     figure: Figure = Figure(figsize=(8, 5))
     figure.canvas = FigureCanvasPdf(figure)
+    # argument must be positional only.
     ax: Axes = figure.add_subplot(111)
     train_d: NDArray[np.double] = np.array(
         object=history["train_d"],
@@ -717,21 +710,21 @@ def plot_losses(
     # be this one drawn twice. Older runs carry a `val_g` key holding exactly
     # that copy --- it is deliberately not read.
     _ = ax.plot(epochs, val_d, label="Val D", color="C0", ls="--", lw=3, alpha=0.5)
-    _ = ax.axhline(y=LN2, color="gray", lw=1)  # no `label`: it is a tick, not a series
+    _ = ax.axhline(y=LOG2, color="gray", lw=1)  # no `label`: it is a tick, not a series
 
     _ = ax.set_ylim(
-        bottom=LN2 * (1 - LOSS_YLIM_FRACTION), top=LN2 * (1 + LOSS_YLIM_FRACTION)
+        bottom=LOG2 * (1 - LOSS_YLIM_FRACTION), top=LOG2 * (1 + LOSS_YLIM_FRACTION)
     )
     # Invariant: `offsets` is symmetric and odd-length, which is the only
     # reason `len(offsets) // 2` is the index of the zero offset -- i.e. the
     # only reason the $\ln 2$ label below lands on the $\ln 2$ tick.
     offsets: tuple[float, ...] = (-2.0, -1.0, 0.0, 1.0, 2.0)
-    ticks: list[float] = [LN2 * (1 + k * 2.0**-5) for k in offsets]
+    ticks: list[float] = [LOG2 * (1 + k * 2.0**-5) for k in offsets]
     _ = ax.set_yticks(ticks=ticks)
     _ = ax.set_yticklabels(
         labels=[
             r"$\ln 2$" if i == len(offsets) // 2 else f"{t:.4f}"
-            for i, t in enumerate(ticks)
+            for i, t in enumerate(iterable=ticks)
         ]
     )
 
@@ -762,9 +755,9 @@ def _rolling_median(values: NDArray[np.double], window: int, /) -> NDArray[np.do
     The only caller passes `SELECTION_SMOOTHING_WINDOW`, which is 5.
     """
     pad: int = window // 2
-    padded: NDArray[np.double] = np.pad(values, pad_width=pad, mode="edge")
+    padded: NDArray[np.double] = np.pad(array=values, pad_width=pad, mode="edge")
     return np.array(
-        [np.median(padded[i : i + window]) for i in range(values.size)],
+        object=[np.median(a=padded[i : i + window]) for i in range(values.size)],
         dtype=np.double,
     )
 
@@ -780,7 +773,7 @@ def _mmd_series(
 ) -> None:
     """Raw trace at low alpha, rolling median on top carrying the label."""
     _ = ax.plot(epochs, values, color=color, ls=ls, lw=1, alpha=0.3)
-    smoothed = _rolling_median(values, SELECTION_SMOOTHING_WINDOW)
+    smoothed: NDArray[np.double] = _rolling_median(values, SELECTION_SMOOTHING_WINDOW)
     _ = ax.plot(epochs, smoothed, color=color, ls=ls, lw=2, label=label)
 
 
@@ -789,20 +782,19 @@ def _mmd_scatter(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> 
     series cannot show. Only drawn when a particle-level curve exists.
 
     Lives in its own axes in the figure's right column rather than as an
-    `inset_axes` over the MMD panel -- an opaque box sitting on top of the
-    curves it is meant to explain hides exactly the criterion points it is
-    there to relate, the same defect the legend caused before it moved
-    outside the axes.
+    `inset_axes` over the MMD panel: an opaque box sitting on top of the
+    curves it is meant to explain would hide exactly the criterion points it
+    is there to relate.
     """
     detector = np.array(history["val_mmd"], dtype=np.double)
     particle = np.array(history["val_mmd_particle"], dtype=np.double)
     _ = ax.scatter(detector, particle, s=8, alpha=0.6, color=COLOR_MC)
     if 0 <= best_epoch < detector.size:
         _ = ax.scatter(
-            detector[best_epoch], particle[best_epoch], s=40, color="k", marker="x"
+            x=detector[best_epoch], y=particle[best_epoch], s=40, color="k", marker="x"
         )
-    _ = ax.set_xlabel("Detector MMD$^2$", fontsize="x-small")
-    _ = ax.set_ylabel("Particle MMD$^2$", fontsize="x-small")
+    _ = ax.set_xlabel(xlabel="Detector MMD$^2$", fontsize="x-small")
+    _ = ax.set_ylabel(ylabel="Particle MMD$^2$", fontsize="x-small")
     ax.tick_params(labelsize="x-small")
 
 
@@ -818,19 +810,20 @@ def _mmd_values(history: dict[str, list[float]]) -> NDArray[np.double]:
 def _mmd_ylim(history: dict[str, list[float]]) -> tuple[float, float]:
     """Y-limits sized to the plotted data, not to the resolution floor.
 
-    The floor's `axhspan` used to set the view's lower bound at `ymin=0`
-    regardless of where the data actually sat, which on a real run put 63% of
-    the panel's height in the (empty) floor band and crushed every curve into
-    the top third. Padding 20% past the data's own min/max instead lets the
-    floor be clipped by the view -- still drawn, just no longer the majority
-    of the panel. Padding is taken as a fraction of `abs(value)` rather than
-    a flat multiply, so it still widens (not narrows) the view when the
-    unbiased MMD estimator's noise puts the extreme value below zero.
+    Fixing the view's lower bound to the floor's `ymin=0` would let an empty
+    floor band dominate the panel on a run whose data sits well above it, and
+    crush every curve into a fraction of the height. Padding 20% past the
+    data's own min/max instead lets the floor be clipped by the view -- still
+    drawn, just not the majority of the panel. Padding is taken as a fraction
+    of `abs(value)` rather than a flat multiply, so it still widens (not
+    narrows) the view when the unbiased MMD estimator's noise puts the
+    extreme value below zero.
     """
-    values = _mmd_values(history)
-    data_min, data_max = float(values.min()), float(values.max())
-    bottom = data_min - 0.2 * abs(data_min)
-    top = data_max + 0.2 * abs(data_max)
+    values: NDArray[np.double] = _mmd_values(history)
+    data_min: np.double = values.min()
+    data_max: np.double = values.max()
+    bottom: float = data_min - 0.2 * np.abs(data_min)
+    top: float = data_max + 0.2 * np.abs(data_max)
     return bottom, top
 
 
@@ -844,7 +837,7 @@ def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> No
     _mmd_series(
         ax,
         epochs,
-        np.array(history["val_mmd"], dtype=np.double),
+        values=np.array(object=history["val_mmd"], dtype=np.double),
         color=COLOR_NATURE,
         ls="-",
         label="Detector MMD$^2$ (criterion)",
@@ -853,7 +846,7 @@ def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> No
         _mmd_series(
             ax,
             epochs,
-            np.array(history["val_mmd_particle"], dtype=np.double),
+            values=np.array(object=history["val_mmd_particle"], dtype=np.double),
             color=COLOR_IBU,
             ls="--",
             label="Particle MMD$^2$ (diagnostic)",
@@ -868,7 +861,7 @@ def _mmd_panel(ax: Axes, history: dict[str, list[float]], best_epoch: int) -> No
     )
     if best_epoch >= 0:
         _ = ax.axvline(
-            best_epoch,
+            x=best_epoch,
             color="k",
             ls=":",
             lw=1,
@@ -892,17 +885,17 @@ def _clip_ticks_to_view(ax: Axes) -> None:
     current view; this just keeps the ones inside it.
     """
     low, high = ax.get_ylim()
-    ticks = np.asarray(ax.get_yticks(), dtype=np.double)
-    in_view = ticks[(ticks >= low) & (ticks <= high)]
+    ticks: NDArray[np.double] = np.asarray(ax.get_yticks(), dtype=np.double)
+    in_view: NDArray[np.double] = ticks[(ticks >= low) & (ticks <= high)]
     if in_view.size:
-        _ = ax.set_yticks(in_view)
+        _ = ax.set_yticks(ticks=in_view)
 
 
 def _ess_panel(ax: Axes, history: dict[str, list[float]]) -> None:
     """Bottom panel: effective sample size as a percentage of epoch 0. A
     falling MMD bought by a collapsing ESS is not an improvement."""
     epochs: NDArray[np.uintc] = np.arange(len(history["val_ess"]), dtype=np.uintc)
-    ess: NDArray[np.double] = np.array(history["val_ess"], dtype=np.double)
+    ess: NDArray[np.double] = np.array(object=history["val_ess"], dtype=np.double)
     ess_pct: NDArray[np.double] = 100 * ess / ess[0]
 
     _ = ax.plot(epochs, ess_pct, color=COLOR_MC, lw=1.5)
@@ -914,9 +907,10 @@ def _ess_panel(ax: Axes, history: dict[str, list[float]]) -> None:
     # Shrinking just this label keeps the panel proportions the brief calls
     # for instead of stealing height from it.
     _ = ax.set_ylabel(ylabel="Effective sample size\n(% of epoch 0)", fontsize=10)
-    low, high = min(float(ess_pct.min()), 100.0), max(float(ess_pct.max()), 100.0)
-    pad = 0.05 * (high - low if high > low else 1.0)
-    _ = ax.set_ylim(low - pad, high + pad)
+    low: float = min(ess_pct.min(), 100.0)
+    high: float = max(ess_pct.max(), 100.0)
+    pad: float = 0.05 * (high - low if high > low else 1.0)
+    _ = ax.set_ylim(bottom=low - pad, top=high + pad)
     _clip_ticks_to_view(ax)
 
 
@@ -949,27 +943,25 @@ def plot_selection(
     to score against, so it -- and the scatter it feeds -- are optional.
 
     The legend lives in its own axes in the top right, rather than inside
-    the MMD axes: a legend drawn over the data was the original complaint
-    ("covers the bottom third of the plot"), and a `bbox_to_anchor` placed
-    outside the axes worked but left the right side of the figure empty --
-    exactly where the scatter needed to go instead of on top of the curves.
+    or beside the MMD axes, so it neither covers the data nor competes with
+    the scatter panel for the same space.
     """
     figure: Figure = Figure(figsize=(9, 6))
     figure.canvas = FigureCanvasPdf(figure)
-    has_particle = "val_mmd_particle" in history
+    has_particle: bool = "val_mmd_particle" in history
 
     # Neither the outer 1x2 split nor either nested column passes an
     # explicit `wspace`/`hspace` to `add_gridspec` itself -- only to a
     # `SubplotSpec.subgridspec` nested inside a cell. `tight_layout` marks a
-    # `GridSpec` "locally modified" (and falls back to undersized margins,
-    # once silently, now emitting the warning this replaces) exactly when
-    # spacing is set on the gridspec it inspects directly; a nested
-    # subgridspec's own spacing does not trip that check. `_draw_panel`
+    # `GridSpec` "locally modified" (falling back to undersized margins)
+    # exactly when spacing is set on the gridspec it inspects directly; a
+    # nested subgridspec's own spacing does not trip that check. `_draw_panel`
     # above uses the same trick for the same reason.
     outer: GridSpec = figure.add_gridspec(nrows=1, ncols=2, width_ratios=[7, 4])
     left: GridSpecFromSubplotSpec = outer[0].subgridspec(
         nrows=2, ncols=1, height_ratios=[7, 3], hspace=0.08
     )
+    # The first argument of `add_subplot` must be positional only.
     mmd_ax: Axes = figure.add_subplot(left[0])
     ess_ax: Axes = figure.add_subplot(left[1], sharex=mmd_ax)
 
@@ -980,12 +972,14 @@ def plot_selection(
         height_ratios=[1, 1] if has_particle else [1],
         hspace=0.35,
     )
+    # The first argument of `add_subplot` must be positional only.
     legend_ax: Axes = figure.add_subplot(right[0])
 
     _mmd_panel(mmd_ax, history, best_epoch)
     _ess_panel(ess_ax, history)
     _selection_legend(legend_ax, mmd_ax)
     if has_particle:
+        # The first argument of `add_subplot` must be positional only.
         scatter_ax: Axes = figure.add_subplot(right[1])
         _mmd_scatter(scatter_ax, history, best_epoch)
 

@@ -10,11 +10,11 @@ The **covariance** is the other half, and the one the speed argument pays for.
 Unbinned unfolding weights are routinely propagated as if their bin-to-bin
 correlations were zero. They are not, and measuring them takes a hundred
 retrainings --- which at OmniFold's cost is not an analysis anyone runs, and
-at Deconvolve's is twenty minutes on a node. `variance.npz` carries the full `K x K`
+at RAN's is twenty minutes on a node. `variance.npz` carries the full `K x K`
 matrix for every observable.
 
 One caveat is stated rather than buried, because a referee will raise it:
-Deconvolve's weights preserve the total count by construction, so a spectrum's bins
+RAN's weights preserve the total count by construction, so a spectrum's bins
 sum to a fixed number and its covariance is singular with rank `K - 1`. That
 constraint *alone* induces negative off-diagonals. For the equal-occupancy
 bins used here the pure-closure expectation is the multinomial value
@@ -120,7 +120,7 @@ def _evaluation_events(design: Design, /) -> EventArray:
         data_seed=meta["data_seed"],
         variables=tuple(meta["variables"]),
         params=(
-            gaussian_config_from_run_config(raw, meta["dim"])
+            gaussian_config_from_run_config(params=raw, dim=meta["dim"])
             if raw is not None
             else None
         ),
@@ -202,18 +202,18 @@ def _plot_correlations(
     """One heatmap per observable of the bootstrap bin-to-bin correlation."""
     figure = Figure(figsize=(4.0 * min(len(names), 3), 3.6 * ((len(names) + 2) // 3)))
     figure.canvas = FigureCanvasPdf(figure)
-    axes = figure.subplots(
+    axes: NDArray[Any] = figure.subplots(
         nrows=(len(names) + 2) // 3, ncols=min(len(names), 3), squeeze=False
     )
-    flat_axes: Sequence[Axes] = cast("Sequence[Axes]", list(axes.ravel()))
+    flat_axes: Sequence[Axes] = cast(typ="Sequence[Axes]", val=list(axes.ravel()))
     for ax, name in zip(flat_axes, names, strict=False):
         image: AxesImage = ax.imshow(
-            matrices[name], cmap="RdBu_r", vmin=-1.0, vmax=1.0, origin="lower"
+            X=matrices[name], cmap="RdBu_r", vmin=-1.0, vmax=1.0, origin="lower"
         )
         _ = ax.set_title(label=f"{name}  (closure floor {null[name]:+.3f})", fontsize=9)
         _ = ax.set_xlabel(xlabel="bin")
         _ = ax.set_ylabel(ylabel="bin")
-        _ = figure.colorbar(image, ax=ax, fraction=0.046)
+        _ = figure.colorbar(mappable=image, ax=ax, fraction=0.046)
     for ax in flat_axes[len(names) :]:
         ax.set_axis_off()
     _ = figure.suptitle(t="Bootstrap correlation of the unfolded spectrum")

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 import shutil
 
@@ -20,7 +19,9 @@ from importlib import resources
 from itertools import starmap
 from typing import TYPE_CHECKING, cast
 
-from .coretypes import (
+import numpy as np
+
+from ..coretypes import (
     ARTIFACTS_DIR,
     JET_OBS,
     JET_VARIABLE_GROUPS,
@@ -65,8 +66,9 @@ _DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 
 def load_template() -> str:
     """The shipped LaTeX template, as text."""
-    tmpl = resources.files(anchor="deconvolve") / "templates" / "report.tex"
-    return tmpl.read_text(encoding="utf-8")
+    return (
+        resources.files(anchor="deconvolve.reporting") / "templates" / "report.tex"
+    ).read_text(encoding="utf-8")
 
 
 def _plain(value: float, /) -> str:
@@ -79,7 +81,7 @@ def decimal(value: float, /) -> str:
     """Plain decimal notation; `_DASH` when not finite. Every numeric cell lands in a
     siunitx `S` column. `nan` and `inf` must be handled here
     """
-    if not math.isfinite(value):
+    if not np.isfinite(value):
         return _DASH
     return _plain(value)
 
@@ -128,7 +130,7 @@ def _format_value(value: object, /) -> str:
             return "[" + ", ".join(_format_value(item) for item in items) + "]"
         case float():
             # `_plain`, since this lands inside `\ConfigVal`=`\texttt{\detokenize{...}}`
-            return _plain(value) if math.isfinite(value) else str(object=value)
+            return _plain(value) if np.isfinite(value) else str(object=value)
         case _:
             return str(object=value)
 
@@ -196,13 +198,14 @@ def _gaussian_params_cell(params: Mapping[str, Any], /) -> str:
 
 def _sigma_cell(sigmas: Sequence[float], /) -> str:
     r"""`median x (1/2 .. 2)` when the values really are the bracket else raw."""
-    # Deferred: `deconvolve.mmd` imports jax, which this module must not load eagerly.
-    from .mmd import _SCALES
+    # Deferred: `deconvolve.training.mmd` imports jax, which this module must
+    # not load eagerly.
+    from ..training.mmd import _SCALES
 
     if len(sigmas) == len(_SCALES):
         median: float = sigmas[_SCALES.index(1.0)]
         if all(
-            math.isclose(a=s, b=median * scale, rel_tol=1e-6)
+            np.isclose(a=s, b=median * scale, rtol=1e-6)
             for s, scale in zip(sigmas, _SCALES, strict=True)
         ):
             return (
@@ -302,9 +305,8 @@ _METRICS: Final[tuple[tuple[str, str], ...]] = (
     ("VLC", "triangular"),
 )
 
-# Observable, Sim, then a (value, improvement) pair for each of IBU, OmniFold
-# and Deconvolve. Three separate `\multicolumn` spans and the template's column
-# spec have to agree.
+# Observable, Sim, then a (value, improvement) pair for each of IBU, OmniFold and RAN.
+# Three separate `\multicolumn` spans and the template's column spec have to agree.
 _TABLE_COLUMNS: Final[int] = 8
 
 
@@ -318,7 +320,7 @@ def _metric_value(
     if entry is None:
         return None
     val: object = entry.get(metric_key)
-    if val is not None and isinstance(val, (int, float)) and math.isfinite(val):
+    if val is not None and isinstance(val, (int, float)) and np.isfinite(val):
         return float(val)
     return None
 
@@ -327,7 +329,7 @@ def _best_methods(
     variable: str,
     level: str,
     metric: str,
-    deconvolve: Mapping[str, Any],
+    ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     daggered: bool,
@@ -341,7 +343,7 @@ def _best_methods(
     key: str = f"{level}_{variable}"
     metric_key: str = f"{metric}_after"
     sources: tuple[tuple[str, Mapping[str, Any] | None], ...] = (
-        ("deconvolve", deconvolve),
+        ("ran", ran),
         ("ibu", None if daggered else ibu),
         ("omnifold", omnifold),
     )
@@ -357,7 +359,7 @@ def _best_methods(
     return frozenset(
         m
         for m, v in candidates.items()
-        if math.isclose(v, best_val, rel_tol=1e-7, abs_tol=1e-12)
+        if np.isclose(a=v, b=best_val, rtol=1e-7, atol=1e-12)
     )
 
 
@@ -395,7 +397,7 @@ def _row(
     variable: str,
     level: str,
     metric: str,
-    deconvolve: Mapping[str, Any],
+    ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     daggered: bool,
@@ -403,19 +405,18 @@ def _row(
 ) -> str:
     """One variable's eight cells: label, Sim, then a pair per method.
 
-    Deconvolve goes last: the eye reads a row left to right and stops at the end,
-    so the method under test sits where a reader lands, with the baselines in
-    front of it.
+    RAN goes last: the eye reads a row left to right and stops at the end, so the method
+    under test sits where a reader lands, with the baselines in front of it.
     """
     symbol: str = (
         JET_OBS[variable].symbol if variable in JET_OBS else latex_text(variable)
     )
     label: str = rf"{symbol}\(^\dag\)" if daggered else symbol
     scale: float = _SCALE[metric]
-    ours: Mapping[str, float] = deconvolve[f"{level}_{variable}"]
+    ours: Mapping[str, float] = ran[f"{level}_{variable}"]
 
     best: frozenset[str] = _best_methods(
-        variable, level, metric, deconvolve, ibu, omnifold, daggered
+        variable, level, metric, ran, ibu, omnifold, daggered
     )
 
     cells: list[str] = [label, decimal(ours[f"{metric}_before"] * scale)]
@@ -428,9 +429,7 @@ def _row(
         )
     )
     cells.extend(
-        _method_cells(
-            deconvolve, level, variable, metric, scale, is_best="deconvolve" in best
-        )
+        _method_cells(ran, level, variable, metric, scale, is_best="ran" in best)
     )
     return " & ".join(cells) + r" \\"
 
@@ -446,7 +445,7 @@ def metrics_table(
     level: str,
     metric: str,
     variables: Sequence[str],
-    deconvolve: Mapping[str, Any],
+    ran: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
@@ -462,8 +461,7 @@ def metrics_table(
     ordered: tuple[int, ...] = display_order(variables)
     ordered_vars: list[str] = [variables[i] for i in ordered]
     rows: list[str] = [
-        _row(v, level, metric, deconvolve, ibu, omnifold, v in skipped)
-        for v in ordered_vars
+        _row(v, level, metric, ran, ibu, omnifold, v in skipped) for v in ordered_vars
     ]
     lines: list[str] = [r"\midrule", *rows]
 
@@ -497,7 +495,7 @@ _NO_METRICS: Final[str] = (
     r"\midrule"
     "\n"
     rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\itshape metrics.json not "
-    r"found: run \texttt{deconvolve evaluate} for this run.} \\"
+    r"found: run \texttt{ran evaluate} for this run.} \\"
 )
 
 
@@ -523,7 +521,7 @@ def _table(
     level: str,
     metric: str,
     variables: Sequence[str],
-    deconvolve: Mapping[str, Any] | None,
+    ran: Mapping[str, Any] | None,
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
@@ -532,13 +530,13 @@ def _table(
     include_legend: bool = False,
 ) -> str:
     """A metrics body, or the not-found row when there are no metrics."""
-    if not deconvolve:
+    if not ran:
         return _NO_METRICS
     return metrics_table(
         level,
         metric,
         variables,
-        deconvolve,
+        ran,
         ibu,
         omnifold,
         skipped,
@@ -571,15 +569,13 @@ def render(run_dir: Path, /) -> str:
         raise FileNotFoundError(msg)
 
     artifacts: Path = run_dir / ARTIFACTS_DIR
-    deconvolve: dict[str, Any] | None = _read(artifacts / "metrics.json")
+    ran: dict[str, Any] | None = _read(artifacts / "metrics.json")
     ibu: dict[str, Any] | None = _read(artifacts / "metrics_ibu.json")
     omnifold: dict[str, Any] | None = _read(artifacts / "metrics_omnifold.json")
     timings: dict[str, Any] | None = _read(artifacts / "timings.json")
     skipped: frozenset[str] = skipped_variables(run_dir, ibu)
     variables: tuple[str, ...] = _variables(config)
-    has_particle: bool = bool(
-        deconvolve and any(k.startswith("particle_") for k in deconvolve)
-    )
+    has_particle: bool = bool(ran and any(k.startswith("particle_") for k in ran))
     legend_level: str = "particle" if has_particle else "detector"
 
     source: str = load_template()
@@ -594,7 +590,7 @@ def render(run_dir: Path, /) -> str:
                     level,
                     metric,
                     variables,
-                    deconvolve,
+                    ran,
                     ibu,
                     omnifold,
                     skipped,
@@ -645,8 +641,6 @@ def _compile(source: Path, artifacts: Path, run_dir: Path, /) -> None:
         raise RuntimeError(msg)
 
     for _pass in range(2):
-        # Fixed argv, no shell, and the only interpolated element is a path
-        # this process just wrote.
         completed: subprocess.CompletedProcess[str] = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             args=[*_LATEX_ARGS, f"-output-directory={run_dir}", source.name],
             cwd=artifacts,

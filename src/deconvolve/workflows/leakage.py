@@ -5,27 +5,27 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .coretypes import (
+from ..coretypes import (
     EVENT_DTYPE,
     POISON_SENTINEL,
     TRUTH_SENTINEL,
     Events,
     Populations,
 )
-from .data import DeconvolveDataset
-from .evaluate import (
+from ..data import DeconvolveDataset
+from ..evaluation.evaluate import (
     _collect_test_data,
     _improvement,
     _triangular_per_dim,
     _wd_per_dim,
 )
-from .train import train
+from ..training.engine import train
 
 if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Literal
 
-    from .coretypes import ZXY, DatasetSplits, DeconvolveModel, EventArray
+    from ..coretypes import ZXY, DatasetSplits, DeconvolveModel, EventArray
 
 logger: Logger = logging.getLogger(name=__name__)
 

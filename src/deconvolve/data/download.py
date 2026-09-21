@@ -240,8 +240,8 @@ def _fetch_generator(
 
     Returns `{"<ptype>_<var>": values}` over every event, never the raw arrays.
 
-    Reducing inside the loop rather than concatenating first is what makes
-    `particles` affordable and correct. Affordable: the constituent arrays are
+    Reducing inside the loop rather than concatenating first makes `particles`
+    affordable and correct. Affordable: the constituent arrays are
     the bulk of the release, and holding both generators' at float64 would be
     ~12 GB against ~100 MB of derived observables. Correct: the constituent
     axis is padded to the longest jet *in that array*, which differs between
@@ -291,15 +291,11 @@ def download_jet_data(cache_dir: Path = CACHE_DIR) -> None:
         out_path: Path = cache_dir / f"{CACHE_FILENAMES[var]}.npz"
         # `savez`, not `savez_compressed`. These observables are float64 and
         # very nearly incompressible: measured on representative data, DEFLATE
-        # lands at ~0.94 of raw for every continuous variable (mass, w, tau21,
-        # zg, sdm) while costing ~20x on read. `mult` is the sole exception at
-        # ~0.18, because it is integer-valued -- one variable in six does not
-        # pay for the tax on the other five, and the read cost is paid on every
-        # run while the write happens once.
-        #
-        # This is a write-side change only. `np.load` reads stored and deflated
-        # members identically, so caches written before this keep working and
-        # nothing needs invalidating.
+        # lands at ~0.94 of raw for a continuous variable while costing ~20x
+        # on read. Integer-valued variables (e.g. `mult`) compress to ~0.18,
+        # but the read cost is paid on every run while the write happens once,
+        # so uncompressed wins on balance. `np.load` reads either format
+        # identically, so this is a write-side choice only.
         np.savez(
             file=out_path,
             z_true=nature[f"gen_{var}"],

@@ -468,11 +468,11 @@ class TestCacheDirIsRelocatable:
 
     def test_a_tilde_expands(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A SLURM `--export` carries the string through without a shell to
-        expand it, so `~/deconvolve-cache` would otherwise become a literal directory
+        expand it, so `~/ran-cache` would otherwise become a literal directory
         named `~`."""
-        expected: Path = Path.home() / "deconvolve-cache"
+        expected: Path = Path.home() / "ran-cache"
 
-        assert self._with("~/deconvolve-cache", monkeypatch) == expected
+        assert self._with("~/ran-cache", monkeypatch) == expected
 
     def test_empty_falls_back_rather_than_meaning_cwd(
         self, monkeypatch: pytest.MonkeyPatch

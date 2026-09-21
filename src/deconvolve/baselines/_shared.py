@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 import numpy as np
 
 from ..coretypes import DatasetName, RunConfig, Split, UnfoldingPopulations
-from ..evaluate import (
+from ..evaluation.evaluate import (
     _improvement,
     _js_per_dim,
     _load_splits,

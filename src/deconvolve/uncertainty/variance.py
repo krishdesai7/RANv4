@@ -1,6 +1,6 @@
 """The two-way variance decomposition, and the covariance the field assumes away.
 
-A run of Deconvolve is a function of two independent random draws: the dataset `D` it
+A run of RAN is a function of two independent random draws: the dataset `D` it
 saw and the initialization seed `S` it started from. Write one run's output as
 `T(D, S)`. The law of total variance splits its variance exactly:
 
@@ -87,9 +87,9 @@ class VarianceComponents(NamedTuple):
 class Covariances(NamedTuple):
     """The same three components as `K x K` matrices over binned observables.
 
-    Diagonals agree with `VarianceComponents` by construction, which is what
-    `tests/test_uncertainty.py` checks. The off-diagonals are the point: they
-    are what a bin-by-bin error bar throws away.
+    Diagonals agree with `VarianceComponents` by construction;
+    `tests/test_uncertainty.py` checks exactly that. The off-diagonals are the
+    point: a bin-by-bin error bar throws them away.
     """
 
     data: NDArray[np.double]
@@ -119,7 +119,7 @@ def _grid(t: NDArray[np.double] | EventArray, /) -> NDArray[np.double]:
             f"B={n_data} and S={n_init}; two one-dimensional sweeps cannot "
             "separate the interaction from the main effects"
         )
-    if not np.all(np.isfinite(grid)):
+    if not np.all(a=np.isfinite(grid)):
         raise ValueError("the design grid contains non-finite values")
     return grid
 
@@ -152,15 +152,15 @@ def decompose(t: NDArray[np.double] | EventArray, /) -> VarianceComponents:
     )
 
     return VarianceComponents(
-        data=cast("NDArray[np.double]", (ms_data - ms_interaction) / n_init),
-        init=cast("NDArray[np.double]", (ms_init - ms_interaction) / n_data),
+        data=cast(typ="NDArray[np.double]", val=(ms_data - ms_interaction) / n_init),
+        init=cast(typ="NDArray[np.double]", val=(ms_init - ms_interaction) / n_data),
         interaction=ms_interaction,
     )
 
 
 def _cov(rows: NDArray[np.double], /, *, ddof: int) -> NDArray[np.double]:
     """`np.cov` with the orientation pinned and a 1x1 result kept 2-D."""
-    return np.atleast_2d(np.cov(rows, rowvar=False, ddof=ddof))
+    return np.atleast_2d(np.cov(m=rows, rowvar=False, ddof=ddof))
 
 
 def component_covariances(t: NDArray[np.double] | EventArray, /) -> Covariances:
@@ -189,8 +189,8 @@ def component_covariances(t: NDArray[np.double] | EventArray, /) -> Covariances:
     between_data: NDArray[np.double] = _cov(grid.mean(axis=1), ddof=1)
     between_init: NDArray[np.double] = _cov(grid.mean(axis=0), ddof=1)
     return Covariances(
-        data=cast("NDArray[np.double]", between_data - interaction / n_init),
-        init=cast("NDArray[np.double]", between_init - interaction / n_data),
+        data=cast(typ="NDArray[np.double]", val=between_data - interaction / n_init),
+        init=cast(typ="NDArray[np.double]", val=between_init - interaction / n_data),
         interaction=interaction,
     )
 
@@ -202,13 +202,13 @@ def correlation(cov: NDArray[np.double], /) -> NDArray[np.double]:
     in a bin whose true variance is near zero, and there is no correlation to
     quote there. `nan` says so; a clamp would draw a confident zero.
     """
-    variance: NDArray[np.double] = np.diag(cov)
+    variance: NDArray[np.double] = np.diag(v=cov)
     # `np.where` would evaluate `sqrt` on the negative entries as well and warn
     # about it; the mask keeps the warning-free path and the `nan` both.
     scale: NDArray[np.double] = np.full(shape=variance.shape, fill_value=np.nan)
     positive: NDArray[np.bool] = variance > 0
     scale[positive] = np.sqrt(variance[positive])
-    return cov / np.outer(scale, scale)
+    return cov / np.outer(a=scale, b=scale)
 
 
 def quantile_edges(column: EventArray, /, *, n_bins: int) -> NDArray[np.double]:
@@ -224,7 +224,8 @@ def quantile_edges(column: EventArray, /, *, n_bins: int) -> NDArray[np.double]:
     if n_bins < 1:
         raise ValueError(f"n_bins must be at least 1, got {n_bins}")
     edges: NDArray[np.double] = np.quantile(
-        a=np.asarray(a=column, dtype=np.double), q=np.linspace(0.0, 1.0, n_bins + 1)
+        a=np.asarray(a=column, dtype=np.double),
+        q=np.linspace(start=0.0, stop=1.0, num=n_bins + 1),
     )
     # Nudge the outer edges so `np.histogram`'s half-open bins keep the
     # extreme events, which the quantile puts exactly on the boundary.
@@ -248,9 +249,9 @@ def binned_spectra(
 
     `weights` is `(..., n_events)` and the result is `(..., K)`, so a `(B, S)`
     design comes back as `(B, S, K)` ready for `decompose`. Every run weights
-    the *same* `column`, which is what makes the across-run variance a property
-    of the unfolding rather than of the evaluation sample: the finite size of
-    the common set shifts all runs together and cancels out of the contrast.
+    the *same* `column`, so the across-run variance is a property of the
+    unfolding rather than of the evaluation sample: the finite size of the
+    common set shifts all runs together and cancels out of the contrast.
     """
     values: NDArray[np.double] = np.asarray(a=column, dtype=np.double)
     stack: NDArray[np.double] = np.asarray(a=weights, dtype=np.double)
@@ -276,8 +277,8 @@ def weighted_means(
 
     Binning is a choice, and a decomposition that depends on it invites the
     reply that a different binning would say something else. The weighted mean
-    depends on none, so it is what the summary table reports; the binned
-    covariance is what carries the off-diagonal argument.
+    depends on none, so the summary table reports it; the binned covariance
+    carries the off-diagonal argument.
     """
     values: NDArray[np.double] = np.asarray(a=column, dtype=np.double)
     stack: NDArray[np.double] = np.asarray(a=weights, dtype=np.double)

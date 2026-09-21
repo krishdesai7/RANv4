@@ -129,9 +129,9 @@ class ZXY:
                 f"one-dimensional array of length {len(self.events)}"
             )
         bad_labels: NDArray[np.bool_] = cast(
-            "NDArray[np.bool_]", (self.y != 0) & (self.y != 1)
+            typ="NDArray[np.bool_]", val=(self.y != 0) & (self.y != 1)
         )
-        if np.any(bad_labels):
+        if np.any(a=bad_labels):
             raise ValueError("labels must be zero (MC) or one (nature)")
 
     def __len__(self) -> int:
@@ -154,7 +154,7 @@ class ZXY:
         if not parts:
             raise ValueError("cannot concatenate an empty sequence of labelled events")
         return cls(
-            events=Events.concatenate([part.events for part in parts]),
+            events=Events.concatenate(parts=[part.events for part in parts]),
             y=np.concatenate([part.y for part in parts], axis=0),
         )
 

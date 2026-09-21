@@ -30,48 +30,6 @@ wheels = [
 ]
 
 [[package]]
-name = "deconvolve"
-version = "0.2.0"
-source = { editable = "." }
-dependencies = [
-    { name = "beartype" },
-    { name = "jax", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
-    { name = "jax", extra = ["cuda13"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "jaxtyping" },
-    { name = "keras" },
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "pyyaml" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "complexipy" },
-    { name = "ipykernel" },
-    { name = "pre-commit" },
-    { name = "pyrefly" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-env" },
-    { name = "pytest-xdist" },
-    { name = "ruff" },
-    { name = "rust-just" },
-    { name = "scipy" },
-    { name = "scipy-stubs" },
-    { name = "types-pyyaml" },
-]
-release = [
-    { name = "rooster" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "scipy" },
-    { name = "scipy-stubs" },
-]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -532,6 +490,48 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/f9/4383635281999c3eaa44bf327de523ba42240b35eb87c1130adac4a829c6/debugpy-1.8.22-cp315-cp315-win32.whl", hash = "sha256:225d063f81708c2546999e7edfac0198b2d5c2f144797dc64858f867948633e0", size = 5359469, upload-time = "2026-09-15T21:44:43.234Z" },
     { url = "https://files.pythonhosted.org/packages/7b/14/4fe9f46a9c825c8cbc6dc4aebc2a885b0bceb37ce2a37699c170482e7a40/debugpy-1.8.22-cp315-cp315-win_amd64.whl", hash = "sha256:b17a4896520f1c6da09ce76ec8215df0b85b0b6f3617526a4c65c2315340875a", size = 5397869, upload-time = "2026-09-15T21:44:44.783Z" },
     { url = "https://files.pythonhosted.org/packages/56/3d/c7dc9f35bc9e22cdb53679f844bee40fd5cff871862f60595869a433400d/debugpy-1.8.22-py2.py3-none-any.whl", hash = "sha256:a9e9d3550e15ca479c59333e90845029190531f0cacfedab3b815a57bd913947", size = 5374857, upload-time = "2026-09-15T21:44:54.454Z" },
+]
+
+[[package]]
+name = "deconvolve"
+version = "0.3.0"
+source = { editable = "." }
+dependencies = [
+    { name = "beartype" },
+    { name = "jax", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "jax", extra = ["cuda13"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "jaxtyping" },
+    { name = "keras" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "complexipy" },
+    { name = "ipykernel" },
+    { name = "pre-commit" },
+    { name = "pyrefly" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-env" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "rust-just" },
+    { name = "scipy" },
+    { name = "scipy-stubs" },
+    { name = "types-pyyaml" },
+]
+release = [
+    { name = "rooster" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "scipy" },
+    { name = "scipy-stubs" },
 ]
 
 [[package]]

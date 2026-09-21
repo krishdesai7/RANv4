@@ -36,7 +36,7 @@ In equilibrium, both losses converge to $\log(2)$ and the reweighted MC matches 
 Requires Python >= 3.13. Uses [`uv`](https://docs.astral.sh/uv/) for dependency management. One way to install it is with `pip install uv`; for alternatives see the [uv documentation](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```shell
-git clone https://github.com/krishdesai7/RANv4.git
+git clone https://github.com/krishdesai7/anamorph.git
 cd Anamorph
 uv sync
 ```

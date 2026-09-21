@@ -44,7 +44,7 @@ jobs:
         run: uv run --locked complexipy --suggest-refactors
 
       - name: Test
-        run: uv run --locked pytest -q
+        run: uv run --locked pytest
 
       - name: Audit
         run: uv audit --locked

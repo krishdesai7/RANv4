@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from anamorph.evaluate import (
+from deconvolve.evaluate import (
     _bin_edges,
     _js_from_histograms,
     _js_per_dim,

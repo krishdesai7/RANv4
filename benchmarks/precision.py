@@ -10,20 +10,20 @@ from typing import TYPE_CHECKING, Protocol, cast
 if TYPE_CHECKING:
     from typing import Any, Final
 
-    from anamorph.coretypes import AnamorphModel, DatasetSplits, EventArray
-    from anamorph.train import TrainResult
+    from deconvolve.coretypes import DatasetSplits, DeconvolveModel, EventArray
+    from deconvolve.train import TrainResult
     from numpy.typing import NDArray
 
     class ModelBuilder(Protocol):
-        """The exact shape of `anamorph.models.build_{generator,discriminator}`.
+        """The exact shape of `deconvolve.models.build_{generator,discriminator}`.
 
-        Spelled out rather than `Callable[..., AnamorphModel]` so that rebinding the
+        Spelled out rather than `Callable[..., DeconvolveModel]` so that rebinding the
         module attributes below type-checks instead of needing a suppression.
         """
 
         def __call__(
             self, dim: int = 1, hidden_units: int = 64, n_layers: int = 2
-        ) -> AnamorphModel: ...
+        ) -> DeconvolveModel: ...
 
 
 if len(sys.argv) < 3:
@@ -38,14 +38,14 @@ SEED: Final[int] = int(sys.argv[2])
 os.environ["KERAS_BACKEND"] = "jax"
 os.environ["JAX_ENABLE_X64"] = str(object=int(DTYPE == "float64"))
 
-import anamorph  # ruff: ignore[unused-import] -- import order is load-bearing; see above
-import anamorph.train as train_module
+import deconvolve  # ruff: ignore[unused-import] -- import order is load-bearing; see above
+import deconvolve.train as train_module
 import numpy as np
-from anamorph.coretypes import (
+from deconvolve.coretypes import (
     Events,
     Populations,
 )
-from anamorph.data import AnamorphDataset
+from deconvolve.data import DeconvolveDataset
 from scipy.stats import (
     wasserstein_distance,
 )
@@ -58,12 +58,12 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 
 def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """Rebuild the model factories at `dtype` without mutating the source file."""
-    source: str = (REPO_ROOT / "src" / "anamorph" / "models.py").read_text()
+    source: str = (REPO_ROOT / "src" / "deconvolve" / "models.py").read_text()
     namespace: dict[str, Any] = {}
     exec(  # ruff: ignore[exec-builtin] -- module's own source, recompiled with one literal changed
         compile(
             source=source.replace('"float32"', f'"{dtype}"'),
-            filename="anamorph/models.py",
+            filename="deconvolve/models.py",
             mode="exec",
         ),
         namespace,
@@ -108,7 +108,7 @@ def main() -> None:
         truth=cast("EventArray", z_true),
     )
 
-    splits: DatasetSplits = AnamorphDataset(batch_size=1024, seed=0).splits_from_data(
+    splits: DatasetSplits = DeconvolveDataset(batch_size=1024, seed=0).splits_from_data(
         data=pops.interleave()
     )
     result: TrainResult = train_module.train(

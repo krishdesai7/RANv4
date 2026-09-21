@@ -1,4 +1,4 @@
-"""Tests for `anamorph.report`'s template loading and value-formatting primitives."""
+"""Tests for `deconvolve.report`'s template loading and value-formatting primitives."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import pytest
-from anamorph import report
-from anamorph.coretypes import SUBSTRUCTURE_VARIABLES
+from deconvolve import report
+from deconvolve.coretypes import SUBSTRUCTURE_VARIABLES
 
 
 def test_the_template_ships_with_the_package() -> None:
@@ -90,7 +90,7 @@ def test_a_non_finite_improvement_leaves_the_rest_of_the_row_intact() -> None:
     )
 
     # Two absent-IBU cells, two absent-OmniFold cells, and the non-finite
-    # Anamorph improvement.
+    # Deconvolve improvement.
     assert body.count(r"\multicolumn{1}{c}{---}") == 5
     # The scaled `after` still lands: 0.1 x 10^3.
     assert "100" in body
@@ -405,7 +405,7 @@ def test_rendering_creates_nothing_in_a_directory_that_is_not_a_run(
 def test_missing_metrics_degrade_to_a_row_rather_than_raising(
     reference_run: Path,
 ) -> None:
-    """A run that died before `anamorph evaluate` still produces a report."""
+    """A run that died before `deconvolve evaluate` still produces a report."""
     (reference_run / "artifacts" / "metrics.json").unlink()
 
     source: str = report.render(reference_run)
@@ -435,7 +435,7 @@ def test_a_gaussian_run_renders(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
 ) -> None:
     """The `gaussian_params` row has no other coverage."""
-    from anamorph.data import parse_gaussian_config
+    from deconvolve.data import parse_gaussian_config
 
     run_dir: Path = make_reference_run(
         tmp_path / "gaussian_run",
@@ -502,7 +502,7 @@ def test_the_compile_invocation_is_absolute_and_non_interactive(
     `pdflatex` runs with `cwd=artifacts`, so a relative `-output-directory`
     resolves against `artifacts/` rather than the caller's working directory
     -- and a relative run directory is precisely what `scripts/submit.sh` and
-    the documented `anamorph report runs/<timestamp>` both pass.
+    the documented `deconvolve report runs/<timestamp>` both pass.
 
     `-interaction=nonstopmode` does not cover pdflatex's pre-mode "I can't
     write on file `report.log'" prompt, so without `stdin=DEVNULL` the failure
@@ -574,7 +574,7 @@ def test_a_run_directory_with_an_underscore_compiles(
 def test_a_gaussian_run_compiles(
     tmp_path: Path, make_reference_run: ReferenceRunBuilder
 ) -> None:
-    from anamorph.data import parse_gaussian_config
+    from deconvolve.data import parse_gaussian_config
 
     run_dir: Path = make_reference_run(
         tmp_path / "gaussian_run",
@@ -654,7 +654,7 @@ class TestOmniFoldColumns:
         assert "50" in body
 
     def test_the_methods_are_ordered_ibu_omnifold_ran(self) -> None:
-        """Anamorph sits last, where the eye lands, behind what it is compared to.
+        """Deconvolve sits last, where the eye lands, behind what it is compared to.
 
         Ordering is positional in the row -- nothing labels the cells -- so a
         swapped pair would silently attribute each method's numbers to another.
@@ -663,19 +663,19 @@ class TestOmniFoldColumns:
             "detector",
             "wasserstein",
             ("m",),
-            {"detector_m": _entry(1.0, 0.001)},  # Anamorph: 1.0
+            {"detector_m": _entry(1.0, 0.001)},  # Deconvolve: 1.0
             {"detector_m": _entry(1.0, 0.002)},  # IBU: 2.0
             {"detector_m": _entry(1.0, 0.003)},  # OmniFold: 3.0
             frozenset(),
         )
 
         cells = [c.strip() for c in body.splitlines()[-1].split("&")]
-        # label, Sim, IBU, IBU%, OmniFold, OmniFold%, Anamorph, Anamorph%
+        # label, Sim, IBU, IBU%, OmniFold, OmniFold%, Deconvolve, Deconvolve%
         assert len(cells) == report._TABLE_COLUMNS
         assert cells[2].removeprefix(r"\bfseries ").startswith("2")
         assert cells[4].removeprefix(r"\bfseries ").startswith("3")
         assert cells[6].removeprefix(r"\bfseries ").startswith("1")
-        # Anamorph performed best (1.0 vs 2.0 and 3.0), so its cells are bolded
+        # Deconvolve performed best (1.0 vs 2.0 and 3.0), so its cells are bolded
         assert cells[6].startswith(r"\bfseries")
         assert cells[7].startswith(r"\bfseries")
         assert not cells[2].startswith(r"\bfseries")
@@ -683,7 +683,7 @@ class TestOmniFoldColumns:
 
     def test_best_performing_method_is_bolded(self) -> None:
         r"""The method achieving lowest distance is highlighted with \bfseries."""
-        # OmniFold (0.001) wins over Anamorph (0.002) and IBU (0.003)
+        # OmniFold (0.001) wins over Deconvolve (0.002) and IBU (0.003)
         body = report.metrics_table(
             "detector",
             "wasserstein",

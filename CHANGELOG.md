@@ -6,4 +6,4 @@ Released on 2026-09-04.
 
 ### Breaking changes
 
-- Select on detector-level MMD; add uncertainty, hyperparams, and expanded jet observables ([#10](https://github.com/krishdesai7/anamorph/pull/10))
+- Select on detector-level MMD; add uncertainty, hyperparams, and expanded jet observables ([#10](https://github.com/krishdesai7/deconvolve/pull/10))

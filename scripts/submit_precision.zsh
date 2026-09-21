@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/Anamorph
+PROJECT_DIR=/global/u1/k/kdesai/Deconvolve
 SEED_START=200
 SEED_END=271
 

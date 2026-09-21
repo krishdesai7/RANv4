@@ -1,9 +1,9 @@
 """Exponential-tilt reweighting: the most regularized generator there is.
 
-Anamorph's generator is an arbitrary function `z -> w`, and `benchmarks/ceiling.py`
+Deconvolve's generator is an arbitrary function `z -> w`, and `benchmarks/ceiling.py`
 diagnostic D shows what that costs: the detector-level objective does not
 identify the truth. The oracle particle-level likelihood ratio scores *worse*
-on detector-level MMD than a trained Anamorph does, on held-out events. Many weight
+on detector-level MMD than a trained Deconvolve does, on held-out events. Many weight
 functions match `p(x)`; the right one is not the one the objective prefers.
 
 This replaces the network with a `d`-parameter exponential family:
@@ -70,16 +70,16 @@ from itertools import combinations_with_replacement, starmap
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, cast
 
-import anamorph  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
+import deconvolve  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 import numpy as np
-from anamorph.coretypes import SUBSTRUCTURE_VARIABLES, Split
-from anamorph.data import AnamorphDataset, load_jet_dataset
-from anamorph.evaluate import _improvement, _wd_per_dim
-from anamorph.logging_config import configure_logging
+from deconvolve.coretypes import SUBSTRUCTURE_VARIABLES, Split
+from deconvolve.data import DeconvolveDataset, load_jet_dataset
+from deconvolve.evaluate import _improvement, _wd_per_dim
+from deconvolve.logging_config import configure_logging
 from scipy.optimize import root
 
 if TYPE_CHECKING:
-    from anamorph.coretypes import DatasetSplits, EventArray, Populations
+    from deconvolve.coretypes import DatasetSplits, EventArray, Populations
     from numpy.typing import NDArray
     from scipy.optimize._root import OptimizeResult
 
@@ -338,7 +338,7 @@ def _load(args: argparse.Namespace) -> tuple[DatasetSplits, tuple[str, ...]]:
         return splits, variables
     if args.config is None:
         raise SystemExit("--config is required for --dataset gaussian")
-    splits = AnamorphDataset(
+    splits = DeconvolveDataset(
         batch_size=args.batch_size, seed=args.data_seed
     ).generate_gaussian_dataset(config_path=args.config, n_samples=args.n_samples)
     dim = splits.train.as_arrays().z.shape[1]

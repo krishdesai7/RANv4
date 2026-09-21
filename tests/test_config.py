@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import yaml
-from anamorph.data import (
+from deconvolve.data import (
     gaussian_config_from_run_config,
     parse_gaussian_config,
     sigma_to_covariance,
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from anamorph.coretypes import GaussianConfig
+    from deconvolve.coretypes import GaussianConfig
     from numpy.typing import ArrayLike, NDArray
 
 
@@ -173,7 +173,7 @@ class TestGaussianConfigFromRunConfig:
 
     Three formats exist in runs/ and two share their key names, so this is the
     one place that has to get the disambiguation right. A `--load-run` replot
-    and `anamorph evaluate` both go through here; when they read it independently
+    and `deconvolve evaluate` both go through here; when they read it independently
     they drifted, and metrics on every Gaussian run died with KeyError.
     """
 

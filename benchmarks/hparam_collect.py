@@ -61,8 +61,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from anamorph.coretypes import artifacts_dir
-from anamorph.logging_config import configure_logging
+from deconvolve.coretypes import artifacts_dir
+from deconvolve.logging_config import configure_logging
 from rich.console import Console
 from rich.table import Table
 from scipy import stats
@@ -434,7 +434,7 @@ def _arms_table(
     # The spread is the reason the whole tool exists, so it is a column and not
     # a footnote: a difference smaller than this is not a result.
     arms.add_column(header="SD", justify="right")
-    # The oracle sits at 80.1% of the MMD subsample and Anamorph at 73.3%, so ESS is
+    # The oracle sits at 80.1% of the MMD subsample and Deconvolve at 73.3%, so ESS is
     # how a dispersion coefficient is calibrated rather than guessed.
     arms.add_column(header="ESS", justify="right")
     # Admissibility before performance: an arm the criterion can separate from

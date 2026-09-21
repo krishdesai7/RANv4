@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/Anamorph
+PROJECT_DIR=/global/u1/k/kdesai/Deconvolve
 
 FLAG=${FLAG:---lr-g}
 LEVELS=${LEVELS:-"3e-5 1e-4 3e-4"}
@@ -59,7 +59,7 @@ for level in ${LEVELS}; do
     run_dir="${ARM_DIR}/${tag}"
     mkdir -p "${run_dir}"
     $step bash -c "
-        uv run anamorph train ${TRAIN_ARGS} \
+        uv run deconvolve train ${TRAIN_ARGS} \
             ${FLAG}='${level}' ${REPLICATE_FLAG}='${seed}' --run-dir='${run_dir}'
       " > "${run_dir}/train.log" 2>&1 &
 

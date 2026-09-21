@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 import numpy as np
-from anamorph.mmd import (
+from deconvolve.mmd import (
     MMDCache,
     bandwidths,
     build_cache,

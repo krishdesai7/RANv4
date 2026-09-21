@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def test_render_metrics_outputs_named_columns_and_values() -> None:
-    from anamorph.evaluate import render_metrics
+    from deconvolve.evaluate import render_metrics
 
     output = StringIO()
     console = Console(file=output, color_system=None, width=120)
@@ -45,7 +45,7 @@ def test_render_metrics_outputs_named_columns_and_values() -> None:
 def test_download_file_updates_a_rich_progress_task(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from anamorph.data import download
+    from deconvolve.data import download
 
     completed: list[tuple[str, Path]] = []
 

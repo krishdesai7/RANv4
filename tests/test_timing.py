@@ -1,7 +1,7 @@
 """Tests for the optional timing layer.
 
 Two properties matter more than the numbers themselves. The layer must be a
-true no-op when `ANAMORPH_TIMING` is unset --- a run that is not being profiled
+true no-op when `DECONVOLVE_TIMING` is unset --- a run that is not being profiled
 should not pay a `perf_counter` call, let alone a list append, at every phase
 boundary --- and it must record a phase that raised, because the phase you most
 want a number for is the one that just fell over.
@@ -16,7 +16,7 @@ from io import StringIO
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from anamorph import timing
+from deconvolve import timing
 from rich.console import Console
 
 if TYPE_CHECKING:
@@ -24,8 +24,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from anamorph.coretypes import DatasetSplits
-    from anamorph.train import TrainResult
+    from deconvolve.coretypes import DatasetSplits
+    from deconvolve.train import TrainResult
 
 
 def _rendered() -> str:
@@ -402,11 +402,11 @@ class TestMerge:
 class TestEnvironment:
     @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
     def test_truthy_values_enable(self, value: str) -> None:
-        assert timing._enabled_from_env({"ANAMORPH_TIMING": value})
+        assert timing._enabled_from_env({"DECONVOLVE_TIMING": value})
 
     @pytest.mark.parametrize("value", ["", "0", "false", "FALSE", "no", "off"])
     def test_falsey_values_do_not(self, value: str) -> None:
-        assert not timing._enabled_from_env({"ANAMORPH_TIMING": value})
+        assert not timing._enabled_from_env({"DECONVOLVE_TIMING": value})
 
     def test_absent_does_not(self) -> None:
         assert not timing._enabled_from_env({})
@@ -428,26 +428,26 @@ class TestTrainIntegration:
     @staticmethod
     def _splits() -> DatasetSplits:
         import numpy as np
-        from anamorph.coretypes import ZXY, Events
-        from anamorph.data import AnamorphDataset
+        from deconvolve.coretypes import ZXY, Events
+        from deconvolve.data import DeconvolveDataset
 
         rng = np.random.default_rng(21)
         n = 512
         z = rng.normal(size=(2 * n, 1)).astype(np.single)
         x = z + rng.normal(0, 0.3, size=(2 * n, 1)).astype(np.single)
         y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-        return AnamorphDataset(batch_size=32, seed=5).splits_from_data(
+        return DeconvolveDataset(batch_size=32, seed=5).splits_from_data(
             ZXY(Events(z, x), y)
         )
 
     @staticmethod
     def _train(splits: DatasetSplits) -> TrainResult:
-        from anamorph.train import train
+        from deconvolve.train import train
 
         return train(splits, dim=1, n_epochs=3, hidden_units=8, n_layers=1, seed=42)
 
     def test_timed_run_matches_an_untimed_one(self) -> None:
-        """`ANAMORPH_TIMING` must be observable in the report and nowhere else.
+        """`DECONVOLVE_TIMING` must be observable in the report and nowhere else.
 
         Timing splits the fused path's single `jit` call into `lower().compile()`
         plus a call to the compiled object so the compile boundary is visible.

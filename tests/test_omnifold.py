@@ -20,16 +20,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from anamorph import timing
-from anamorph.baselines import _shared as shared
-from anamorph.baselines import omnifold
-from anamorph.coretypes import ZXY, DatasetSplits, Events
-from anamorph.data import ArrayDataset
+from deconvolve import timing
+from deconvolve.baselines import _shared as shared
+from deconvolve.baselines import omnifold
+from deconvolve.coretypes import ZXY, DatasetSplits, Events
+from deconvolve.data import ArrayDataset
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from anamorph.coretypes import EventArray
+    from deconvolve.coretypes import EventArray
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -97,13 +97,13 @@ class TestQuarantine:
     """The properties that keep TensorFlow out of this interpreter."""
 
     def test_the_worker_is_not_imported_by_the_package(self) -> None:
-        """Importing `anamorph` must not pull the worker in.
+        """Importing `deconvolve` must not pull the worker in.
 
         If it ever is imported, its module-level `KERAS_BACKEND=tensorflow` would
         race the package's `jax` pin and the failure would surface somewhere
         unrelated.
         """
-        assert "anamorph.baselines._omnifold_worker" not in sys.modules
+        assert "deconvolve.baselines._omnifold_worker" not in sys.modules
 
     def test_tensorflow_is_not_importable(self) -> None:
         """The project environment must not contain TensorFlow at all.
@@ -267,7 +267,7 @@ class TestCpuFallbackIsReported:
 
 
 class TestEvaluateSingle:
-    """The artifact layout, which `anamorph report` reads positionally."""
+    """The artifact layout, which `deconvolve report` reads positionally."""
 
     def test_it_writes_into_artifacts_and_caches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

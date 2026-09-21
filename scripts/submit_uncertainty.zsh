@@ -2,7 +2,7 @@
 #
 # Packed launcher for the bootstrap x seed variance design.
 #
-# One cell is one `anamorph uncertainty run`, so cells are independent and pack onto
+# One cell is one `deconvolve uncertainty run`, so cells are independent and pack onto
 # whatever GPUs the allocation has. Sizing, written out rather than guessed at:
 # a cell is one ordinary training run plus the jet cache read. Scaled from a
 # measured 12-var/500k/100-epoch run (`timings.json`: epochs 6.3s) by 3.2x the
@@ -22,7 +22,7 @@
 # inside the 90 minutes requested.
 #
 # This is the grid shape the published numbers use
-# (src/anamorph/uncertainty/README.md): a B=50 run confirmed against it (every lag
+# (src/deconvolve/uncertainty/README.md): a B=50 run confirmed against it (every lag
 # correlation within 0.01, every effective rank within 0.2) before B=100
 # superseded it as the smaller grid's individual off-diagonal entries moved by
 # up to 0.39 -- too much to publish a single matrix entry from, even though the
@@ -31,7 +31,7 @@
 # Those published numbers were measured at `-n1000000`. The default below is
 # now 1.6M, matching what `scripts/submit.sh` trains, so a design run here
 # supersedes them rather than describing a different model -- see the note in
-# `src/anamorph/uncertainty/README.md` under "What the design measured". Both grids
+# `src/deconvolve/uncertainty/README.md` under "What the design measured". Both grids
 # have to be rerun for that to hold: a decomposition at one sample size and a
 # covariance at another do not describe the same measurement.
 #
@@ -40,7 +40,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/Anamorph
+PROJECT_DIR=/global/u1/k/kdesai/Deconvolve
 
 B=${B:-8}
 S=${S:-8}
@@ -55,7 +55,7 @@ TIME=${TIME:-01:00:00}
 GPUS_PER_NODE=4
 GPUS_TOTAL=$((NODES * GPUS_PER_NODE))
 
-# The design measures Anamorph as the paper ships it, so these are the paper's
+# The design measures Deconvolve as the paper ships it, so these are the paper's
 # values and not a cheaper stand-in. A design run at other settings is a
 # variance budget for a model nobody is publishing -- which is why this tracks
 # `scripts/submit.sh` and why the two must be changed together. All twelve
@@ -86,7 +86,7 @@ step="srun --exact -n1 -N1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56
 for cell in $(seq 0 $((CELLS - 1))); do
   log="${DESIGN_DIR}/cell_$(printf '%04d' "${cell}").log"
   $step bash -c "
-      uv run anamorph uncertainty run ${RUN_ARGS} \
+      uv run deconvolve uncertainty run ${RUN_ARGS} \
           --cell '${cell}' --design-dir '${DESIGN_DIR}' \
           -B '${B}' -S '${S}' --n-eval '${N_EVAL}'
     " > "${log}" 2>&1 &
@@ -98,11 +98,11 @@ for cell in $(seq 0 $((CELLS - 1))); do
 done
 wait || true
 
-uv run anamorph uncertainty collect \
+uv run deconvolve uncertainty collect \
     --design-dir "${DESIGN_DIR}" -B "${B}" -S "${S}" --n-bins "${N_BINS}"
 EOF
 )
 
 echo "Submitted packed job: ${JOB}"
 echo "Logs:    ${DESIGN_DIR}/slurm-${JOB}.log  (+ per-cell cell_NNNN.log)"
-echo "Collect: uv run anamorph uncertainty collect --design-dir ${DESIGN_DIR} -B ${B} -S ${S}"
+echo "Collect: uv run deconvolve uncertainty collect --design-dir ${DESIGN_DIR} -B ${B} -S ${S}"

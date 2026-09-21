@@ -5,8 +5,8 @@ on is the assertion: the bad argument must be refused before any model is built.
 """
 
 import pytest
-from anamorph import leakage
-from anamorph.coretypes import POISON_SENTINEL, TRUTH_SENTINEL
+from deconvolve import leakage
+from deconvolve.coretypes import POISON_SENTINEL, TRUTH_SENTINEL
 
 
 class ReachedTrainingError(Exception):

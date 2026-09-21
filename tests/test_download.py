@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from anamorph.coretypes import LOG_RHO_FLOOR, SUBSTRUCTURE_VARIABLES
-from anamorph.data import download
-from anamorph.data.download import _constituents, _get_var
+from deconvolve.coretypes import LOG_RHO_FLOOR, SUBSTRUCTURE_VARIABLES
+from deconvolve.data import download
+from deconvolve.data.download import _constituents, _get_var
 
 if TYPE_CHECKING:
     from pathlib import Path

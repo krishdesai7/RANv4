@@ -346,12 +346,23 @@ organization-owned repositories, and this repository belongs to a user. A PAT
 would work but would carry a person's identity, which would hand that person
 direct push access to master as a side effect.
 
-**PyPI publishing is off.** The `publish_pypi` input defaults to false, so a
-release never depends on credentials. One thing must still change before it can
-succeed: `PYPI_TOKEN` has to exist in repository secrets. The name is settled --
-the project published under `ran` would have returned 403 whatever the token,
-because an unrelated package holds it, and that is what the rename to
-`deconvolve` was for.
+**PyPI publishing is off by default, and holds no credential.** The
+`publish_pypi` input defaults to false. When it is set, the upload goes through
+**trusted publishing**: `id-token: write` lets the job mint an OIDC token, PyPI
+trades it for a short-lived project-scoped upload token, and `uv publish` does
+the exchange. There is no `PYPI_TOKEN`, deliberately -- nothing to leak or
+rotate.
+
+What that costs is a match maintained in two places at once. The publisher
+registered on PyPI names this repository **and this workflow's filename**, so
+renaming `release.yml` or moving the publish step into another workflow breaks
+it, and the failure is a 403 that does not say why. `--trusted-publishing
+always` is what keeps that failure loud instead of a silent fallback to
+credentials that do not exist.
+
+The name itself is settled: under the old name `ran` every upload would have
+403'd whatever the credential, because an unrelated package holds it, and that
+is what the rename to `deconvolve` was for.
 
 ## OmniFold
 

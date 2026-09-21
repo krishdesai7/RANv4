@@ -38,11 +38,11 @@ complexity:
 
 # Run tests, optionally forwarding arguments to pytest.
 test *args:
-    uv run --locked pytest -q {{ args }}
+    uv run --locked pytest {{ args }}
 
 # Run every test that is not marked slow -- a quick mid-work check.
 test-fast *args:
-    uv run --locked pytest -q -m 'not slow' {{ args }}
+    uv run --locked pytest -m 'not slow' {{ args }}
 
 # Audit locked dependencies for known vulnerabilities.
 audit:

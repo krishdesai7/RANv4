@@ -8,9 +8,9 @@
 # ///
 """The TensorFlow half of `gpu_coexistence.py`. Never imported -- only `uv run`.
 
-This file deliberately has no `ran` import and is not reachable from the
+This file deliberately has no `anamorph` import and is not reachable from the
 package: it runs under Python 3.13 with the TensorFlow Keras backend, which is
-exactly the environment `src/ran` cannot coexist with. The PEP 723 header above
+exactly the environment `src/anamorph` cannot coexist with. The PEP 723 header above
 is the whole quarantine mechanism; `uv run --no-project` provisions it.
 
 It answers one question -- **can TensorFlow get usable GPU memory right now?**
@@ -175,7 +175,7 @@ def _environment(dlopen: dict[str, str]) -> dict[str, object]:
         },
         "ld_library_path": os.environ.get("LD_LIBRARY_PATH", "<unset>")[:600],
         "nvidia_packages": packages,
-        "wheels_preloaded": os.environ.get("_RAN_PROBE_REEXEC") == "1",
+        "wheels_preloaded": os.environ.get("_ANAMORPH_PROBE_REEXEC") == "1",
         "dlopen": dlopen,
         "nvidia_wheel_libs": _nvidia_wheel_libs(),
     }
@@ -255,11 +255,11 @@ def _preload_wheels_and_reexec() -> None:
     loader when the process starts, so rewriting it inside a running
     interpreter changes nothing for libraries TF has yet to open -- a detail
     that makes an in-process "fix" look like it works while measuring the
-    unfixed path. `_RAN_PROBE_REEXEC` guards against looping.
+    unfixed path. `_ANAMORPH_PROBE_REEXEC` guards against looping.
     """
-    if os.environ.get("RAN_PROBE_PRELOAD_WHEELS") != "1":
+    if os.environ.get("ANAMORPH_PROBE_PRELOAD_WHEELS") != "1":
         return
-    if os.environ.get("_RAN_PROBE_REEXEC") == "1":
+    if os.environ.get("_ANAMORPH_PROBE_REEXEC") == "1":
         return
 
     dirs = _wheel_lib_dirs()
@@ -270,7 +270,7 @@ def _preload_wheels_and_reexec() -> None:
     os.environ["LD_LIBRARY_PATH"] = (
         ":".join([*dirs, existing]) if existing else ":".join(dirs)
     )
-    os.environ["_RAN_PROBE_REEXEC"] = "1"
+    os.environ["_ANAMORPH_PROBE_REEXEC"] = "1"
     os.execv(sys.executable, [sys.executable, *sys.argv])  # ruff: ignore[start-process-with-no-shell]
 
 

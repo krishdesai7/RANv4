@@ -5,16 +5,16 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
-import ran.experiments.cubic_sweep as cs
-import ran.train
-from ran.experiments.cubic_sweep import (
+import anamorph.experiments.cubic_sweep as cs
+import anamorph.train
+from anamorph.experiments.cubic_sweep import (
     _sweep_point,
     collect,
     make_particles,
     response,
     unfolded_wasserstein,
 )
-from ran.train import TrainResult
+from anamorph.train import TrainResult
 from scipy.stats import wasserstein_distance
 
 if TYPE_CHECKING:
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from numpy.typing import NDArray
-    from ran.rantypes import RANModel
+    from anamorph.coretypes import AnamorphModel
 
 
 def test_response_identity_at_zero() -> None:
@@ -72,7 +72,7 @@ def test_run_ran_wiring_with_stubbed_training(
 ) -> None:
     """Verify run_ran's orchestration WITHOUT training any models.
 
-    Real RAN training is cluster work; here train() is stubbed with an instant
+    Real Anamorph training is cluster work; here train() is stubbed with an instant
     fake and we only check that run_ran draws the right s, normalizes weights,
     computes the metric, and writes the JSON.
     """
@@ -87,16 +87,16 @@ def test_run_ran_wiring_with_stubbed_training(
         # dim/n_epochs are swallowed by **_kwargs: this stub only cares that
         # run_ran passes a seed through.
         return TrainResult(
-            # TrainResult declares g/d as RANModel; run_ran only calls g and
+            # TrainResult declares g/d as AnamorphModel; run_ran only calls g and
             # reads seed, so this test double is sufficient at runtime.
-            g=cast("RANModel", _uniform_weights),
-            d=cast("RANModel", None),
+            g=cast("AnamorphModel", _uniform_weights),
+            d=cast("AnamorphModel", None),
             history={},
             seed=seed or 0,
         )
 
-    # run_ran imports train() lazily from ran.train, so patch it at the source.
-    monkeypatch.setattr(ran.train, "train", fake_train)
+    # run_ran imports train() lazily from anamorph.train, so patch it at the source.
+    monkeypatch.setattr(anamorph.train, "train", fake_train)
 
     out = cs.run_ran(
         s_index=3, sweep_dir=tmp_path, n_samples=2000, n_points=25, seed=0, init_seed=5

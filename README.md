@@ -1,12 +1,14 @@
-# RAN: Reweighting Adversarial Networks
+# Anamorph
 
-An adversarial neural network that learns per-event weights to correct simulated (Monte Carlo) distributions so they match observed data. Built with Keras 3 on the JAX backend.
+Unbinned, full-phase-space unfolding. An adversarial neural network learns per-event weights that correct simulated (Monte Carlo) distributions so they match observed data. Built with Keras 3 on the JAX backend.
+
+An *anamorphosis* is a distortion that resolves into the true picture from exactly one vantage point — the information was never lost, only transformed. That is the detector, and the weights this package learns are the vantage.
 
 ## Motivation
 
 In particle physics, Monte Carlo (MC) simulations are used to model detector responses and physical processes. These simulations never perfectly reproduce real data. There are always residual mismodelling effects. Traditional reweighting uses hand-tuned correction factors binned in one or two variables, which scales poorly to high-dimensional feature spaces.
 
-RANv4 replaces this with a learned reweighting: a **generator** network predicts a continuous per-event weight from particle-level (truth) features, while an **adversarial discriminator** tries to distinguish the reweighted simulation from real data. At convergence the discriminator can no longer tell them apart, and the generator's weights constitute an optimal correction.
+Anamorph replaces this with a learned reweighting: a **generator** network predicts a continuous per-event weight from particle-level (truth) features, while an **adversarial discriminator** tries to distinguish the reweighted simulation from real data. At convergence the discriminator can no longer tell them apart, and the generator's weights constitute an optimal correction.
 
 ## Model
 
@@ -34,18 +36,18 @@ In equilibrium, both losses converge to $\log(2)$ and the reweighted MC matches 
 Requires Python >= 3.13. Uses [`uv`](https://docs.astral.sh/uv/) for dependency management. One way to install it is with `pip install uv`; for alternatives see the [uv documentation](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```shell
-git clone https://github.com/krishdesai7/RANv4.git
-cd RANv4
+git clone https://github.com/krishdesai7/anamorph.git
+cd anamorph
 uv sync
 ```
 
-This installs the `ran` console script into `.venv/bin`. Commands below are
-written as `ran ...`; from a checkout without an activated virtualenv, prefix
-them with `uv run` (`uv run ran train --config params/1d_default.yaml`).
+This installs the `anamorph` console script into `.venv/bin`. Commands below are
+written as `anamorph ...`; from a checkout without an activated virtualenv, prefix
+them with `uv run` (`uv run anamorph train --config params/1d_default.yaml`).
 Tab completion for subcommands, flags and enum values is available with:
 
 ```shell
-ran --install-completion
+anamorph --install-completion
 ```
 
 ### GPU Support
@@ -58,9 +60,9 @@ Built against `jax[cuda13]` on x86_64 Linux, compiled against CUDA version 13.0.
 
 #### macOS, arm64 (Apple Silicon)
 
-The official macOS arm64 wheels for JAX do not provide GPU acceleration. Therefore JAX and consequentially RAN only offer CPU support on Apple Silicon;
+The official macOS arm64 wheels for JAX do not provide GPU acceleration. Therefore JAX and consequentially Anamorph only offer CPU support on Apple Silicon;
 
-Experimental alternatives, such as `jax-mps` or `IREE`-based workflows, may enable Metal acceleration, but these configurations are not tested or supported by RAN. Users should independently validate their correctness and performance.
+Experimental alternatives, such as `jax-mps` or `IREE`-based workflows, may enable Metal acceleration, but these configurations are not tested or supported by Anamorph. Users should independently validate their correctness and performance.
 
 ## Usage
 
@@ -70,17 +72,17 @@ Gaussian datasets are configured via YAML files. Examples are provided in `param
 
 ```shell
 # 1D uncorrelated Gaussian
-ran train --config params/1d_default.yaml
+anamorph train --config params/1d_default.yaml
 
 # 2D with correlated covariance
-ran train --config params/2d_correlated.yaml
+anamorph train --config params/2d_correlated.yaml
 
 # 4D and 6D correlated
-ran train --config params/4d_correlated.yaml
-ran train --config params/6d_correlated.yaml
+anamorph train --config params/4d_correlated.yaml
+anamorph train --config params/6d_correlated.yaml
 
 # Customize network and training
-ran train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --n-epochs 200
+anamorph train --config params/1d_default.yaml --hidden-units 128 --n-layers 3 --n-epochs 200
 ```
 
 YAML config format (see `params/` for examples):
@@ -103,20 +105,20 @@ Sigma values are promoted to covariance matrices:
 
 ```shell
 # All 6 jet variables
-ran train --dataset jets
+anamorph train --dataset jets
 
 # Specific variables
-ran train --dataset jets --var m --var w
+anamorph train --dataset jets --var m --var w
 ```
 
 ### Other Options
 
 ```shell
 # Reload an existing run (regenerate plots/metrics)
-ran train --load-run runs/2026-03-14T061023Z
+anamorph train --load-run runs/2026-03-14T061023Z
 
 # Enable debug logging for any command
-ran --log-level DEBUG train --config params/1d_default.yaml
+anamorph --log-level DEBUG train --config params/1d_default.yaml
 
 # SLURM submission
 sbatch scripts/submit.sh --config params/2d_correlated.yaml
@@ -144,7 +146,7 @@ The pipeline will:
 
 1. Generate (or load from cache) the dataset
 2. Split into train / validation / test sets (70 / 10 / 20%)
-3. Train the RAN with early stopping
+3. Train the Anamorph with early stopping
 4. Save models, training history, and plots to `runs/<UTC-timestamp>/`
 5. Compute distance metrics on the test set
 
@@ -154,13 +156,13 @@ Distance metrics can be computed independently on existing runs:
 
 ```bash
 # Evaluate all runs
-ran evaluate
+anamorph evaluate
 
 # Evaluate a single run
-ran evaluate --run-dir runs/2026-03-14T061023Z
+anamorph evaluate --run-dir runs/2026-03-14T061023Z
 
 # Recompute even if metrics.json exists
-ran evaluate --force
+anamorph evaluate --force
 ```
 
 This computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences, and triangular discriminator (Vincze-LeCam divergence) \[$\times10^3$\] at both detector and particle level, before and after reweighting. Results are saved to `metrics.json` in each run directory.
@@ -172,20 +174,20 @@ figure — built from the JSON a run already writes:
 
 ```bash
 # Compile runs/<timestamp>/report.pdf
-ran report runs/2026-03-14T061023Z
+anamorph report runs/2026-03-14T061023Z
 
 # Rebuild one that already exists
-ran report runs/2026-03-14T061023Z --force
+anamorph report runs/2026-03-14T061023Z --force
 
 # Emit artifacts/report.tex alone, without a TeX installation
-ran report runs/2026-03-14T061023Z --no-compile
+anamorph report runs/2026-03-14T061023Z --no-compile
 ```
 
 `report.tex` is written into `artifacts/`; `report.pdf` lands at the run root
 beside `config.json`. Compilation needs `pdflatex` on `PATH`. A run missing its
 baseline, its timings or even its metrics still reports: the affected cells
 degrade to dashes or a labelled row rather than failing. `scripts/submit.sh`
-ends with `ran report`, so the report sees the IBU overlay, the redrawn figures
+ends with `anamorph report`, so the report sees the IBU overlay, the redrawn figures
 and the recomputed metrics.
 
 ### Baseline Comparisons
@@ -194,13 +196,13 @@ Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head com
 
 ```bash
 # IBU — single run
-ran baseline ibu --run-dir runs/2026-03-14T061023Z
+anamorph baseline ibu --run-dir runs/2026-03-14T061023Z
 
 # IBU — all runs
-ran baseline ibu
+anamorph baseline ibu
 ```
 
-Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
+Results are saved to `metrics_ibu.json` in each run directory using the same metric format as Anamorph.
 
 ### Leakage Verification
 
@@ -208,10 +210,10 @@ A core correctness requirement is that the generator $g(z)$ never receives $z_\t
 
 ```bash
 # Clean run — z_true drawn from N(0, 1) as normal
-ran leakage-check --clean
+anamorph leakage-check --clean
 
 # Poisoned run — z_true overwritten with -999 after x_data is generated
-ran leakage-check --poison
+anamorph leakage-check --poison
 ```
 
 The poisoned run corrupts every data particle-level value to a nonsense sentinel (-999) while leaving $x_\text{data}$ (the reco-level observations the discriminator actually sees) unchanged. If $g$ had any access to $z_\text{true}$, the poisoned run would produce degraded weights. Both runs should report statistically identical Wasserstein and triangular discriminator improvements. Matching results confirm that no leakage path exists.
@@ -224,17 +226,17 @@ bit-identical between the clean and poisoned arms.
 
 JAX is the only backend in the build; TensorFlow is not a dependency, direct or transitive.
 
-`src/ran/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `ran.*` import must come before `import keras`**. `src/ran/train.py` raises a clear error if the backend has been initialized to something else.
+`src/anamorph/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3 still defaults to TensorFlow when that variable is unset, so the pin is what makes `import keras` work here at all. The backend is fixed at the first keras import, so the pin has to land before it — which is why it lives in the package `__init__`, and why **any `anamorph.*` import must come before `import keras`**. `src/anamorph/train.py` raises a clear error if the backend has been initialized to something else.
 
 ### Precision
 
-The project runs in float32 end to end. The pin is a single constant, `EVENT_DTYPE` in `src/ran/rantypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/ran/models.py` follow from it.
+The project runs in float32 end to end. The pin is a single constant, `EVENT_DTYPE` in `src/anamorph/coretypes/constants.py`, with the annotation alias `EventArray` alongside it; `JAX_ENABLE_X64=0` and the `dtype=` arguments in `src/anamorph/models.py` follow from it.
 
 This is a measured choice, not a default. Every jet observable is float32-clean — `mass` and `mult` survive a float32 round trip bit-exactly, and the other four lose exactly half a ULP, the least a cast can cost. Across 20 paired seeds, float32 and float64 agree on unfolding improvement to within ±0.5 percentage points (equivalence test p=0.015), while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
 
-`ran.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
+`anamorph.data.download` computes jet observables in float64, because the ε protecting degenerate jets is below the smallest float32 denormal.
 
-`src/ran/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
+`src/anamorph/train.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
 - Model state lives in JAX pytrees (`TrainState`) for the duration of training
 - Updates are applied through `stateless_call`/`stateless_apply`
@@ -246,7 +248,7 @@ One unexpected behaviour is worth flagging, because it is the reason the reducti
 
 - **`keras.ops.mean` is not float64-safe.**
   - For float64 input, it selects a float32 compute dtype internally and returns a float64 result carrying ~1e-8 relative error.
-  - `src/ran/train.py` no longer touches `keras.ops`, but it still reduces with `jnp.sum(...) / n` rather than a mean, and `tests/test_train.py` guards the accuracy either way.
+  - `src/anamorph/train.py` no longer touches `keras.ops`, but it still reduces with `jnp.sum(...) / n` rather than a mean, and `tests/test_train.py` guards the accuracy either way.
   - Anything that reaches for `keras.ops` again needs to know. `ops.sum` is unaffected.
 
 ## Seeding
@@ -271,16 +273,16 @@ Force bitwise reproducibility with `XLA_FLAGS=--xla_gpu_deterministic_ops=true`.
 ## Project Structure
 
 ```txt
-RANv4/
-├── src/ran/                      Python package
+Anamorph/
+├── src/anamorph/                      Python package
 │   ├── __init__.py               Pins KERAS_BACKEND=jax and JAX_ENABLE_X64=1
-│   ├── __main__.py               Fallback entry point (python -m ran)
-│   ├── cli.py                    Unified Typer command tree; target of the `ran` script
+│   ├── __main__.py               Fallback entry point (python -m anamorph)
+│   ├── cli.py                    Unified Typer command tree; target of the `anamorph` script
 │   ├── workflow.py               Training and reload workflow
 │   ├── logging_config.py         Structured application logging
 │   ├── leakage.py                Data-poisoning leakage check
 │   ├── py.typed                  PEP 561 typing marker
-│   ├── rantypes/
+│   ├── coretypes/
 │   │   ├── events.py             Split, Events, ZXY, Populations, DatasetSplits
 │   │   ├── configs.py            GaussianConfig, RunConfig
 │   │   ├── results.py            UnfoldingPopulations, VariableOutcome, IBUResult
@@ -289,7 +291,7 @@ RANv4/
 │   │   └── types.py              TypedDicts and array aliases
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion
-│   │   ├── datasets.py           DatasetSplits, RANDataset, caching
+│   │   ├── datasets.py           DatasetSplits, AnamorphDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
 │   │   ├── device.py             Device-resident training form (TrainSplit/EvalSplit)
 │   │   └── download.py           One-time Zenodo data download
@@ -315,7 +317,7 @@ RANv4/
 └── .cache/                       Cached datasets
 ```
 
-`src/ran/rantypes/`, `src/ran/data/` and `src/ran/baselines/` carry their own `README.md` with module-level detail.
+`src/anamorph/coretypes/`, `src/anamorph/data/` and `src/anamorph/baselines/` carry their own `README.md` with module-level detail.
 
 ## Datasets
 
@@ -360,12 +362,12 @@ runs/<timestamp>/
 - **`selection.pdf`** -- Per-epoch MMD curves and the epoch model selection restored
 - **`metrics.json`** -- Wasserstein, JS divergence, and triangular discriminator (before/after)
 - **`metrics_ibu.json`** -- Same metrics from IBU baseline (if run)
-- **`timings.json`** -- Per-phase wall clock, when the run was made under `RAN_TIMING=1`
-- **`report.tex`** -- The LaTeX source `ran report` compiles into the run root's `report.pdf`
+- **`timings.json`** -- Per-phase wall clock, when the run was made under `ANAMORPH_TIMING=1`
+- **`report.tex`** -- The LaTeX source `anamorph report` compiles into the run root's `report.pdf`
 
 ## Training Hyperparameters
 
-These are internal training defaults in `src/ran/train.py`; the CLI-exposed
+These are internal training defaults in `src/anamorph/train.py`; the CLI-exposed
 training options are listed above.
 
 | Parameter            | Default | Description                                     |

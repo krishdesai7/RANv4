@@ -20,16 +20,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from ran import timing
-from ran.baselines import _shared as shared
-from ran.baselines import omnifold
-from ran.data import ArrayDataset
-from ran.rantypes import ZXY, DatasetSplits, Events
+from anamorph import timing
+from anamorph.baselines import _shared as shared
+from anamorph.baselines import omnifold
+from anamorph.coretypes import ZXY, DatasetSplits, Events
+from anamorph.data import ArrayDataset
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from ran.rantypes import EventArray
+    from anamorph.coretypes import EventArray
 
 
 def _split(z: list[list[float]], x: list[list[float]], y: list[int]) -> ArrayDataset:
@@ -97,13 +97,13 @@ class TestQuarantine:
     """The properties that keep TensorFlow out of this interpreter."""
 
     def test_the_worker_is_not_imported_by_the_package(self) -> None:
-        """Importing `ran` must not pull the worker in.
+        """Importing `anamorph` must not pull the worker in.
 
         If it ever is imported, its module-level `KERAS_BACKEND=tensorflow` would
         race the package's `jax` pin and the failure would surface somewhere
         unrelated.
         """
-        assert "ran.baselines._omnifold_worker" not in sys.modules
+        assert "anamorph.baselines._omnifold_worker" not in sys.modules
 
     def test_tensorflow_is_not_importable(self) -> None:
         """The project environment must not contain TensorFlow at all.
@@ -267,7 +267,7 @@ class TestCpuFallbackIsReported:
 
 
 class TestEvaluateSingle:
-    """The artifact layout, which `ran report` reads positionally."""
+    """The artifact layout, which `anamorph report` reads positionally."""
 
     def test_it_writes_into_artifacts_and_caches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

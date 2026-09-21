@@ -9,9 +9,9 @@ import os
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
+import anamorph  # ruff: ignore[unused-import]  -- imported for its backend bootstrap
 import pytest
-import ran  # ruff: ignore[unused-import]  -- imported for its backend bootstrap
-from ran.rantypes import constants
+from anamorph.coretypes import constants
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
 
 def _default_cache_is_writable() -> bool:
-    """Whether the process can write RAN's default (non-`tmp_path`) cache dir.
+    """Whether the process can write Anamorph's default (non-`tmp_path`) cache dir.
 
-    A few dataset/workflow tests build a `RANDataset` without an explicit
+    A few dataset/workflow tests build a `AnamorphDataset` without an explicit
     `cache_dir`, so they generate into `constants.CACHE_DIR`. On a locked-down
     filesystem (sandboxed local runs, read-only `/.cache`) that write fails with
     `OSError`; on HPC, where these are meant to run, it succeeds. Probe once.
@@ -55,16 +55,16 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "writes_default_cache: needs a writable RAN default cache dir "
+        "writes_default_cache: needs a writable Anamorph default cache dir "
         "(skipped where the filesystem is read-only, e.g. local sandbox runs; "
-        "force with RAN_RUN_CACHE_TESTS=1)",
+        "force with ANAMORPH_RUN_CACHE_TESTS=1)",
     )
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
     if "writes_default_cache" not in item.keywords:
         return
-    if _CACHE_WRITABLE or os.environ.get("RAN_RUN_CACHE_TESTS"):
+    if _CACHE_WRITABLE or os.environ.get("ANAMORPH_RUN_CACHE_TESTS"):
         return
     pytest.skip(f"default cache dir {constants.CACHE_DIR} is not writable")
 

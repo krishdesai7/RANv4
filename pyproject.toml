@@ -4,9 +4,9 @@ build-backend = "uv_build"
 
 
 [project]
-name = "ran"
+name = "anamorph"
 version = "0.2.0"
-description = "Reweighting Adversarial Networks"
+description = "Unbinned, full-phase-space unfolding by adversarial reweighting"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -22,12 +22,12 @@ dependencies = [
 ]
 
 [project.scripts]
-ran = "ran.cli:app"
+anamorph = "anamorph.cli:app"
 
 [project.urls]
-repository = "https://github.com/krishdesai7/RANv4"
-Changelog = "https://github.com/krishdesai7/RANv4/blob/master/CHANGELOG.md"
-Releases = "https://github.com/krishdesai7/RANv4/releases"
+repository = "https://github.com/krishdesai7/anamorph"
+Changelog = "https://github.com/krishdesai7/anamorph/blob/master/CHANGELOG.md"
+Releases = "https://github.com/krishdesai7/anamorph/releases"
 
 [[project.authors]]
 name = "Krish Desai"
@@ -68,7 +68,7 @@ preview-features = true
 cache-keys = [{ file = "pyproject.toml" }]
 
 [tool.uv.build-backend]
-module-name = "ran"
+module-name = "anamorph"
 
 
 [tool.pytest.ini_options]
@@ -79,7 +79,7 @@ filterwarnings = [
     "ignore:__array__ implementation doesn't accept a copy keyword:DeprecationWarning",
     # `train()` points XLA's persistent cache at `COMPILE_CACHE_DIR`. A sandboxed or read-only `.cache/` costs the run nothing but a recompile. "ignore:Error (reading|writing) persistent compilation cache entry:UserWarning",
 ]
-addopts = "-xqn8 --dist loadscope --cov ran"
+addopts = "-xqn8 --dist loadscope --cov anamorph"
 env = [
     "OMP_NUM_THREADS = 1",
     "OPENBLAS_NUM_THREADS = 1",
@@ -171,7 +171,7 @@ ignore = [
 "benchmarks/**.py" = ["T20", "start-process-with-partial-path"]
 # package __init__ is the backend bootstrap: must set KERAS_BACKEND and
 # JAX_ENABLE_X64 before anything imports jax or keras. See module docstring.
-"src/ran/__init__.py" = ["non-empty-init-module"]
+"src/anamorph/__init__.py" = ["non-empty-init-module"]
 
 # The quarantined OmniFold/TensorFlow workers run under Python 3.13 exactly
 # (TF ships no 3.14 wheels), so they are pinned here rather than left to

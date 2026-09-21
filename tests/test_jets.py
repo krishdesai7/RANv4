@@ -4,7 +4,7 @@
 container carrying those names is an ordering. It used to be a `frozenset`,
 whose iteration order depends on per-process randomized string hashes: `ran
 train` built columns in one order and recorded it in `config.json`, then `ran
-baseline ibu` and `ran evaluate` rebuilt the same dataset in a different order
+baseline ibu` and `anamorph evaluate` rebuilt the same dataset in a different order
 in their own processes and labelled it with the recorded one. Every jet metric
 came back under the wrong variable name, and a generator trained on one column
 order was fed another.
@@ -18,8 +18,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from ran.data.jets import load_jet_dataset
-from ran.rantypes import (
+from anamorph.coretypes import (
     CACHE_FILENAMES,
     JET_DISPLAY_ORDER,
     JET_VARIABLE_GROUPS,
@@ -27,6 +26,7 @@ from ran.rantypes import (
     Split,
     display_order,
 )
+from anamorph.data.jets import load_jet_dataset
 
 if TYPE_CHECKING:
     from pathlib import Path

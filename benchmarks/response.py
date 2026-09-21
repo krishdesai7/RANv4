@@ -1,4 +1,4 @@
-"""Test whether Herwig and Pythia induce the same response on RAN's summaries.
+"""Test whether Herwig and Pythia induce the same response on Anamorph's summaries.
 
 The generator label is S (Herwig=1, Pythia=0).  Two classifiers are fitted:
 
@@ -59,9 +59,9 @@ from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 import keras
 import numpy as np
-from ran.data import load_jet_dataset
-from ran.logging_config import configure_logging
-from ran.rantypes import SUBSTRUCTURE_VARIABLES, Split
+from anamorph.coretypes import SUBSTRUCTURE_VARIABLES, Split
+from anamorph.data import load_jet_dataset
+from anamorph.logging_config import configure_logging
 from scipy.special import expit
 
 try:
@@ -70,13 +70,13 @@ except ModuleNotFoundError:  # Direct execution puts benchmarks/ on sys.path.
     from ceiling import _fit_classifier, _labelled  # pyrefly: ignore[missing-import]
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-    from ran.rantypes import (
+    from anamorph.coretypes import (
+        AnamorphModel,
         DatasetSplits,
         EventArray,
         Populations,
-        RANModel,
     )
+    from numpy.typing import NDArray
 
 
 LOG2: float = math.log(2.0)
@@ -262,7 +262,7 @@ def _fit(
     include_x: bool,
     label: str,
     fit_kwargs: dict[str, Any],
-) -> RANModel:
+) -> AnamorphModel:
     train = _balanced(train)
     val = _balanced(val)
     return _fit_classifier(
@@ -275,8 +275,8 @@ def _fit(
     ).model
 
 
-def _probability(model: RANModel, inputs: NDArray[np.floating]) -> EventArray:
-    # `RANModel` is a narrow protocol; the classifier built here is a full
+def _probability(model: AnamorphModel, inputs: NDArray[np.floating]) -> EventArray:
+    # `AnamorphModel` is a narrow protocol; the classifier built here is a full
     # `keras.Model` and `.predict` is what the batched forward pass needs.
     predicted = cast("keras.Model", model).predict(inputs, batch_size=8192, verbose=0)
     return cast("EventArray", np.asarray(predicted).ravel().astype(np.double))

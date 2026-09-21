@@ -14,13 +14,13 @@
 
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/RANv4
+PROJECT_DIR=/global/u1/k/kdesai/Anamorph
 cd "${PROJECT_DIR}"
 
-echo "RAN_CACHE_DIR = ${RAN_CACHE_DIR:-<unset: using ./.cache>}"
+echo "ANAMORPH_CACHE_DIR = ${ANAMORPH_CACHE_DIR:-<unset: using ./.cache>}"
 
 # Report where the wall clock times.
-export RAN_TIMING=1
+export ANAMORPH_TIMING=1
 
 N_REQUESTED=1600000
 
@@ -32,7 +32,7 @@ import sys
 
 import numpy as np
 
-from ran.rantypes.constants import (
+from anamorph.coretypes.constants import (
     CACHE_DIR,
     CACHE_FILENAMES,
     SUBSTRUCTURE_VARIABLES,
@@ -67,23 +67,23 @@ mkdir -p runs
 marker="$(mktemp)"
 trap 'rm -f "${marker}"' EXIT
 
-uv run ran train "${TRAIN_ARGS[@]}" "$@"
+uv run anamorph train "${TRAIN_ARGS[@]}" "$@"
 
 RUN_DIR=( runs/*(/e:'[[ $REPLY -nt $marker ]]':) )
 RUN_DIR=$RUN_DIR[-1]
 
 echo "Run dir: ${RUN_DIR}"
 
-uv run ran baseline ibu --run-dir "${RUN_DIR}"
-uv run ran train --load-run "${RUN_DIR}"
-uv run ran evaluate --run-dir "${RUN_DIR}" --force
+uv run anamorph baseline ibu --run-dir "${RUN_DIR}"
+uv run anamorph train --load-run "${RUN_DIR}"
+uv run anamorph evaluate --run-dir "${RUN_DIR}" --force
 
 source "${PROJECT_DIR}/scripts/_lmod.zsh"
 module load texlive
-uv run ran report "${RUN_DIR}"
+uv run anamorph report "${RUN_DIR}"
 
 echo "Artifacts in ${RUN_DIR}:"
 ls -1 "${RUN_DIR}"
 
-jax_cache="${RAN_CACHE_DIR:-.cache}/jax"
+jax_cache="${ANAMORPH_CACHE_DIR:-.cache}/jax"
 echo "XLA cache: $(find "${jax_cache}" -type f 2>/dev/null | wc -l | tr -d ' ') entries in ${jax_cache}"

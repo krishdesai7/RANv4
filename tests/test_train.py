@@ -15,16 +15,16 @@ import jax.numpy as jnp
 import keras
 import numpy as np
 import pytest
-from ran.data import DeviceSplits, RANDataset, train_indices
-from ran.models import build_generator
-from ran.rantypes import (
+from anamorph.coretypes import (
     COMPILE_CACHE_DIR,
     TRUTH_SENTINEL,
     ZXY,
     Events,
     Split,
 )
-from ran.train import (
+from anamorph.data import AnamorphDataset, DeviceSplits, train_indices
+from anamorph.models import build_generator
+from anamorph.train import (
     EPS,
     LOG2,
     TrainResult,
@@ -45,10 +45,16 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
+    from anamorph.coretypes import (
+        AnamorphModel,
+        DatasetSplits,
+        EvalStep,
+        TrainStep,
+        Variables,
+    )
+    from anamorph.train import EpochParams
     from jax._src.basearray import Array
     from numpy.typing import NDArray
-    from ran.rantypes import DatasetSplits, EvalStep, RANModel, TrainStep, Variables
-    from ran.train import EpochParams
 
 
 def test_backend_is_jax_pinned_to_single_precision() -> None:
@@ -144,7 +150,7 @@ def test_a_missing_particle_level_cannot_poison_the_batch() -> None:
     rng: np.random.Generator = np.random.default_rng(seed=6)
     mc_z: NDArray[np.single] = rng.normal(size=(6, 1)).astype(dtype=np.single)
     y: NDArray[np.single] = np.array(object=[1.0] * 4 + [0.0] * 6, dtype=np.single)
-    g: RANModel = build_generator(dim=1)
+    g: AnamorphModel = build_generator(dim=1)
 
     def weights(nature_fill: float) -> NDArray[np.single]:
         z: NDArray[np.single] = np.concatenate(
@@ -320,11 +326,11 @@ class TestTrainSteps:
     def _setup(
         dim: int = 2, n: int = 64, lambda_dispersion: float = 0.0
     ) -> tuple[tuple[TrainStep, TrainStep, EvalStep], TrainState, tuple[Array, ...]]:
-        from ran.models import build_discriminator, build_generator
+        from anamorph.models import build_discriminator, build_generator
 
         keras.utils.set_random_seed(0)
-        g: RANModel = build_generator(dim=dim, hidden_units=8, n_layers=1)
-        d: RANModel = build_discriminator(dim=dim, hidden_units=8, n_layers=1)
+        g: AnamorphModel = build_generator(dim=dim, hidden_units=8, n_layers=1)
+        d: AnamorphModel = build_discriminator(dim=dim, hidden_units=8, n_layers=1)
         opt_g = keras.optimizers.Adam(learning_rate=1e-2)
         opt_d = keras.optimizers.Adam(learning_rate=1e-2)
         opt_g.build(var_list=g.trainable_variables)
@@ -418,7 +424,7 @@ def test_train_runs_and_returns_usable_models(tmp_path: Path) -> None:
     y: NDArray[np.ubyte] = np.concatenate(
         [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
     )
-    splits: DatasetSplits = RANDataset(batch_size=128, seed=0).splits_from_data(
+    splits: DatasetSplits = AnamorphDataset(batch_size=128, seed=0).splits_from_data(
         data=ZXY(Events(z, x), y)
     )
 
@@ -476,7 +482,7 @@ class TestParameterHistory:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         )
-        return RANDataset(batch_size=128, seed=0).splits_from_data(
+        return AnamorphDataset(batch_size=128, seed=0).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 
@@ -549,9 +555,9 @@ class TestParameterHistory:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         )
-        splits: DatasetSplits = RANDataset(batch_size=128, seed=0).splits_from_data(
-            data=ZXY(Events(z, x), y)
-        )
+        splits: DatasetSplits = AnamorphDataset(
+            batch_size=128, seed=0
+        ).splits_from_data(data=ZXY(Events(z, x), y))
         result: TrainResult = train(
             splits, dim=1, n_epochs=9, hidden_units=8, n_layers=1, seed=6
         )
@@ -570,7 +576,7 @@ class TestMMDSelection:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         )
-        return RANDataset(batch_size=128, seed=0).splits_from_data(
+        return AnamorphDataset(batch_size=128, seed=0).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 
@@ -628,7 +634,7 @@ def test_training_never_reads_the_truth_rows_of_z() -> None:
     """The MMD subsample must come from `y == 0` rows only.
 
     `z[y == 1]` is `z_true`. Poisoning it must leave every recorded number
-    bit-identical -- the same guarantee `ran leakage-check` makes, asserted
+    bit-identical -- the same guarantee `anamorph leakage-check` makes, asserted
     here at the seam where the MMD subsample is drawn.
     """
     n = 512
@@ -645,7 +651,9 @@ def test_training_never_reads_the_truth_rows_of_z() -> None:
     poisoned[y == 1] = -999.0
 
     clean_r: TrainResult = train(
-        RANDataset(batch_size=128, seed=0).splits_from_data(data=ZXY(Events(z, x), y)),
+        AnamorphDataset(batch_size=128, seed=0).splits_from_data(
+            data=ZXY(Events(z, x), y)
+        ),
         dim=1,
         n_epochs=4,
         hidden_units=8,
@@ -653,7 +661,7 @@ def test_training_never_reads_the_truth_rows_of_z() -> None:
         seed=17,
     )
     dirty_r: TrainResult = train(
-        RANDataset(batch_size=128, seed=0).splits_from_data(
+        AnamorphDataset(batch_size=128, seed=0).splits_from_data(
             data=ZXY(Events(poisoned, x), y)
         ),
         dim=1,
@@ -683,7 +691,7 @@ class TestSeeding:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         )
-        return RANDataset(batch_size=128, seed=3).splits_from_data(
+        return AnamorphDataset(batch_size=128, seed=3).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 
@@ -788,7 +796,7 @@ class TestFusion:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         )
-        return RANDataset(batch_size=32, seed=5).splits_from_data(
+        return AnamorphDataset(batch_size=32, seed=5).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 
@@ -867,7 +875,7 @@ class TestCompilationCache:
         )
 
     def test_the_threshold_drops_to_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """JAX's 1.0s default leaves RAN's cache *empty*, not merely sparse.
+        """JAX's 1.0s default leaves Anamorph's cache *empty*, not merely sparse.
 
         A run compiles a few dozen executables totalling ~4.6s and not one of
         them clears a second on its own, so the stock threshold caches nothing
@@ -937,7 +945,7 @@ class TestTrainingNeverSeesTheTestSplit:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         ).astype(dtype=np.ubyte)
-        return RANDataset(batch_size=64, seed=1).splits_from_data(
+        return AnamorphDataset(batch_size=64, seed=1).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 
@@ -959,7 +967,7 @@ class TestTrainingNeverSeesTheTestSplit:
         """Every array `train` writes back, generator and discriminator alike.
 
         `trainable_variables` rather than `get_weights()`: it is what the
-        `RANModel` protocol declares, and it is precisely what `_assign` restores
+        `AnamorphModel` protocol declares, and it is precisely what `_assign` restores
         the best state into.
         """
         return [
@@ -1024,11 +1032,11 @@ class TestTrainingNeverSeesTheTestSplit:
 class TestWeightDispersion:
     """How far the generator has travelled from `w = 1`, as one number.
 
-    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against RAN's
-    73.3%: RAN's weights are *more* dispersed than the truth's, so dispersion is
+    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against Anamorph's
+    73.3%: Anamorph's weights are *more* dispersed than the truth's, so dispersion is
     a knob with a target rather than a free parameter. For weights normalised to
     mean 1 the relation is `ESS/n = 1 / (1 + Var(w))`, which puts the oracle at
-    Var 0.249 and RAN at 0.364.
+    Var 0.249 and Anamorph at 0.364.
 
     The variance is taken over the MC rows only. Nature's weights are pinned to
     1 by `normalize_weights` and carry no gradient, so including them would
@@ -1122,7 +1130,7 @@ class TestDispersionPenalty:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(shape=n, dtype=np.ubyte), np.zeros(shape=n, dtype=np.ubyte)]
         ).astype(dtype=np.ubyte)
-        return RANDataset(batch_size=128, seed=0).splits_from_data(
+        return AnamorphDataset(batch_size=128, seed=0).splits_from_data(
             data=ZXY(Events(z, x), y)
         )
 

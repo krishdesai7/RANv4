@@ -6,14 +6,14 @@ intra-interpreter constraints, so all three dissolve at a process boundary:
 `_omnifold_worker.py` carries a PEP 723 header, `uv run --no-project`
 provisions Python 3.13 and TensorFlow for it, and the two halves exchange one
 `.npz` file. Nothing in this module imports TensorFlow, and nothing in the
-worker can import `anamorph`.
+worker can import `deconvolve`.
 
 This half does what every other baseline does --- read a run's `config.json`,
 rebuild its populations, score a weight vector against the same metrics
-`anamorph evaluate` uses --- and the symmetry is the point. The comparison is only
+`deconvolve evaluate` uses --- and the symmetry is the point. The comparison is only
 worth anything if both arms are scored by the same code, which is why this lives
 here rather than in a separate repository with its own vendored copy of
-`anamorph.evaluate` drifting away from this one.
+`deconvolve.evaluate` drifting away from this one.
 
 Two things differ from `ibu.py`, both forced by the subprocess:
 
@@ -86,7 +86,7 @@ def worker_script() -> AbstractContextManager[Path]:
     stash the path.
     """
     return resources.as_file(
-        resources.files(anchor="anamorph") / "baselines" / "_omnifold_worker.py"
+        resources.files(anchor="deconvolve") / "baselines" / "_omnifold_worker.py"
     )
 
 
@@ -106,7 +106,7 @@ def _worker_env() -> dict[str, str]:
     imports nothing local, so it loses nothing.
 
     Renaming this module would also have worked, at the cost of
-    `anamorph.baselines.omnifold` no longer being called after the thing it runs.
+    `deconvolve.baselines.omnifold` no longer being called after the thing it runs.
     """
     return os.environ | {"PYTHONSAFEPATH": "1"}
 

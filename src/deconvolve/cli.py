@@ -44,7 +44,7 @@ def configure(
             "--log-level",
             "-L",
             case_sensitive=False,
-            envvar="ANAMORPH_LOG_LEVEL",
+            envvar="DECONVOLVE_LOG_LEVEL",
             help="Application log level.",
         ),
     ] = LogLevel.info,

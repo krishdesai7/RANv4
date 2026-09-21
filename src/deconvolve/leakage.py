@@ -12,7 +12,7 @@ from .coretypes import (
     Events,
     Populations,
 )
-from .data import AnamorphDataset
+from .data import DeconvolveDataset
 from .evaluate import (
     _collect_test_data,
     _improvement,
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Any, Literal
 
-    from .coretypes import ZXY, AnamorphModel, DatasetSplits, EventArray
+    from .coretypes import ZXY, DatasetSplits, DeconvolveModel, EventArray
 
 logger: Logger = logging.getLogger(name=__name__)
 
@@ -72,13 +72,13 @@ def run_leakage_check(poison: bool, sentinel: float, seed: int, init_seed: int) 
         mc=Events(z_gen, x_sim), data=x_data, truth=z_true
     ).interleave()
 
-    splits: DatasetSplits = AnamorphDataset(
+    splits: DatasetSplits = DeconvolveDataset(
         batch_size=1024, seed=seed
     ).splits_from_data(data)
 
     # Fixed init_seed: both arms must start from identical weights, or the
     # comparison measures initialization variance rather than leakage.
-    g: AnamorphModel = train(
+    g: DeconvolveModel = train(
         splits, dim=1, hidden_units=32, n_layers=2, seed=init_seed
     ).g
 

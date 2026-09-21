@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from matplotlib.patches import Polygon
     from numpy.typing import NDArray
 
-    from .coretypes import AnamorphModel, EventArray, Populations, VarInfo
+    from .coretypes import DeconvolveModel, EventArray, Populations, VarInfo
     from .data import ArrayDataset
 
 type AxesHist = tuple[
@@ -57,25 +57,25 @@ mpl.rcParams["lines.markerfacecolor"] = "none"
 
 
 # One place for the figure's visual hierarchy, rather than seven literals
-# scattered through `_hist_ratio_panel`. Anamorph's step line used to be black at
+# scattered through `_hist_ratio_panel`. Deconvolve's step line used to be black at
 # alpha 0.35 while IBU's ratio line was at 0.75 -- the baseline drawn twice as
 # prominently as the method being showcased, on the same panel.
 COLOR_NATURE: Final[str] = "C0"  # Data / Truth
 COLOR_MC: Final[str] = "C1"  # Sim / Gen
 COLOR_IBU: Final[str] = "green"
 COLOR_OMNIFOLD: Final[str] = "#E31A1C"  # crimson; the third baseline curve
-COLOR_ANAMORPH: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
+COLOR_DECONVOLVE: Final[str] = "#6A3D9A"  # deep violet; greyscales to a dark mid-tone
 
 ALPHA_FILL: Final[float] = 0.35  # the two filled background histograms
 ALPHA_IBU: Final[float] = 0.75
 ALPHA_OMNIFOLD: Final[float] = 0.75
-ALPHA_ANAMORPH: Final[float] = 0.90
+ALPHA_DECONVOLVE: Final[float] = 0.90
 
-# Paint order, which is not legend order: baselines are created after Anamorph so
+# Paint order, which is not legend order: baselines are created after Deconvolve so
 # they read last in the legend, but must not paint over it. Matplotlib's
 # default for lines is 2.
 Z_BASELINE: Final[int] = 2
-Z_ANAMORPH: Final[int] = 3
+Z_DECONVOLVE: Final[int] = 3
 
 
 # `weighted_mmd` is the unbiased U-statistic estimator, which is negative
@@ -150,7 +150,7 @@ class BaselineOverlay(NamedTuple):
     `weights` holds one full-length weight vector **per dimension**, because
     IBU unfolds each observable separately and its weights genuinely differ
     between them. A method producing one vector for every observable, as
-    OmniFold and Anamorph do, repeats it; `from_shared` is that, said once.
+    OmniFold and Deconvolve do, repeats it; `from_shared` is that, said once.
     """
 
     label: str
@@ -263,18 +263,18 @@ def _hist_ratio_panel(
             bins=cast(typ=Sequence[float], val=h_nature[1]),
             weights=w_ran,
             histtype="step",
-            color=COLOR_ANAMORPH,
+            color=COLOR_DECONVOLVE,
             linestyle="-",
             linewidth=4,
-            alpha=ALPHA_ANAMORPH,
-            label="Anamorph",
+            alpha=ALPHA_DECONVOLVE,
+            label="Deconvolve",
             # Above every baseline. The overlays are drawn after this call --
             # which is what puts them last in the legend, where they belong --
-            # and at linewidth 4 the last one drawn would otherwise bury Anamorph
+            # and at linewidth 4 the last one drawn would otherwise bury Deconvolve
             # wherever the curves agree, which on a converged run is
             # everywhere. `zorder` separates paint order from legend order;
             # without it the method being showcased sits under the baselines.
-            zorder=Z_ANAMORPH,
+            zorder=Z_DECONVOLVE,
         ),
     )
 
@@ -305,11 +305,11 @@ def _hist_ratio_panel(
     _ = ax_r.plot(
         centres,
         ratio_ran,
-        color=COLOR_ANAMORPH,
+        color=COLOR_DECONVOLVE,
         marker="o",
         linestyle="--",
-        alpha=ALPHA_ANAMORPH,
-        zorder=Z_ANAMORPH,
+        alpha=ALPHA_DECONVOLVE,
+        zorder=Z_DECONVOLVE,
     )
 
     for overlay in overlays:
@@ -343,7 +343,7 @@ def _hist_ratio_panel(
         )
     # Every panel gets a label, a title and a legend, not only one drawn
     # against a baseline -- no `*_weights.npz` exists on the default
-    # `anamorph train` path, and until one did every panel was unlabelled, untitled
+    # `deconvolve train` path, and until one did every panel was unlabelled, untitled
     # and legend-less. `ax.legend()` runs once here, after the overlay loop, so
     # it picks up whichever baseline handles that loop created and omits the
     # rest.
@@ -619,7 +619,7 @@ def _plot_level(
 
 def plot_detector_level(
     test_dataset: ArrayDataset,
-    g: AnamorphModel,
+    g: DeconvolveModel,
     save_path: Path = Path("plots/detector_level.pdf"),
     var_info: list[VarInfo] | None = None,
     baselines: Sequence[BaselineOverlay] = (),
@@ -641,7 +641,7 @@ def plot_detector_level(
 
 def plot_particle_level(
     test_dataset: ArrayDataset,
-    g: AnamorphModel,
+    g: DeconvolveModel,
     save_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,
     baselines: Sequence[BaselineOverlay] = (),
@@ -663,7 +663,7 @@ def plot_particle_level(
 
 def plot_levels(
     test_dataset: ArrayDataset,
-    g: AnamorphModel,
+    g: DeconvolveModel,
     detector_path: Path = Path("plots/detector_level.pdf"),
     particle_path: Path = Path("plots/particle_level.pdf"),
     var_info: list[VarInfo] | None = None,

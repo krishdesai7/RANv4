@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from anamorph.coretypes import Events, Populations
-from anamorph.uncertainty import (
+from deconvolve.coretypes import Events, Populations
+from deconvolve.uncertainty import (
     DesignSpec,
     binned_spectra,
     bootstrap,
@@ -33,8 +33,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from anamorph.coretypes import DatasetSplits
-    from anamorph.uncertainty import (
+    from deconvolve.coretypes import DatasetSplits
+    from deconvolve.uncertainty import (
         Covariances,
         Design,
         EvaluationSet,
@@ -539,10 +539,10 @@ class TestRunCell:
 
     @staticmethod
     def _stub(monkeypatch: pytest.MonkeyPatch, seen: list[dict[str, Any]]) -> None:
-        import anamorph.evaluate
-        import anamorph.train
-        import anamorph.uncertainty.design as design_module
-        from anamorph.train import TrainResult
+        import deconvolve.evaluate
+        import deconvolve.train
+        import deconvolve.uncertainty.design as design_module
+        from deconvolve.train import TrainResult
 
         monkeypatch.setattr(
             target=design_module,
@@ -574,9 +574,9 @@ class TestRunCell:
                 mmd_test=1.5e-4,
             )
 
-        monkeypatch.setattr(target=anamorph.train, name="train", value=fake_train)
+        monkeypatch.setattr(target=deconvolve.train, name="train", value=fake_train)
         monkeypatch.setattr(
-            target=anamorph.evaluate,
+            target=deconvolve.evaluate,
             name="_get_weights",
             value=lambda _g, z, **_kw: np.ones(shape=len(z), dtype=np.single),  # pyrefly: ignore[unknown-argument-type]
         )
@@ -584,7 +584,7 @@ class TestRunCell:
     def test_every_cell_holds_out_the_same_evaluation_events(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from anamorph.uncertainty import run_cell
+        from deconvolve.uncertainty import run_cell
 
         seen: list[dict[str, Any]] = []
         self._stub(monkeypatch, seen)
@@ -599,7 +599,7 @@ class TestRunCell:
     def test_the_dataset_axis_varies_and_the_seed_axis_does_not(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from anamorph.uncertainty import run_cell
+        from deconvolve.uncertainty import run_cell
 
         seen: list[dict[str, Any]] = []
         self._stub(monkeypatch, seen)
@@ -614,7 +614,7 @@ class TestRunCell:
     def test_the_init_seed_advances_with_the_seed_index_only(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from anamorph.uncertainty import run_cell
+        from deconvolve.uncertainty import run_cell
 
         seen: list[dict[str, Any]] = []
         self._stub(monkeypatch, seen)
@@ -628,7 +628,7 @@ class TestRunCell:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Defaults that differ from the paper's would not be a measurement of it."""
-        from anamorph.uncertainty import run_cell
+        from deconvolve.uncertainty import run_cell
 
         seen: list[dict[str, Any]] = []
         self._stub(monkeypatch, seen)
@@ -659,7 +659,7 @@ class TestCollect:
         *,
         n_eval: int = 300,
     ) -> None:
-        import anamorph.uncertainty.report as report_module
+        import deconvolve.uncertainty.report as report_module
 
         pops: Populations = _populations(n=n_eval * 3)
         monkeypatch.setattr(
@@ -688,7 +688,7 @@ class TestCollect:
     def test_it_writes_the_table_the_npz_and_the_figure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from anamorph.uncertainty import collect
+        from deconvolve.uncertainty import collect
 
         spec = DesignSpec(n_datasets=4, n_seeds=3)
         self._design(tmp_path, monkeypatch, spec)
@@ -708,7 +708,7 @@ class TestCollect:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """So the measured off-diagonals can be read against what closure forces."""
-        from anamorph.uncertainty import collect
+        from deconvolve.uncertainty import collect
 
         spec = DesignSpec(n_datasets=4, n_seeds=3)
         self._design(tmp_path, monkeypatch, spec)
@@ -724,7 +724,7 @@ class TestCollect:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The evaluation set is regenerated, so it has to regenerate identically."""
-        from anamorph.uncertainty import collect
+        from deconvolve.uncertainty import collect
 
         spec = DesignSpec(n_datasets=2, n_seeds=2)
         self._design(tmp_path, monkeypatch, spec, n_eval=50)
@@ -745,7 +745,7 @@ class TestCollect:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """B <= K makes every correlation +-1, which looks like a strong result."""
-        from anamorph.uncertainty import collect
+        from deconvolve.uncertainty import collect
 
         spec = DesignSpec(n_datasets=3, n_seeds=2)
         self._design(tmp_path, monkeypatch, spec)
@@ -761,7 +761,7 @@ class TestCollect:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        from anamorph.uncertainty import collect
+        from deconvolve.uncertainty import collect
 
         spec = DesignSpec(n_datasets=6, n_seeds=2)
         self._design(tmp_path, monkeypatch, spec)

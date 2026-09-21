@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol, TypedDict
 import numpy as np
 
 # `Variables` is used as a runtime annotation by the `@jaxtyped(beartype)`
-# functions in `anamorph.train`, and beartype has to evaluate the alias to check
+# functions in `deconvolve.train`, and beartype has to evaluate the alias to check
 # it -- so `JaxArray` cannot hide under TYPE_CHECKING.
 from jax import Array as JaxArray
 
@@ -42,7 +42,7 @@ class KerasVariable(Protocol):
     def assign(self, value: JaxArray) -> None: ...
 
 
-class AnamorphModel(Protocol):
+class DeconvolveModel(Protocol):
     @property
     def trainable_variables(self) -> list[KerasVariable]: ...
 
@@ -173,6 +173,6 @@ class MetricRecord(TypedDict):
 type Nested[T] = T | list[Nested[T]]
 
 # Every event array in the pipeline. The dtype is pinned in
-# `anamorph.coretypes.constants.EVENT_DTYPE`; this is its annotation-space twin, so
+# `deconvolve.coretypes.constants.EVENT_DTYPE`; this is its annotation-space twin, so
 # changing precision is two lines rather than a sweep through the package.
 type EventArray = NDArray[np.single]

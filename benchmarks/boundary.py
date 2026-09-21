@@ -1,7 +1,7 @@
 """Where a run's wall clock actually goes, and how much of it jnp could claim.
 
 This existed to answer one question: is it worth porting the scipy metrics in
-`anamorph.evaluate` to jnp now that nothing forces the host/device split any more?
+`deconvolve.evaluate` to jnp now that nothing forces the host/device split any more?
 The answer was yes and the port has happened, so what this measures now is the
 residue -- the npz write, and the per-dimension divergence reductions that stay
 on the host in float64 because they are free there. The number to read is still
@@ -16,7 +16,7 @@ Three things this is careful about, each of which an earlier version got wrong:
   call pays a full XLA compile. Timing one call and calling it "a run" charges
   compile to the training term and flatters it. Two calls at different epoch
   counts separate the two by subtraction.
-* The metrics are timed by calling `anamorph.evaluate`'s own helpers, on the split
+* The metrics are timed by calling `deconvolve.evaluate`'s own helpers, on the split
   `evaluate` actually scores (test, ~20% of the sample) and over the same 12
   passes it makes: three metrics, two levels, before and after. Re-implementing
   that inline is how the earlier version came to measure four passes over five
@@ -34,22 +34,22 @@ import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-import anamorph  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND/x64 before keras or jax load
+import deconvolve  # ruff: ignore[unused-import]  -- pins KERAS_BACKEND/x64 before keras or jax load
 import jax
 import numpy as np
-from anamorph.coretypes import EVENT_DTYPE, Events, Populations
-from anamorph.data import AnamorphDataset
-from anamorph.data.device import TrainSplit
+from deconvolve.coretypes import EVENT_DTYPE, Events, Populations
+from deconvolve.data import DeconvolveDataset
+from deconvolve.data.device import TrainSplit
 
 # Private on purpose: the point is to time what `evaluate` runs, not a
 # re-implementation of it that can drift.
-from anamorph.evaluate import _js_per_dim, _triangular_per_dim, _wd_per_dim
-from anamorph.train import train
+from deconvolve.evaluate import _js_per_dim, _triangular_per_dim, _wd_per_dim
+from deconvolve.train import train
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from anamorph.coretypes import DatasetSplits, EventArray
+    from deconvolve.coretypes import DatasetSplits, EventArray
     from numpy.typing import NDArray
 
 
@@ -106,7 +106,7 @@ def main() -> None:
 
     rng: np.random.Generator = np.random.default_rng(seed=0)
     pops: Populations = _sample(rng)
-    splits: DatasetSplits = AnamorphDataset(batch_size=1024, seed=0).splits_from_data(
+    splits: DatasetSplits = DeconvolveDataset(batch_size=1024, seed=0).splits_from_data(
         data=pops.interleave()
     )
     # `evaluate` scores the test split, not the whole sample.
@@ -129,7 +129,7 @@ def main() -> None:
     # --- host side: does NOT scale with the accelerator ---
     _time_metrics(test, weights)
 
-    # Mirrors what `AnamorphDataset` actually writes. It stopped compressing --
+    # Mirrors what `DeconvolveDataset` actually writes. It stopped compressing --
     # incompressible floats, ~20x read tax for a few percent of disk -- so
     # timing `savez_compressed` here would measure a path the pipeline no
     # longer takes, and would overstate the host term this benchmark exists

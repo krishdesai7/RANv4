@@ -1,6 +1,6 @@
 """Optional wall-clock instrumentation for a run's phases.
 
-Off unless `ANAMORPH_TIMING` is set, and *off* means a shared no-op context manager:
+Off unless `DECONVOLVE_TIMING` is set, and *off* means a shared no-op context manager:
 no `perf_counter`, no allocation, nothing appended. That matters because the
 timers sit at phase boundaries inside `workflow.run` and `train.train`, which a
 sweep crosses a few hundred times.
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 logger: Logger = logging.getLogger(name=__name__)
 
-TIMING_ENV_VAR: Final[LiteralString] = "ANAMORPH_TIMING"
+TIMING_ENV_VAR: Final[LiteralString] = "DECONVOLVE_TIMING"
 
 # Spelled out rather than `bool(value)`, because the string "0" is truthy and a
 # SLURM `--export` that forwards an unset variable delivers "" rather than
@@ -375,7 +375,7 @@ def write(run_dir: Path, /, *, pass_name: str, filename: str = "timings.json") -
     (pass, name)**. That is right for the passes of one pipeline over one run,
     which is what it was built for: `load` legitimately replaces `train`'s
     `plots` row. It is wrong for a different program over the same directory.
-    `anamorph baseline omnifold` also has phases called `data` and `evaluate`, and
+    `deconvolve baseline omnifold` also has phases called `data` and `evaluate`, and
     writing them here would silently destroy the training pass's --- the rows
     anyone actually wants. So it writes `timings_omnifold.json` instead, and
     the baseline's cost stays separable from the method's, which is the

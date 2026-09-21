@@ -21,19 +21,19 @@ from typing import TYPE_CHECKING, override
 
 import numpy as np
 import pytest
-from anamorph import workflow
-from anamorph.coretypes import ZXY, DatasetName, Events, Populations
-from anamorph.coretypes.events import DatasetSplits
-from anamorph.data import AnamorphDataset, parse_gaussian_config
-from anamorph.train import TrainResult, train
-from anamorph.workflow import _compact_variables
+from deconvolve import workflow
+from deconvolve.coretypes import ZXY, DatasetName, Events, Populations
+from deconvolve.coretypes.events import DatasetSplits
+from deconvolve.data import DeconvolveDataset, parse_gaussian_config
+from deconvolve.train import TrainResult, train
+from deconvolve.workflow import _compact_variables
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
     from typing import Any, Final
 
-    from anamorph.coretypes import DatasetSplits, GaussianConfig
+    from deconvolve.coretypes import DatasetSplits, GaussianConfig
     from numpy.typing import NDArray
 
 CONFIG_2D: Final[str] = """
@@ -220,7 +220,7 @@ def test_load_run_forwards_recorded_seed_and_size(
     )
 
     seen: dict[str, object] = {}
-    real: type[AnamorphDataset] = workflow.AnamorphDataset
+    real: type[DeconvolveDataset] = workflow.DeconvolveDataset
 
     class Recording(real):
         def __init__(self, *args: tuple[Any, ...], **kwargs: dict[str, Any]) -> None:
@@ -232,7 +232,7 @@ def test_load_run_forwards_recorded_seed_and_size(
             seen["n_samples"] = kwargs.get("n_samples")
             return super().generate_gaussian_dataset(*args, **kwargs)
 
-    monkeypatch.setattr(target=workflow, name="AnamorphDataset", value=Recording)
+    monkeypatch.setattr(target=workflow, name="DeconvolveDataset", value=Recording)
     _reload(run_dir)
 
     assert seen == {"seed": 7, "n_samples": 600}
@@ -353,7 +353,7 @@ class TestParticleCurve:
         x_data: NDArray[np.single] = rng.normal(size=(n, 1)).astype(dtype=np.single)
         pops: Populations = Populations.create(mc=Events(z_gen, x_sim), data=x_data)
         assert not pops.has_truth
-        return AnamorphDataset(batch_size=32, seed=9).splits_from_data(
+        return DeconvolveDataset(batch_size=32, seed=9).splits_from_data(
             pops.interleave()
         )
 
@@ -388,7 +388,7 @@ class TestParticleCurve:
         y: NDArray[np.ubyte] = np.concatenate(
             [np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)]
         )
-        splits: DatasetSplits = AnamorphDataset(
+        splits: DatasetSplits = DeconvolveDataset(
             batch_size=64, seed=10
         ).splits_from_data(data=ZXY(Events(z, x), y))
         result: TrainResult = train(
@@ -716,13 +716,13 @@ def test_run_rejects_an_output_directory_on_the_reload_path(tmp_path: Path) -> N
 def test_timing_writes_a_phase_breakdown_into_the_run_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The reload path, end to end, with `ANAMORPH_TIMING` on.
+    """The reload path, end to end, with `DECONVOLVE_TIMING` on.
 
     `data`/`load`/`plots`/`evaluate` are opened in `run()` itself, so this is
     what says the phases survive a real call rather than only the unit tests in
     `tests/test_timing.py`.
     """
-    from anamorph import timing
+    from deconvolve import timing
 
     monkeypatch.chdir(tmp_path)
     _ = (tmp_path / "cfg.yaml").write_text(data=CONFIG_2D)
@@ -768,8 +768,8 @@ class TestBaselineDiscovery:
     """Which baselines reach the figures, and on what evidence.
 
     Presence of `artifacts/*_weights.npz` is the entire mechanism: no baseline
-    runs on the `anamorph train` path, so a fresh run's figures carry no overlay and
-    `anamorph train --load-run` after a baseline has run is what puts one there.
+    runs on the `deconvolve train` path, so a fresh run's figures carry no overlay and
+    `deconvolve train --load-run` after a baseline has run is what puts one there.
     That makes "does the file exist" the thing worth testing.
     """
 

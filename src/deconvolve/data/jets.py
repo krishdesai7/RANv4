@@ -16,7 +16,7 @@ from ..coretypes import (
     Populations,
 )
 from ..timing import note
-from .datasets import AnamorphDataset
+from .datasets import DeconvolveDataset
 from .download import download_jet_data
 
 if TYPE_CHECKING:
@@ -67,7 +67,7 @@ def load_jet_dataset(
 
     `variables` is a `Sequence` and the order is load-bearing: it is the column
     order of every array downstream, it is what `_save_run` records, and it is
-    what a later `anamorph evaluate` or `anamorph baseline ibu` must reproduce
+    what a later `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce
     exactly to label those columns --- or to feed a trained generator its own
     features.
     Passing a `set` or `frozenset` here is a bug, not a convenience.
@@ -130,5 +130,5 @@ def load_jet_dataset(
         mc=Events(z_gen, x_sim), data=x_data, truth=z_true
     ).interleave()
 
-    splits: DatasetSplits = AnamorphDataset(batch_size, seed).splits_from_data(data)
+    splits: DatasetSplits = DeconvolveDataset(batch_size, seed).splits_from_data(data)
     return splits, n_features, std_params

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_DIR=/global/u1/k/kdesai/Anamorph
+PROJECT_DIR=/global/u1/k/kdesai/Deconvolve
 N_POINTS=24
 
 NODES=${NODES:-6}
@@ -34,7 +34,7 @@ step="srun --exact -n1 -N1 --gpus-per-task=1 --cpus-per-task=16 --mem-per-gpu=56
 
 for i in $(seq 0 $((N_POINTS - 1))); do
   $step bash -c "
-      uv run anamorph sweep ran \
+      uv run deconvolve sweep ran \
           --s-index='${i}' --sweep-dir='${SWEEP_DIR}' --n-points='${N_POINTS}'
     " > "${SWEEP_DIR}/point_$(printf '%02d' "${i}").log" 2>&1 &
 
@@ -45,7 +45,7 @@ for i in $(seq 0 $((N_POINTS - 1))); do
 done
 wait || true
 
-uv run anamorph sweep collect --sweep-dir="${SWEEP_DIR}" --n-points="${N_POINTS}"
+uv run deconvolve sweep collect --sweep-dir="${SWEEP_DIR}" --n-points="${N_POINTS}"
 EOF
 )
 

@@ -10,11 +10,11 @@ The **covariance** is the other half, and the one the speed argument pays for.
 Unbinned unfolding weights are routinely propagated as if their bin-to-bin
 correlations were zero. They are not, and measuring them takes a hundred
 retrainings --- which at OmniFold's cost is not an analysis anyone runs, and
-at Anamorph's is twenty minutes on a node. `variance.npz` carries the full `K x K`
+at Deconvolve's is twenty minutes on a node. `variance.npz` carries the full `K x K`
 matrix for every observable.
 
 One caveat is stated rather than buried, because a referee will raise it:
-Anamorph's weights preserve the total count by construction, so a spectrum's bins
+Deconvolve's weights preserve the total count by construction, so a spectrum's bins
 sum to a fixed number and its covariance is singular with rank `K - 1`. That
 constraint *alone* induces negative off-diagonals. For the equal-occupancy
 bins used here the pure-closure expectation is the multinomial value
@@ -260,7 +260,7 @@ def collect(
             f"{name}_corr_data": correlations[name],
         }
 
-    # See anamorph.baselines.ibu: unpacking a str-keyed dict into savez means a key
+    # See deconvolve.baselines.ibu: unpacking a str-keyed dict into savez means a key
     # could in principle be "allow_pickle", which is declared bool.
     np.savez(file=design_dir / "variance.npz", **saved)  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
     _ = (design_dir / "variance.json").write_text(

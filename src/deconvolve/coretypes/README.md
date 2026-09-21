@@ -1,8 +1,8 @@
-# Anamorph Types
+# Deconvolve Types
 
 Records, constants and aliases shared across the package.
 
-Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `anamorph.train`.
+Types owned by exactly one module stay with that module. E.g., `TrainResult` and `TrainState` are in `deconvolve.train`.
 
 ## module: `configs`
 
@@ -28,11 +28,11 @@ Fixed values: the Zenodo jet dataset, its cache layout, plot metadata, the defau
 
 ### Constants: `CACHE_ENV_VAR`, `CACHE_DIR`, `COMPILE_CACHE_DIR`
 
-Everything Anamorph can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `ANAMORPH_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
+Everything Deconvolve can regenerate shares one root: generated Gaussian datasets, the per-variable jet caches pulled from Zenodo, and the XLA compilation cache under `jax/`. `CACHE_DIR` is `.cache` unless `DECONVOLVE_CACHE_DIR` (the value of `CACHE_ENV_VAR`) says otherwise, which is what relocates the tree to `$SCRATCH` on a cluster where `$HOME` is quota'd and shared.
 
 It is deliberately not derived from `XDG_CACHE_HOME`. That variable is already set, or defaults to `~/.cache`, on most Linux systems — deriving from it would silently move every existing checkout's cache and orphan the jet data already on disk.
 
-`~` is expanded, and an empty value falls back to the default rather than being taken as the current directory: a SLURM `--export` forwarding an unset variable delivers `""`, not absence. The value is read once, at import, because the `cache_dir=` defaults throughout `anamorph.data` bind to `CACHE_DIR` at import either way.
+`~` is expanded, and an empty value falls back to the default rather than being taken as the current directory: a SLURM `--export` forwarding an unset variable delivers `""`, not absence. The value is read once, at import, because the `cache_dir=` defaults throughout `deconvolve.data` bind to `CACHE_DIR` at import either way.
 
 ### Constant: `LOG_RHO_FLOOR: Final[float]`
 
@@ -50,7 +50,7 @@ $-2^{15}$ is that number: absurd on sight for any standardized observable, exact
 
 ## module: `enums`
 
-CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `anamorph.data` implements, and `LogLevel` one that `anamorph.logging_config` does.
+CLI choice enums. They live here rather than beside the code they select for so that a choice type is not tied to the module that consumes it --- `DatasetName` names an option `deconvolve.data` implements, and `LogLevel` one that `deconvolve.logging_config` does.
 
 ## module: `events`
 
@@ -79,7 +79,7 @@ The physics view of a labelled sample.
 
 `mc` is the simulation, its particle level generation (`mc.z`) paired per event with the corresponding detector level simulation (`mc.x`); that pairing is used to build a response matrix.
 
-`data` is the natural measurement. `truth` is the particle-level answer key. It exists only because every dataset here is a closure test. A real measurement has no such array, and no network may ever see it. Keeping it out of `mc` means a function handed the MCMC cannot reach it. Construct through `create` to set `truth` to `anamorph.coretypes.constants.TRUTH_SENTINEL`; the field itself is always present.
+`data` is the natural measurement. `truth` is the particle-level answer key. It exists only because every dataset here is a closure test. A real measurement has no such array, and no network may ever see it. Keeping it out of `mc` means a function handed the MCMC cannot reach it. Construct through `create` to set `truth` to `deconvolve.coretypes.constants.TRUTH_SENTINEL`; the field itself is always present.
 
 #### Fields
 
@@ -89,7 +89,7 @@ The physics view of a labelled sample.
 
 #### Properties
 
-- `has_truth: bool`: `True` if the sample has a particle-level answer key. `False` if it is populated with `anamorph.coretypes.constants.TRUTH_SENTINEL`.
+- `has_truth: bool`: `True` if the sample has a particle-level answer key. `False` if it is populated with `deconvolve.coretypes.constants.TRUTH_SENTINEL`.
 
 Any metric computed against a sentinel `truth` is meaningless but finite, so unfolding code that scores against the particle level has to ask rather than wait to be told.
 
@@ -97,9 +97,9 @@ Any metric computed against a sentinel `truth` is meaningless but finite, so unf
 
 ##### `create(mc: Events, data: EventArray, truth: EventArray | None = None) -> Populations`
 
-Build a sample, filling `truth` with `anamorph.coretypes.constants.TRUTH_SENTINEL` if there is none.
+Build a sample, filling `truth` with `deconvolve.coretypes.constants.TRUTH_SENTINEL` if there is none.
 
-A real measurement has no answer key. Filling the field rather than dropping it keeps one type for both cases, and keeps the sample trainable: the nature rows of `z` are `truth`, so they reach the generator, and only a finite value there lets `normalize_weights` annihilate them as intended. See `anamorph.coretypes.constants.TRUTH_SENTINEL` for why not NaN.
+A real measurement has no answer key. Filling the field rather than dropping it keeps one type for both cases, and keeps the sample trainable: the nature rows of `z` are `truth`, so they reach the generator, and only a finite value there lets `normalize_weights` annihilate them as intended. See `deconvolve.coretypes.constants.TRUTH_SENTINEL` for why not NaN.
 
 `truth` is particle level, so it takes its columns from `mc.z` and its rows from `data`.
 

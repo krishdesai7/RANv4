@@ -13,7 +13,7 @@ from beartype import beartype
 from jax import lax
 from jaxtyping import Array, Float, Int, jaxtyped
 
-from anamorph.data.device import EvalSplit
+from deconvolve.data.device import EvalSplit
 
 # `COMPILE_CACHE_DIR` is a runtime value; `Variables` only annotates, but it
 # annotates `@jaxtyped(beartype)` and beartype resolves at decoration time
@@ -36,8 +36,8 @@ if TYPE_CHECKING:
 
     from .coretypes import (
         ZXY,
-        AnamorphModel,
         DatasetSplits,
+        DeconvolveModel,
         DiscGradFn,
         EvalStep,
         EventArray,
@@ -53,11 +53,11 @@ if TYPE_CHECKING:
 logger: Logger = logging.getLogger(name=__name__)
 
 if keras.backend.backend() != "jax":
-    # Importing `keras` before `anamorph` wins the race for the backend, and the
+    # Importing `keras` before `deconvolve` wins the race for the backend, and the
     # jitted steps below fail deep inside a trace.
     raise RuntimeError(
-        f"anamorph.train requires the JAX backend, got {keras.backend.backend()!r}. "
-        "Import `anamorph` (or any anamorph.* module) before `keras`, or set "
+        f"deconvolve.train requires the JAX backend, got {keras.backend.backend()!r}. "
+        "Import `deconvolve` (or any deconvolve.* module) before `keras`, or set "
         "KERAS_BACKEND=jax in the environment."
     )
 
@@ -94,8 +94,8 @@ class EpochParams(NamedTuple):
 
 
 class TrainResult(NamedTuple):
-    g: AnamorphModel
-    d: AnamorphModel
+    g: DeconvolveModel
+    d: DeconvolveModel
     history: dict[str, list[float]]
     seed: int
     # Which epoch the restored weights came from. Two criteria can select
@@ -216,10 +216,10 @@ def weight_dispersion(
 
     The variance of the normalised MC weights. It is the natural regulariser
     here because it has a **target** rather than being a free dial:
-    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against Anamorph's
-    73.3%, so Anamorph's weights are more dispersed than the truth's. For weights of
+    `benchmarks/README.md` §2 measures the oracle's ESS at 80.1% against Deconvolve's
+    73.3%, so Deconvolve's weights are more dispersed than the truth's. For weights of
     mean 1 the identity is `ESS/n = 1 / (1 + Var(w))`, putting the oracle at
-    0.249 and Anamorph at 0.364 — a coefficient can be tuned to close that gap.
+    0.249 and Deconvolve at 0.364 — a coefficient can be tuned to close that gap.
 
     Nature's rows are excluded, not merely down-weighted: `normalize_weights`
     pins them to exactly 1 and no gradient reaches `g` through them, so
@@ -267,8 +267,8 @@ def weighted_bce(
 
 
 def _make_steps(
-    g: AnamorphModel,
-    d: AnamorphModel,
+    g: DeconvolveModel,
+    d: DeconvolveModel,
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
     # No default: `train` always passes it, and a second copy of the shipped
@@ -569,8 +569,8 @@ def _assign(variables: list[KerasVariable], values: Variables) -> None:
 
 
 def _initial_state(
-    g: AnamorphModel,
-    d: AnamorphModel,
+    g: DeconvolveModel,
+    d: DeconvolveModel,
     opt_g: StatelessOptimizer,
     opt_d: StatelessOptimizer,
 ) -> TrainState:
@@ -630,7 +630,7 @@ def _run(
 
 
 def _restore(
-    g: AnamorphModel, d: AnamorphModel, params: EpochParams, epoch: int, /
+    g: DeconvolveModel, d: DeconvolveModel, params: EpochParams, epoch: int, /
 ) -> None:
     """Write one epoch's parameters back into the live Keras models."""
     chosen: EpochParams = cast(
@@ -663,7 +663,7 @@ def _detector_arrays(
 
 
 def _weights_per_epoch(
-    g: AnamorphModel, params: EpochParams, z: EventArray, /
+    g: DeconvolveModel, params: EpochParams, z: EventArray, /
 ) -> Float[Array, "epochs m"]:
     """`g`'s raw output on a fixed sample, for every retained epoch.
 
@@ -695,8 +695,8 @@ def _weights_per_epoch(
 
 
 def _select_by_mmd(
-    g: AnamorphModel,
-    d: AnamorphModel,
+    g: DeconvolveModel,
+    d: DeconvolveModel,
     splits: DatasetSplits,
     params: EpochParams,
     history: dict[str, list[float]],
@@ -793,10 +793,10 @@ def train(
         # or an async copy is charged to whatever runs next.
         data: DeviceSplits = timer.block(DeviceSplits.from_splits(splits))
 
-    g: AnamorphModel = build_generator(
+    g: DeconvolveModel = build_generator(
         dim=dim, hidden_units=hidden_units, n_layers=n_layers
     )
-    d: AnamorphModel = build_discriminator(
+    d: DeconvolveModel = build_discriminator(
         dim=dim, hidden_units=hidden_units, n_layers=n_layers
     )
     opt_g: StatelessOptimizer = keras.optimizers.Adam(learning_rate=lr_g)

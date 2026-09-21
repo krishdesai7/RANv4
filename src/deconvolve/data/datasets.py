@@ -53,8 +53,8 @@ def _savez_atomic(path: Path, /, **arrays: NDArray[Any]) -> None:
 
     `np.savez` streams into the destination it is handed, so a reader that
     arrives mid-write gets a truncated zip rather than an error it could
-    recover from. Anamorph's cache is shared by construction:
-    `ANAMORPH_CACHE_DIR` is one directory on `$SCRATCH`,
+    recover from. Deconvolve's cache is shared by construction:
+    `DECONVOLVE_CACHE_DIR` is one directory on `$SCRATCH`,
     `submit_uncertainty.sh` packs a grid of cells onto a node against it, and
     `pytest -n16` does the same thing on a smaller scale -- two workers that
     land on tests sharing a cache key are two writers on one path.
@@ -101,7 +101,7 @@ def _draw_gaussian(
     # Two dots draw this dataset, and on an A100 XLA runs both at TF32 -- a
     # 10-bit mantissa -- unless told otherwise. Neither cancels, so the cost is
     # an honest ~5e-4 relative rather than the unbounded error the same default
-    # caused in `anamorph.mmd`; what it buys instead is that the sample is a
+    # caused in `deconvolve.mmd`; what it buys instead is that the sample is a
     # function of the config and the seed alone, rather than of the hardware
     # that happened to draw it. A cached .npz is keyed on the physics config,
     # so without this a file drawn on a login node and one drawn on a GPU node
@@ -158,7 +158,7 @@ class ArrayDataset:
         return self.data
 
 
-class AnamorphDataset:
+class DeconvolveDataset:
     def __init__(
         self,
         batch_size: int = 128,
@@ -190,7 +190,7 @@ class AnamorphDataset:
     ) -> Nested[float]:
         """Recursively round floats in a nested list/scalar for stable hashing."""
         if isinstance(obj, list):
-            return [AnamorphDataset._round_nested(v, ndigits) for v in obj]
+            return [DeconvolveDataset._round_nested(v, ndigits) for v in obj]
         return float(np.round(a=float(obj), decimals=ndigits))
 
     def _cache_key(self, parsed: GaussianConfig, n_samples: int) -> str:
@@ -311,7 +311,7 @@ class AnamorphDataset:
                 truth=np.asarray(a=z_true, dtype=self.dtype),
             ).interleave()
 
-            # Uncompressed, for the reason spelled out in `anamorph.data.download`:
+            # Uncompressed, for the reason spelled out in `deconvolve.data.download`:
             # these are incompressible floats, so DEFLATE is a large read tax
             # for a few percent of disk. Existing compressed caches still load.
             _savez_atomic(cache_path, z=data.z, x=data.x, y=data.y)

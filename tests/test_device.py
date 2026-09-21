@@ -11,9 +11,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from anamorph.coretypes import ZXY, DatasetSplits, Events
-from anamorph.data import AnamorphDataset
-from anamorph.data.device import (
+from deconvolve.coretypes import ZXY, DatasetSplits, Events
+from deconvolve.data import DeconvolveDataset
+from deconvolve.data.device import (
     DEFAULT_EVAL_BATCH_SIZE,
     DeviceSplits,
     EvalSplit,
@@ -28,7 +28,7 @@ def _toy(n: int = 200, batch_size: int = 32, seed: int = 4) -> DatasetSplits:
     """z counts up, x is its negation, so pairing is checkable by eye."""
     z = np.arange(2 * n, dtype=np.single).reshape(-1, 1)
     y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-    return AnamorphDataset(batch_size=batch_size, seed=seed).splits_from_data(
+    return DeconvolveDataset(batch_size=batch_size, seed=seed).splits_from_data(
         ZXY(Events(z, -z), y)
     )
 
@@ -179,7 +179,7 @@ class TestDtypeIsPinnedAtTheBoundary:
         """
         z = np.arange(2 * n, dtype=np.double).reshape(-1, 1)
         y = np.concatenate([np.ones(n, dtype=np.ubyte), np.zeros(n, dtype=np.ubyte)])
-        return AnamorphDataset(batch_size=batch_size, seed=4).splits_from_data(
+        return DeconvolveDataset(batch_size=batch_size, seed=4).splits_from_data(
             # pyrefly: ignore[bad-argument-type]
             # ty: ignore[invalid-argument-type]
             ZXY(Events(z, -z), y)

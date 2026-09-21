@@ -65,9 +65,8 @@ _DASH: Final[str] = r"\multicolumn{1}{c}{---}"
 
 def load_template() -> str:
     """The shipped LaTeX template, as text."""
-    return (resources.files(anchor="anamorph") / "templates" / "report.tex").read_text(
-        encoding="utf-8"
-    )
+    tmpl = resources.files(anchor="deconvolve") / "templates" / "report.tex"
+    return tmpl.read_text(encoding="utf-8")
 
 
 def _plain(value: float, /) -> str:
@@ -197,7 +196,7 @@ def _gaussian_params_cell(params: Mapping[str, Any], /) -> str:
 
 def _sigma_cell(sigmas: Sequence[float], /) -> str:
     r"""`median x (1/2 .. 2)` when the values really are the bracket else raw."""
-    # Deferred: `anamorph.mmd` imports jax, which this module must not load eagerly.
+    # Deferred: `deconvolve.mmd` imports jax, which this module must not load eagerly.
     from .mmd import _SCALES
 
     if len(sigmas) == len(_SCALES):
@@ -304,7 +303,7 @@ _METRICS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 # Observable, Sim, then a (value, improvement) pair for each of IBU, OmniFold
-# and Anamorph. Three separate `\multicolumn` spans and the template's column
+# and Deconvolve. Three separate `\multicolumn` spans and the template's column
 # spec have to agree.
 _TABLE_COLUMNS: Final[int] = 8
 
@@ -328,7 +327,7 @@ def _best_methods(
     variable: str,
     level: str,
     metric: str,
-    anamorph: Mapping[str, Any],
+    deconvolve: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     daggered: bool,
@@ -342,7 +341,7 @@ def _best_methods(
     key: str = f"{level}_{variable}"
     metric_key: str = f"{metric}_after"
     sources: tuple[tuple[str, Mapping[str, Any] | None], ...] = (
-        ("anamorph", anamorph),
+        ("deconvolve", deconvolve),
         ("ibu", None if daggered else ibu),
         ("omnifold", omnifold),
     )
@@ -396,7 +395,7 @@ def _row(
     variable: str,
     level: str,
     metric: str,
-    anamorph: Mapping[str, Any],
+    deconvolve: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     daggered: bool,
@@ -404,7 +403,7 @@ def _row(
 ) -> str:
     """One variable's eight cells: label, Sim, then a pair per method.
 
-    Anamorph goes last: the eye reads a row left to right and stops at the end,
+    Deconvolve goes last: the eye reads a row left to right and stops at the end,
     so the method under test sits where a reader lands, with the baselines in
     front of it.
     """
@@ -413,10 +412,10 @@ def _row(
     )
     label: str = rf"{symbol}\(^\dag\)" if daggered else symbol
     scale: float = _SCALE[metric]
-    ours: Mapping[str, float] = anamorph[f"{level}_{variable}"]
+    ours: Mapping[str, float] = deconvolve[f"{level}_{variable}"]
 
     best: frozenset[str] = _best_methods(
-        variable, level, metric, anamorph, ibu, omnifold, daggered
+        variable, level, metric, deconvolve, ibu, omnifold, daggered
     )
 
     cells: list[str] = [label, decimal(ours[f"{metric}_before"] * scale)]
@@ -430,7 +429,7 @@ def _row(
     )
     cells.extend(
         _method_cells(
-            anamorph, level, variable, metric, scale, is_best="anamorph" in best
+            deconvolve, level, variable, metric, scale, is_best="deconvolve" in best
         )
     )
     return " & ".join(cells) + r" \\"
@@ -447,7 +446,7 @@ def metrics_table(
     level: str,
     metric: str,
     variables: Sequence[str],
-    anamorph: Mapping[str, Any],
+    deconvolve: Mapping[str, Any],
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
@@ -463,7 +462,7 @@ def metrics_table(
     ordered: tuple[int, ...] = display_order(variables)
     ordered_vars: list[str] = [variables[i] for i in ordered]
     rows: list[str] = [
-        _row(v, level, metric, anamorph, ibu, omnifold, v in skipped)
+        _row(v, level, metric, deconvolve, ibu, omnifold, v in skipped)
         for v in ordered_vars
     ]
     lines: list[str] = [r"\midrule", *rows]
@@ -491,14 +490,14 @@ def skipped_variables(
     return frozenset(o["variable_name"] for o in outcomes if o["status"] == "skipped")
 
 
-# A run that died before `anamorph evaluate`: the tables degrade to a single
+# A run that died before `deconvolve evaluate`: the tables degrade to a single
 # explanatory row rather than raising. The template fixes column count, so row
 # has to span all of them.
 _NO_METRICS: Final[str] = (
     r"\midrule"
     "\n"
     rf"\multicolumn{{{_TABLE_COLUMNS}}}{{@{{}}l}}{{\itshape metrics.json not "
-    r"found: run \texttt{anamorph evaluate} for this run.} \\"
+    r"found: run \texttt{deconvolve evaluate} for this run.} \\"
 )
 
 
@@ -524,7 +523,7 @@ def _table(
     level: str,
     metric: str,
     variables: Sequence[str],
-    anamorph: Mapping[str, Any] | None,
+    deconvolve: Mapping[str, Any] | None,
     ibu: Mapping[str, Any] | None,
     omnifold: Mapping[str, Any] | None,
     skipped: frozenset[str],
@@ -533,13 +532,13 @@ def _table(
     include_legend: bool = False,
 ) -> str:
     """A metrics body, or the not-found row when there are no metrics."""
-    if not anamorph:
+    if not deconvolve:
         return _NO_METRICS
     return metrics_table(
         level,
         metric,
         variables,
-        anamorph,
+        deconvolve,
         ibu,
         omnifold,
         skipped,
@@ -572,14 +571,14 @@ def render(run_dir: Path, /) -> str:
         raise FileNotFoundError(msg)
 
     artifacts: Path = run_dir / ARTIFACTS_DIR
-    anamorph: dict[str, Any] | None = _read(artifacts / "metrics.json")
+    deconvolve: dict[str, Any] | None = _read(artifacts / "metrics.json")
     ibu: dict[str, Any] | None = _read(artifacts / "metrics_ibu.json")
     omnifold: dict[str, Any] | None = _read(artifacts / "metrics_omnifold.json")
     timings: dict[str, Any] | None = _read(artifacts / "timings.json")
     skipped: frozenset[str] = skipped_variables(run_dir, ibu)
     variables: tuple[str, ...] = _variables(config)
     has_particle: bool = bool(
-        anamorph and any(k.startswith("particle_") for k in anamorph)
+        deconvolve and any(k.startswith("particle_") for k in deconvolve)
     )
     legend_level: str = "particle" if has_particle else "detector"
 
@@ -595,7 +594,7 @@ def render(run_dir: Path, /) -> str:
                     level,
                     metric,
                     variables,
-                    anamorph,
+                    deconvolve,
                     ibu,
                     omnifold,
                     skipped,

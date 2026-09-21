@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 # containers, the models, `JAX_ENABLE_X64` --- follows from this line.
 EVENT_DTYPE: Final[type[np.single]] = np.single
 
-# Everything Anamorph can regenerate lives under one root: the dataset `.npz` caches
-# and the XLA compilation cache. `ANAMORPH_CACHE_DIR` relocates the whole tree, which
+# Everything Deconvolve can regenerate lives under one root: the dataset `.npz` caches
+# and the XLA compilation cache. `DECONVOLVE_CACHE_DIR` relocates the whole tree, which
 # is what a cluster needs --- on Perlmutter `$HOME` is small, quota'd and shared
 # across nodes, `$SCRATCH` is none of those, and hardcoding either would be
 # wrong for everyone not on that machine.
@@ -36,7 +36,7 @@ EVENT_DTYPE: Final[type[np.single]] = np.single
 #
 # Read once, at import: the module-level constant is what the `cache_dir=`
 # defaults below bind to, and those bind at import either way.
-CACHE_ENV_VAR: Final[LiteralString] = "ANAMORPH_CACHE_DIR"
+CACHE_ENV_VAR: Final[LiteralString] = "DECONVOLVE_CACHE_DIR"
 CACHE_DIR: Final[Path] = Path(os.environ.get(CACHE_ENV_VAR) or ".cache").expanduser()
 
 # XLA keys its persistent cache on lowered HLO plus the jaxlib and backend
@@ -72,8 +72,8 @@ N_FILES: Final[int] = 17
 # `load_jet_dataset` fills column `i` from the `i`-th name --- so the container
 # holding them is an ordering, and a set has none. It used to be a frozenset,
 # whose iteration order depends on the per-process randomized hashes of the
-# strings inside it: `anamorph train` built its columns in one order and recorded
-# that order in `config.json`, then `anamorph baseline ibu` and `anamorph evaluate`
+# strings inside it: `deconvolve train` built its columns in one order and recorded
+# that order in `config.json`, then `deconvolve baseline ibu` and `deconvolve evaluate`
 # rebuilt the same dataset in a *different* order in their own processes and
 # labelled it with the recorded one. Same six observables, six wrong names ---
 # and worse, a generator trained on one column order evaluated against another.
@@ -280,7 +280,7 @@ def display_order(variables: Sequence[str], /) -> tuple[int, ...]:
 DEFAULT_PURITY_THRESHOLD: Final[np.double] = np.sqrt(0.5)
 TRUTH_SENTINEL: Final[np.double] = np.double(np.iinfo(int_type=np.short).min)
 
-# What `anamorph leakage-check --poison` overwrites z_true with. Any far-off-manifold
+# What `deconvolve leakage-check --poison` overwrites z_true with. Any far-off-manifold
 # value does the job, so this is only a default -- but it must not be
 # TRUTH_SENTINEL. A truth column set entirely to that value is exactly what
 # `Populations.create` writes when there is no truth at all, so `has_truth`

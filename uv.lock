@@ -30,7 +30,7 @@ wheels = [
 ]
 
 [[package]]
-name = "anamorph"
+name = "deconvolve"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [

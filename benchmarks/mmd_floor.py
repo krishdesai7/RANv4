@@ -43,14 +43,14 @@ import argparse
 import logging
 from typing import TYPE_CHECKING, NamedTuple
 
-import anamorph  # ruff: ignore[unused-import]  -- pins the backend and the dtype
+import deconvolve  # ruff: ignore[unused-import]  -- pins the backend and the dtype
 import jax.numpy as jnp
 import numpy as np
-from anamorph.coretypes import SUBSTRUCTURE_VARIABLES, Split
-from anamorph.data import load_jet_dataset
-from anamorph.logging_config import configure_logging
-from anamorph.mmd import bandwidths, build_cache, weighted_mmd
-from anamorph.train import MMD_SUBSAMPLE
+from deconvolve.coretypes import SUBSTRUCTURE_VARIABLES, Split
+from deconvolve.data import load_jet_dataset
+from deconvolve.logging_config import configure_logging
+from deconvolve.mmd import bandwidths, build_cache, weighted_mmd
+from deconvolve.train import MMD_SUBSAMPLE
 from rich.console import Console
 from rich.table import Table
 

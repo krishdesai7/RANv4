@@ -51,24 +51,24 @@ import logging
 from itertools import starmap
 from typing import TYPE_CHECKING, Annotated, NamedTuple
 
-import anamorph  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
+import deconvolve  # ruff: ignore[unused-import]  -- pins JAX_ENABLE_X64
 import jax.numpy as jnp
 import numpy as np
 import typer
-from anamorph.coretypes import Split, artifacts_dir
-from anamorph.data import AnamorphDataset, load_jet_dataset
-from anamorph.data.config import gaussian_config_from_run_config
-from anamorph.evaluate import _improvement, _wd_per_dim
-from anamorph.logging_config import configure_logging
-from anamorph.mmd import (
+from deconvolve.coretypes import Split, artifacts_dir
+from deconvolve.data import DeconvolveDataset, load_jet_dataset
+from deconvolve.data.config import gaussian_config_from_run_config
+from deconvolve.evaluate import _improvement, _wd_per_dim
+from deconvolve.logging_config import configure_logging
+from deconvolve.mmd import (
     MMDCache,
     bandwidths,
     build_cache,
     subsample_indices,
     weighted_mmd,
 )
-from anamorph.models import build_generator
-from anamorph.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
+from deconvolve.models import build_generator
+from deconvolve.train import MMD_SUBSAMPLE, _weights_per_epoch, load_params
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -76,7 +76,12 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from anamorph.coretypes import AnamorphModel, DatasetSplits, EventArray, Populations
+    from deconvolve.coretypes import (
+        DatasetSplits,
+        DeconvolveModel,
+        EventArray,
+        Populations,
+    )
     from numpy.typing import NDArray
 
 
@@ -225,11 +230,11 @@ def _load_splits(config: dict[str, Any], /) -> tuple[DatasetSplits, tuple[str, .
         return splits, variables
     # `_save_run` records the *parsed* config, not the path it came from, so
     # the run reproduces even if the YAML has since moved or changed. Rebuilt
-    # through the same helper `anamorph evaluate` uses: `model_dump` turns the
+    # through the same helper `deconvolve evaluate` uses: `model_dump` turns the
     # covariance arrays into lists, and the constructor does not coerce them
     # back, so `GaussianConfig(**dumped)` yields a config whose fields are
     # lists and fails on the first `.tolist()`.
-    splits: DatasetSplits = AnamorphDataset(
+    splits: DatasetSplits = DeconvolveDataset(
         batch_size=config["batch_size"], seed=config["data_seed"]
     ).generate_gaussian_dataset(
         params=gaussian_config_from_run_config(
@@ -255,7 +260,7 @@ def main(
     test_pop: Populations = splits.select(Split.TEST).partition()
 
     # The architecture only; `load_params` supplies every epoch's values.
-    generator: AnamorphModel = build_generator(
+    generator: DeconvolveModel = build_generator(
         dim=config["dim"],
         hidden_units=config["hidden_units"],
         n_layers=config["n_layers"],

@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from anamorph import cli
-from anamorph.cli import app, baseline_app, uncertainty_app
+from deconvolve import cli
+from deconvolve.cli import app, baseline_app, uncertainty_app
 from typer.testing import CliRunner
 
 if TYPE_CHECKING:
@@ -56,9 +56,9 @@ def test_every_leaf_command_has_help(command: tuple[str, ...]) -> None:
 def test_train_converts_typer_values_for_the_workflow(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """`anamorph.cli` imports `run` at module scope, so patch the name it calls.
+    """`deconvolve.cli` imports `run` at module scope, so patch the name it calls.
 
-    Replacing `sys.modules["anamorph.workflow"]` would only work if the command
+    Replacing `sys.modules["deconvolve.workflow"]` would only work if the command
     re-imported on every invocation, which it deliberately no longer does.
     """
     calls: list[dict[str, object]] = []
@@ -139,7 +139,7 @@ def test_train_converts_typer_values_for_the_workflow(
     assert calls[0]["lr_g"] == pytest.approx(3e-5)
     assert calls[0]["lr_d"] == pytest.approx(1e-4)
     # 0.015: +4.30 +- 0.88 points on the 12-observable aggregate against 0
-    # (p = 0.0017), and admissible on Anamorph's own selection criterion. See
+    # (p = 0.0017), and admissible on Deconvolve's own selection criterion. See
     # "The dispersion penalty" in benchmarks/README.md.
     assert calls[0]["lambda_dispersion"] == pytest.approx(0.015)
     assert calls[0]["plots"] is True
@@ -184,7 +184,7 @@ def test_train_defaults_to_no_explicit_run_dir(monkeypatch: pytest.MonkeyPatch) 
 def test_report_takes_the_run_directory_positionally(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """`anamorph report runs/...`, not `anamorph report --run-dir runs/...`."""
+    """`deconvolve report runs/...`, not `deconvolve report --run-dir runs/...`."""
     seen: dict[str, object] = {}
 
     def _capture(run_dir: Path, /, *, force: bool, compile_pdf: bool) -> Path:

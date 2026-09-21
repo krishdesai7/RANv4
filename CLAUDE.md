@@ -1,10 +1,10 @@
-# Anamorph
+# Deconvolve
 
 ## Overview
 
-Anamorph uses adversarial learning to unfold (deconvolve) reco-level data to
+Deconvolve uses adversarial learning to unfold (deconvolve) reco-level data to
 nominal truth. The distribution, the import package and the CLI are all
-`anamorph`; the network inside it is still the reweighting adversarial network
+`deconvolve`; the network inside it is still the reweighting adversarial network
 the project was called RAN for.
 
 ## Core Algorithm
@@ -23,8 +23,8 @@ the project was called RAN for.
 ## Data Representations
 
 The same events carry three shapes. Two are defined in
-`src/anamorph/coretypes/events.py` and sit at opposite ends of the host pipeline; the
-third, in `src/anamorph/data/device.py`, is what training actually runs on.
+`src/deconvolve/coretypes/events.py` and sit at opposite ends of the host pipeline; the
+third, in `src/deconvolve/data/device.py`, is what training actually runs on.
 
 `Populations` is the physics form and holds three things: `mc`, an `Events` pair
 of generated particle level (`mc.z`) and simulated detector level (`mc.x`)
@@ -66,7 +66,7 @@ number an unpadded one would.
 
 Keeping the first two forms on host NumPy is deliberate: they feed SciPy,
 Matplotlib, npz I/O and the IBU baseline, none of which want device arrays.
-Only `src/anamorph/data/device.py` is device-resident.
+Only `src/deconvolve/data/device.py` is device-resident.
 
 ## Tooling Preferences
 
@@ -75,16 +75,16 @@ Only `src/anamorph/data/device.py` is device-resident.
 
 ## Project Structure
 
-The package lives under `src/` and is importable as `anamorph`.
+The package lives under `src/` and is importable as `deconvolve`.
 
 ```text
-src/anamorph/                      Python package
+src/deconvolve/                      Python package
 ├── __init__.py               Pins KERAS_BACKEND=jax, JAX_ENABLE_X64=0 (see Backend)
-├── __main__.py               Fallback entry point (python -m anamorph)
-├── cli.py                    Unified Typer command tree; `anamorph` script targets cli:app
-├── workflow.py               Training and reload workflow behind `anamorph train`
-├── report.py                 PDF dossier behind `anamorph report` (see Reporting)
-├── leakage.py                Data-poisoning leakage check behind `anamorph leakage-check`
+├── __main__.py               Fallback entry point (python -m deconvolve)
+├── cli.py                    Unified Typer command tree; `deconvolve` script targets cli:app
+├── workflow.py               Training and reload workflow behind `deconvolve train`
+├── report.py                 PDF dossier behind `deconvolve report` (see Reporting)
+├── leakage.py                Data-poisoning leakage check behind `deconvolve leakage-check`
 ├── logging_config.py         Rich structured application logging
 ├── py.typed                  PEP 561 marker
 ├── coretypes/
@@ -96,7 +96,7 @@ src/anamorph/                      Python package
 │   └── types.py              TypedDicts and array aliases (annotation-space only)
 ├── data/
 │   ├── config.py             YAML config parsing, sigma promotion, gaussian_config_from_run_config
-│   ├── datasets.py           ArrayDataset (host container), DatasetSplits, AnamorphDataset, caching
+│   ├── datasets.py           ArrayDataset (host container), DatasetSplits, DeconvolveDataset, caching
 │   ├── jets.py               Jet substructure loading, standardization (JET_OBS, load_jet_dataset)
 │   ├── device.py             Device-resident training form (TrainSplit/EvalSplit, batch order)
 │   └── download.py           One-time Zenodo download
@@ -135,7 +135,7 @@ Justfile                      Dev recipes: just validate / lint-fix / test / typ
 .github/workflows/ci.yml      Same suite on push
 runs/<timestamp>Z/            One run. Two files at the top, the rest below:
 ├── config.json               Every knob that produced the run
-├── report.pdf                `anamorph report` output; the thing a human reads
+├── report.pdf                `deconvolve report` output; the thing a human reads
 └── artifacts/                Everything else, flat -- see Reporting
     ├── generator.keras, discriminator.keras, params.npz, history.npz
     ├── metrics.json, metrics_ibu.json, ibu_outcomes.json, ibu_weights.npz
@@ -143,22 +143,22 @@ runs/<timestamp>Z/            One run. Two files at the top, the rest below:
     ├── timings.json          Merged across passes (see Timing)
     ├── detector_level.pdf, particle_level.pdf, losses.pdf, selection.pdf
     └── report.tex            The filled-in template, kept for debugging
-.cache/                       Regenerable cache; relocatable via ANAMORPH_CACHE_DIR (see Caching)
+.cache/                       Regenerable cache; relocatable via DECONVOLVE_CACHE_DIR (see Caching)
 ├── gaussian_*.npz            Generated Gaussian datasets, keyed on the promoted covariances
 ├── mass.npz, mult.npz, ...   Per-variable jet caches from the Zenodo download
 └── jax/                      XLA persistent compilation cache
 ```
 
-`src/anamorph/coretypes/`, `src/anamorph/data/`, `src/anamorph/baselines/` and
-`src/anamorph/uncertainty/` each carry their own `README.md`.
+`src/deconvolve/coretypes/`, `src/deconvolve/data/`, `src/deconvolve/baselines/` and
+`src/deconvolve/uncertainty/` each carry their own `README.md`.
 
 ## Running
 
-The package installs a `anamorph` console script (`[project.scripts]` →
-`anamorph.cli:app`), which is the canonical entry point. In a checkout, prefix it
+The package installs a `deconvolve` console script (`[project.scripts]` →
+`deconvolve.cli:app`), which is the canonical entry point. In a checkout, prefix it
 with `uv run` to use the project environment without activating it
-(`uv run anamorph train ...`); `python -m anamorph` still works via `__main__.py`. Shell
-completion comes from `anamorph --install-completion` and needs the script name, so
+(`uv run deconvolve train ...`); `python -m deconvolve` still works via `__main__.py`. Shell
+completion comes from `deconvolve --install-completion` and needs the script name, so
 it does not work through `python -m`.
 
 One Typer command tree. Flags are kebab-case; subcommands are
@@ -166,7 +166,7 @@ One Typer command tree. Flags are kebab-case; subcommands are
 `uncertainty {run,collect}`. `--log-level` is global and
 goes before the subcommand.
 
-Every knob that changes a run is reachable from `anamorph train` and recorded in
+Every knob that changes a run is reachable from `deconvolve train` and recorded in
 `config.json` — architecture (`-u`, `-l`), optimization (`--lr-g`, `--lr-d`,
 `-k`/`--n-disc-steps`, `--lambda-dispersion`) and the loop (`-e`/`--n-epochs`)
 and both seeds. `--lr-g` defaults to 3e-5, measured rather than chosen: see
@@ -191,21 +191,21 @@ An empty directory is accepted, so a launcher can create one to redirect logs
 into before training starts.
 
 ```bash
-anamorph train --config params/1d_default.yaml                     # 1D uncorrelated
-anamorph train --config params/1d_default.yaml --seed 7            # reproducible init (see Seeding)
-anamorph train --config params/2d_correlated.yaml                  # 2D with covariance
-anamorph train --dataset jets                                      # train on all 6 jet variables
-anamorph train --dataset jets --var m --var w                      # a subset of jet variables
-anamorph train --dataset jets --lr-g 3e-4 -k 2 --no-plots          # tuning: see Hyperparameters
-anamorph train --dataset jets --seed 3 --run-dir runs/hp_x/lrg1e-4_seed03  # one arm of a sweep
-anamorph train --load-run runs/2026-03-14T061023Z                  # reload a saved run
-anamorph evaluate                                                  # compute metrics for all runs
-anamorph evaluate --run-dir runs/2026-...                          # single run
-anamorph baseline ibu --run-dir runs/2026-...                      # IBU comparison
-anamorph baseline omnifold --run-dir runs/2026-...                 # OmniFold (see OmniFold)
-anamorph report runs/2026-...                                      # PDF dossier (see Reporting)
-anamorph leakage-check --clean                                     # z_true leakage sanity check
-anamorph --log-level DEBUG train --config params/1d_default.yaml
+deconvolve train --config params/1d_default.yaml                     # 1D uncorrelated
+deconvolve train --config params/1d_default.yaml --seed 7            # reproducible init (see Seeding)
+deconvolve train --config params/2d_correlated.yaml                  # 2D with covariance
+deconvolve train --dataset jets                                      # train on all 6 jet variables
+deconvolve train --dataset jets --var m --var w                      # a subset of jet variables
+deconvolve train --dataset jets --lr-g 3e-4 -k 2 --no-plots          # tuning: see Hyperparameters
+deconvolve train --dataset jets --seed 3 --run-dir runs/hp_x/lrg1e-4_seed03  # one arm of a sweep
+deconvolve train --load-run runs/2026-03-14T061023Z                  # reload a saved run
+deconvolve evaluate                                                  # compute metrics for all runs
+deconvolve evaluate --run-dir runs/2026-...                          # single run
+deconvolve baseline ibu --run-dir runs/2026-...                      # IBU comparison
+deconvolve baseline omnifold --run-dir runs/2026-...                 # OmniFold (see OmniFold)
+deconvolve report runs/2026-...                                      # PDF dossier (see Reporting)
+deconvolve leakage-check --clean                                     # z_true leakage sanity check
+deconvolve --log-level DEBUG train --config params/1d_default.yaml
 sbatch scripts/submit.zsh                                      # end-to-end 6-var jet run
 sbatch scripts/submit.zsh --dataset gaussian --config params/2d_correlated.yaml
 bash scripts/submit_hparam.zsh                                 # hyperparameter arms, 3 levels x 8 seeds
@@ -241,14 +241,14 @@ to measure a statistical property** (`tests/test_mmd_floor.py`). Write a new
 test against the piece directly and it costs a few milliseconds and needs no
 marker; reach for a full run and it costs a hundred times that and does.
 
-`scripts/submit.zsh` is the full pipeline rather than a bare `anamorph train`: it
+`scripts/submit.zsh` is the full pipeline rather than a bare `deconvolve train`: it
 trains, runs the IBU baseline on the same run directory, reloads once so the
 figures come back out with the baseline overlaid (`workflow.run` picks up
 `ibu_weights.npz` only if it exists when the plots are drawn), recomputes
-metrics, then `module load texlive` and `anamorph report` to leave a PDF at the top
+metrics, then `module load texlive` and `deconvolve report` to leave a PDF at the top
 of the run directory. It defaults to the full **twelve**-observable jet run at
-`-n 1600000 -l 3 -u 128`, with `ANAMORPH_TIMING=1` exported so the run reports
-where its wall clock went. Extra flags reach `anamorph train`; those defaults
+`-n 1600000 -l 3 -u 128`, with `DECONVOLVE_TIMING=1` exported so the run reports
+where its wall clock went. Extra flags reach `deconvolve train`; those defaults
 are prepended, and click keeps the last occurrence of a scalar option, so
 anything on the command line still wins.
 
@@ -299,7 +299,7 @@ login node first** — a cold cache pulls 3.3GB from Zenodo (Pythia26 1.55GB +
 Herwig 1.75GB) inside the job and will exceed the `debug` ceiling:
 
 ```bash
-uv run python -c "from anamorph.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"
+uv run python -c "from deconvolve.data import load_jet_dataset; load_jet_dataset(n_samples=1000)"
 ```
 
 The Zenodo release holds ~1.6M jets per generator, and `load_jet_dataset`
@@ -307,9 +307,9 @@ raises if `n_samples` exceeds what is on disk. 1.6M is therefore a request
 against the ceiling rather than a safe round number, which is why the script
 clamps it to what the cache actually holds instead of asserting a figure.
 
-The cubic-response sweep (`anamorph sweep`, `src/anamorph/experiments/`,
+The cubic-response sweep (`deconvolve sweep`, `src/deconvolve/experiments/`,
 `scripts/submit_sweep.zsh`) has been retired and sits under `legacy/`, which is
-a holding pen and not a supported path: it is not importable as `anamorph`, not
+a holding pen and not a supported path: it is not importable as `deconvolve`, not
 covered by `just test`, and slated for deletion. Nothing in the package
 references it.
 
@@ -319,7 +319,7 @@ One button. **Actions -> Release -> Run workflow**, pick a bump (or leave it
 blank), and the job does the rest: rewrite the version, write the changelog
 stanza, re-lock, commit to master, tag, and publish the GitHub release.
 
-Nothing is released by merging a PR. `anamorph evaluate` and friends do not read the
+Nothing is released by merging a PR. `deconvolve evaluate` and friends do not read the
 version, so a release is a labelling act, not a build step -- it exists to give
 a result you can cite a fixed point in the code.
 
@@ -351,11 +351,11 @@ release never depends on credentials. One thing must still change before it can
 succeed: `PYPI_TOKEN` has to exist in repository secrets. The name is settled --
 the project published under `ran` would have returned 403 whatever the token,
 because an unrelated package holds it, and that is what the rename to
-`anamorph` was for.
+`deconvolve` was for.
 
 ## OmniFold
 
-`anamorph baseline omnifold` is the second comparison baseline, and the only part of
+`deconvolve baseline omnifold` is the second comparison baseline, and the only part of
 this repository that does not run in this repository's environment. Three facts
 make that necessary: OmniFold needs TensorFlow, the project environment must
 never hold TensorFlow, and Keras binds its backend once per interpreter. All
@@ -364,10 +364,10 @@ boundary. (TensorFlow also publishes no wheels for 3.14, which is why the
 worker pins `==3.13.*`; that is a fact about the worker's environment, not
 about the project floor, which is `>=3.12`.)
 
-`src/anamorph/baselines/_omnifold_worker.py` carries a PEP 723 header pinning
+`src/deconvolve/baselines/_omnifold_worker.py` carries a PEP 723 header pinning
 `requires-python = "==3.13.*"` plus `omnifold` and `tensorflow`, and
 `uv run --no-project` provisions exactly that, in an interpreter that cannot
-import `anamorph`. The two halves exchange one `.npz` file. `--no-project` is
+import `deconvolve`. The two halves exchange one `.npz` file. `--no-project` is
 load-bearing: without it uv resolves the script against this project and runs
 it in the project environment --- the one environment that must never hold
 TensorFlow, and whose interpreter is whatever the checkout is pinned to
@@ -399,7 +399,7 @@ Its absence is translated into a readable message rather than a
 `FileNotFoundError` from inside `subprocess`, because the fix is an install.
 
 **The worker runs under `PYTHONSAFEPATH=1`, and must.** A script's own directory
-goes on `sys.path[0]`, and the worker's directory is `src/anamorph/baselines/` ---
+goes on `sys.path[0]`, and the worker's directory is `src/deconvolve/baselines/` ---
 which contains `omnifold.py`. So the worker's
 `from omnifold import MLP, DataLoader, MultiFold` resolved to the *host half*
 rather than to the installed package, and died on its `from .. import timing`
@@ -407,7 +407,7 @@ with "attempted relative import with no known parent package": an error naming
 neither the collision nor the file that caused it. `PYTHONSAFEPATH` stops the
 interpreter prepending that directory, which is exactly the shadowing and
 nothing else --- the worker imports nothing local, so it loses nothing. Renaming
-this module would also have worked, at the cost of `anamorph.baselines.omnifold` no
+this module would also have worked, at the cost of `deconvolve.baselines.omnifold` no
 longer being named after the thing it runs.
 `TestTheWorkerDoesNotImportThisPackage` reproduces the collision with a poisoned
 sibling.
@@ -417,7 +417,7 @@ on first use, which needs outbound network, and compute nodes generally have
 none. Warm it on a login node, the way the jet cache is warmed:
 
 ```bash
-uv run --no-project src/anamorph/baselines/_omnifold_worker.py
+uv run --no-project src/deconvolve/baselines/_omnifold_worker.py
 ```
 
 ### It runs on the CPU, silently, without a CUDA 12 toolkit
@@ -445,7 +445,7 @@ did not bind.
 `scripts/submit.zsh` does not run OmniFold. That job asks for
 `--time=00:15:00`, and OmniFold alone measured **~41 minutes** on the shipped
 configuration --- 1.6M samples, twelve observables, `niter=3`, 50 epochs --- so
-it would not fit in what is left after Anamorph trains. It gets
+it would not fit in what is left after Deconvolve trains. It gets
 `scripts/submit_omnifold.zsh` instead, which takes an existing run directory and
 asks for 75 minutes:
 
@@ -480,8 +480,8 @@ Presence is the mechanism, and it is the same one IBU has always used.
 exists in `artifacts/` when the figures are drawn, so:
 
 ```zsh
-anamorph baseline omnifold --run-dir runs/<timestamp>Z   # writes omnifold_weights.npz
-anamorph train --load-run runs/<timestamp>Z              # reloads, redraws with it
+deconvolve baseline omnifold --run-dir runs/<timestamp>Z   # writes omnifold_weights.npz
+deconvolve train --load-run runs/<timestamp>Z              # reloads, redraws with it
 ```
 
 `--load-run` reloads the saved generator rather than training, so the redraw is
@@ -501,7 +501,7 @@ linestyle as well as colour so the panels survive greyscale printing.
 The report's tables carry the third arm too: `render` reads
 `metrics_omnifold.json` when it exists, and fills the two OmniFold columns with
 dashes when it does not, because the template fixes the column count. Columns
-run Sim, IBU, OmniFold, Anamorph --- the method under test last, where the eye lands,
+run Sim, IBU, OmniFold, Deconvolve --- the method under test last, where the eye lands,
 behind what it is being compared against.
 
 Eight columns do not fit at the default column padding. The six tables overran
@@ -515,12 +515,12 @@ and had already drifted once.
 
 ## Uncertainty
 
-`src/anamorph/uncertainty/` measures the variance budget: a `B x S` grid of
+`src/deconvolve/uncertainty/` measures the variance budget: a `B x S` grid of
 bootstrap datasets crossed with initialization seeds, one cell per invocation.
 
 ```bash
-anamorph uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
-anamorph uncertainty collect --design-dir runs/unc_x -B 8 -S 8
+deconvolve uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
+deconvolve uncertainty collect --design-dir runs/unc_x -B 8 -S 8
 bash scripts/submit_uncertainty.zsh                       # packed 8x8 on SLURM
 ```
 
@@ -554,7 +554,7 @@ from two recorded seeds rather than stored per cell.
 The bin-to-bin covariance is the other output, and the one the speed result
 pays for --- ~100 retrainings is not an analysis anyone runs at OmniFold's
 cost. Two corrections keep it honest: the between-dataset covariance still
-carries `Cov_eps / S` and is corrected for it, and Anamorph's weights preserve the
+carries `Cov_eps / S` and is corrected for it, and Deconvolve's weights preserve the
 total count, so closure alone forces `-1 / (K - 1)` on every off-diagonal of
 an equal-occupancy binning. `multinomial_off_diagonal` writes that floor next
 to the measurement. `B` must also exceed the bin count: a covariance from `B`
@@ -564,18 +564,18 @@ heatmap speak for itself.
 
 The finalized numbers --- an 8x8 decomposition and a 100x2 covariance on the
 shipped jet configuration --- are recorded in
-`src/anamorph/uncertainty/README.md`, along with the two caveats that bound them.
+`src/deconvolve/uncertainty/README.md`, along with the two caveats that bound them.
 
 ## Timing
 
-`ANAMORPH_TIMING=1` makes a run report where its wall clock went; unset, the layer
+`DECONVOLVE_TIMING=1` makes a run report where its wall clock went; unset, the layer
 is a genuine no-op --- `phase()` hands back one shared do-nothing context
 manager, so a boundary costs no `perf_counter` call and no allocation. That
 matters because the timers sit inside `workflow.run` and `train.train`, which a
 sweep crosses a few hundred times.
 
 ```bash
-ANAMORPH_TIMING=1 anamorph train --dataset jets -e 100
+DECONVOLVE_TIMING=1 deconvolve train --dataset jets -e 100
 ```
 
 Output is a Rich table on stderr plus `artifacts/timings.json` in the run
@@ -585,7 +585,7 @@ before it did.
 
 **Phases merge by name across passes, and each carries a `pass` field.**
 `scripts/submit.zsh` invokes the package three times over one run directory,
-and each write used to truncate the file: the final `anamorph evaluate` pass left a
+and each write used to truncate the file: the final `deconvolve evaluate` pass left a
 `timings.json` holding `evaluate` alone, with the training block --- the only
 part anyone wants --- gone. A pass now replaces its own same-named phases and
 leaves the rest, so the file accumulates `train`/`load`/`plots`/`evaluate`
@@ -609,7 +609,7 @@ The phases, nested ones indented under their parent:
 | `plots` | `_draw_figures`; near-zero under `--no-plots` |
 | `evaluate` | `evaluate_run` |
 
-`anamorph baseline omnifold` writes its own `artifacts/timings_omnifold.json`
+`deconvolve baseline omnifold` writes its own `artifacts/timings_omnifold.json`
 rather than merging into `timings.json`, and that is not tidiness. **`write`
 merges by phase name alone, not by `(pass, name)`** --- which is right for the
 passes of one pipeline over one run, where `load` legitimately replaces
@@ -655,7 +655,7 @@ compiled object, because an ordinary `jax.jit` call does both at once and shows
 no seam between them. It is the same executable and the same persistent cache;
 `tests/test_timing.py::TestTrainIntegration::test_timed_run_matches_an_untimed_one`
 is what says so, asserting a timed run's history is bit-identical to an untimed
-one's. The split is gated on `ANAMORPH_TIMING`, so the default path stays the single
+one's. The split is gated on `DECONVOLVE_TIMING`, so the default path stays the single
 call `TestFusion` pins.
 
 **JAX is async, so phase boundaries block.** A timer stopped before the arrays
@@ -666,7 +666,7 @@ not the same schedule.
 
 ## Reporting
 
-`anamorph report <run_dir>` compiles one run directory into a PDF dossier at
+`deconvolve report <run_dir>` compiles one run directory into a PDF dossier at
 `<run_dir>/report.pdf` --- configuration, timings, the metric tables, and
 every figure, in one document. `--force` rebuilds over an existing PDF;
 `--no-compile` stops at `artifacts/report.tex` so the LaTeX can be inspected
@@ -680,7 +680,7 @@ report, and burying them is what made the directory readable at a glance.
 so anything that only *reads* must use `run_dir / ARTIFACTS_DIR` instead ---
 rendering a report must not mkdir into a directory it was handed.
 
-`src/anamorph/templates/report.tex` is the document; `src/anamorph/report.py` only fills
+`src/deconvolve/templates/report.tex` is the document; `src/deconvolve/report.py` only fills
 in `<<TOKEN>>` slots and never decides layout. All rounding policy lives in
 the template's `siunitx` column types, so changing how a number reads is a
 LaTeX edit, not a Python one.
@@ -701,7 +701,7 @@ Column Order).
 `report.py` emits that many `\includegraphics[page=k]` blocks without opening
 the file. A run whose figures were drawn before pagination has a one-page PDF
 and `pdflatex` fails with "required page does not exist" --- redraw with
-`anamorph train --load-run <run_dir>` first. `submit.zsh` keeps them in step.
+`deconvolve train --load-run <run_dir>` first. `submit.zsh` keeps them in step.
 
 The figure pages are landscape with their own `\newgeometry{margin=8mm}`,
 and two independent knobs set how they read. A panel's width on the page is
@@ -718,14 +718,14 @@ Render and look before claiming a plotting change works.
 
 ## Caching
 
-Everything Anamorph can regenerate lives under one root, `.cache/` by default:
+Everything Deconvolve can regenerate lives under one root, `.cache/` by default:
 generated Gaussian datasets, the per-variable jet `.npz` files pulled from
-Zenodo, and the XLA compilation cache. **`ANAMORPH_CACHE_DIR` moves the whole tree**,
+Zenodo, and the XLA compilation cache. **`DECONVOLVE_CACHE_DIR` moves the whole tree**,
 which is what a cluster needs — on Perlmutter `$HOME` is small, quota'd and
 shared across nodes:
 
 ```bash
-export ANAMORPH_CACHE_DIR="$SCRATCH/anamorph-cache"
+export DECONVOLVE_CACHE_DIR="$SCRATCH/deconvolve-cache"
 ```
 
 It is deliberately its own variable rather than a read of `XDG_CACHE_HOME`. That
@@ -737,7 +737,7 @@ forwards an unset variable delivers `""`, not absence.
 
 `CACHE_ENV_VAR` and `CACHE_DIR` are resolved once, at import of
 `coretypes/constants.py`, because the `cache_dir=` defaults throughout
-`anamorph.data` bind to `CACHE_DIR` at import either way.
+`deconvolve.data` bind to `CACHE_DIR` at import either way.
 
 ### Compilation cache
 
@@ -752,7 +752,7 @@ architecture N times over. Measured locally, 1.41s cold → 0.36s warm across
 processes.
 
 Two settings, not one. JAX's default `jax_persistent_cache_min_compile_time_secs`
-of 1.0s leaves Anamorph's cache **entirely empty** and says nothing about it: a run
+of 1.0s leaves Deconvolve's cache **entirely empty** and says nothing about it: a run
 compiles a few dozen executables totalling ~4.6s and no single one of them
 clears a second. `_use_compilation_cache` drops it to zero.
 
@@ -781,7 +781,7 @@ YAML files in `params/` use keys: `mu_gen`, `mu_true`, `sigma_gen`, `sigma_true`
 - Keras 3 on the **JAX** backend for training; `jax[cuda13]` on x86_64 Linux
 - Typer for the CLI, Rich for logging and metrics tables
 - Matplotlib for publication-quality plots; `pdflatex` (TeX Live, with
-  siunitx, booktabs and pdflscape) for `anamorph report`, and only for that
+  siunitx, booktabs and pdflscape) for `deconvolve report`, and only for that
 - scipy for evaluation metrics (Wasserstein distance, Jensen-Shannon divergence)
 - jaxtyping + beartype for shape/dtype checking on the training loop's array seams
 - ruff (lint + format), pyrefly (types, `--min-severity info`), complexipy (max 10)
@@ -794,20 +794,20 @@ JAX is the only backend in the build. There is no second framework competing for
 the Keras backend slot or for the GPU, so backend handling here is a one-line
 default rather than a negotiation.
 
-`src/anamorph/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3
+`src/deconvolve/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. Keras 3
 still defaults to TensorFlow when the variable is unset, and TensorFlow is not
 installed, so the pin is what makes `import keras` work at all — it is not
 racing anything. It must still land before the first keras import, which is why
-it lives in the package `__init__`; `src/anamorph/train.py` keeps a cheap guard that
+it lives in the package `__init__`; `src/deconvolve/train.py` keeps a cheap guard that
 raises a readable error if someone sets `KERAS_BACKEND` to something else by
 hand.
 
 ## Precision
 
-**Anamorph is float32 end to end, and the pin lives in one place:**
-`EVENT_DTYPE` in `src/anamorph/coretypes/constants.py`, with its annotation-space
+**Deconvolve is float32 end to end, and the pin lives in one place:**
+`EVENT_DTYPE` in `src/deconvolve/coretypes/constants.py`, with its annotation-space
 twin `EventArray` in `coretypes/types.py`. `JAX_ENABLE_X64=0` and the `dtype=`
-arguments in `src/anamorph/models.py` follow from it. There is no dtype parameter
+arguments in `src/deconvolve/models.py` follow from it. There is no dtype parameter
 anywhere in the pipeline and no `astype` on the containers; there used to be
 generics (`Events[T]`, `Populations[T]`, …) whose only purpose was letting IBU
 carry float32 through a float64 pipeline, and with one dtype they were
@@ -832,7 +832,7 @@ Two things the pin does **not** cover:
   the `Populations` boundary; the checkers enforce it at author time, and the
   three data sources (`_draw_gaussian`, `load_jet_dataset`, and the
   sample-construction in `leakage.py`) narrow explicitly.
-- **`anamorph.data.download` stays float64 on purpose.** `_get_var` upcasts before
+- **`deconvolve.data.download` stays float64 on purpose.** `_get_var` upcasts before
   computing observables, because the ε it uses to protect degenerate jets is
   below the smallest float32 denormal — narrowing there would hand back `NaN`
   for exactly the jets the ε exists to protect. The narrowing happens after, in
@@ -842,7 +842,7 @@ Five gotchas worth knowing:
 
 - **Scores are not pinned.** Wasserstein, JS and the triangular discriminator
   are float64 and stay there. What is pinned is the data, not the measurement
-  taken of it. Since the metrics moved to device (`anamorph.evaluate`), the
+  taken of it. Since the metrics moved to device (`deconvolve.evaluate`), the
   reductions over the full sample --- the sort-and-scan behind Wasserstein, the
   histogram scatter behind the other two --- are necessarily float32, so each is
   arranged so its error is relative to the answer rather than to the largest
@@ -866,7 +866,7 @@ Five gotchas worth knowing:
   `_counts` bins with `empty.at[index].add(...)`, which lowers to a scatter-add;
   many events land in one bin, so on a GPU that is an *atomic* accumulation and
   the summation order is whatever the hardware chose that pass. Two
-  `anamorph evaluate` runs over the same run directory therefore return histogram
+  `deconvolve evaluate` runs over the same run directory therefore return histogram
   counts differing in the last float32 ulp, and JS values differing by ~4e-8
   relative --- measured, not estimated, and non-systematic: it moves up on some
   dimensions and down on others. On a CPU the scatter is sequential and the
@@ -897,7 +897,7 @@ Five gotchas worth knowing:
   way into `metrics.json` for exactly this reason.
 - **`keras.ops.mean` is not float64-safe.** For float64 input it selects a
   float32 compute dtype internally and returns a float64 result carrying ~1e-8
-  relative error. `src/anamorph/train.py` has since moved to plain `jnp`, so it is no
+  relative error. `src/deconvolve/train.py` has since moved to plain `jnp`, so it is no
   longer exposed — but it still reduces with `jnp.sum(...) / n` rather than a
   mean, and `tests/test_train.py` guards the accuracy either way. Anything that
   reaches for `keras.ops` again needs to know. `ops.sum` is unaffected.
@@ -913,16 +913,16 @@ Five gotchas worth knowing:
 For `--dataset jets`, the list of observables is an **ordering**, carried as a
 `tuple[str, ...]` and never as a set. `load_jet_dataset` fills column `i` from
 `variables[i]`; `_save_run` records that order in `config.json`; and
-`anamorph evaluate` and the baselines read the recorded list back **as a list**,
+`deconvolve evaluate` and the baselines read the recorded list back **as a list**,
 in order.
 
 This was a `frozenset`, and it produced silently wrong physics. A frozenset's
 iteration order depends on the per-process randomized hashes of the strings in
-it, so `anamorph train` built its columns in one order and recorded it, then each
+it, so `deconvolve train` built its columns in one order and recorded it, then each
 later process rebuilt the same dataset in a *different* order and labelled it
 with the recorded one. Every jet metric came back under the wrong observable
 name, and — because the generator was trained on one column order and evaluated
-against another — the reload and `anamorph evaluate` passes fed it permuted features
+against another — the reload and `deconvolve evaluate` passes fed it permuted features
 and reported large negative improvements. See `tests/test_jets.py`.
 
 Two rules follow, both enforced rather than documented:
@@ -937,7 +937,7 @@ Two independent randomness axes, deliberately kept separate:
 
 | Seed        | Set by                            | Controls                                               |
 | ----------- | --------------------------------- | ------------------------------------------------------ |
-| `data_seed` | `AnamorphDataset` / `load_jet_dataset` | generation, shuffle, train/val/test split, per-epoch batch order |
+| `data_seed` | `DeconvolveDataset` / `load_jet_dataset` | generation, shuffle, train/val/test split, per-epoch batch order |
 | `seed`      | `train`                           | weight initialization only                             |
 
 `train(seed=None)` draws one from system entropy and **returns the value used**,
@@ -969,7 +969,7 @@ pass. A split too small for one group is not an error: `n_disc_steps` clamps to
 the batches available, matching what the host loop did when the rule fired only
 at step 0.
 
-`anamorph leakage-check` (in `src/anamorph/leakage.py`) depends on this: both arms must
+`deconvolve leakage-check` (in `src/deconvolve/leakage.py`) depends on this: both arms must
 share `--seed` or initialization variance swamps the effect and the arms differ
 even with no leakage. With it fixed, detector-level results are bit-identical
 between the clean and poisoned arms.
@@ -984,7 +984,7 @@ front rather than after a full training run.
 
 ## Training Loop
 
-`src/anamorph/train.py` is hand-rolled, since the two-optimizer min-max game does not
+`src/deconvolve/train.py` is hand-rolled, since the two-optimizer min-max game does not
 fit `Model.fit` — but it is not a Python loop over batches. **A whole run
 compiles to one XLA program.** Model state lives in JAX pytrees (`TrainState`)
 for the duration, updates go through `stateless_call`/`stateless_apply`, and the

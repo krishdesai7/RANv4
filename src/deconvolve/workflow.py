@@ -20,7 +20,7 @@ from .coretypes import (
     artifacts_dir,
 )
 from .data import (
-    AnamorphDataset,
+    DeconvolveDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
     parse_gaussian_config,
@@ -43,8 +43,8 @@ if TYPE_CHECKING:
     from typing import Any
 
     from .coretypes import (
-        AnamorphModel,
         DatasetSplits,
+        DeconvolveModel,
         EventArray,
         Populations,
         RunConfig,
@@ -77,7 +77,9 @@ def _prepare_gaussian(
     n_samples: int,
     data_seed: int,
 ) -> tuple[DatasetSplits, int, GaussianConfig]:
-    builder: AnamorphDataset = AnamorphDataset(batch_size=batch_size, seed=data_seed)
+    builder: DeconvolveDataset = DeconvolveDataset(
+        batch_size=batch_size, seed=data_seed
+    )
     if saved_config is not None:
         gaussian_params: GaussianConfig = saved_config
         # Reload: use stored params from config.json
@@ -169,8 +171,8 @@ def _reject_conflicting_outputs(load_run: Path | None, run_dir: Path | None) -> 
 
 
 def _save_run(
-    g: AnamorphModel,
-    d: AnamorphModel,
+    g: DeconvolveModel,
+    d: DeconvolveModel,
     history: dict[str, list[float]],
     params: EpochParams,
     *,
@@ -205,8 +207,8 @@ def _save_run(
 
 
 def _write_run_dir(
-    g: AnamorphModel,
-    d: AnamorphModel,
+    g: DeconvolveModel,
+    d: DeconvolveModel,
     history: dict[str, list[float]],
     params: EpochParams,
     *,
@@ -234,7 +236,7 @@ def _write_run_dir(
     _ = save_params(run_dir, params)
     np.savez(
         file=artifacts / "history.npz",
-        # See anamorph.baselines.ibu: unpacking a str-keyed dict into savez means a
+        # See deconvolve.baselines.ibu: unpacking a str-keyed dict into savez means a
         # key could in principle be "allow_pickle", which is declared bool.
         **{k: np.array(object=v) for k, v in history.items()},  # pyrefly: ignore[bad-argument-type]  # ty:ignore[invalid-argument-type]
     )
@@ -263,10 +265,10 @@ def _write_run_dir(
     return run_dir
 
 
-def _load_artifacts(run_dir: Path) -> tuple[AnamorphModel, dict[str, list[float]]]:
+def _load_artifacts(run_dir: Path) -> tuple[DeconvolveModel, dict[str, list[float]]]:
     """Reload a finished run's generator and training history."""
     artifacts: Path = artifacts_dir(run_dir)
-    g: AnamorphModel = keras.saving.load_model(artifacts / "generator.keras")
+    g: DeconvolveModel = keras.saving.load_model(artifacts / "generator.keras")
     history: dict[str, list[float]] = {
         k: v.tolist() for k, v in np.load(file=artifacts / "history.npz").items()
     }
@@ -290,7 +292,7 @@ def _display_variables(
 def _draw_figures(
     run_dir: Path,
     splits: DatasetSplits,
-    g: AnamorphModel,
+    g: DeconvolveModel,
     history: dict[str, list[float]],
     dim: int,
     var_info: list[VarInfo] | None,
@@ -344,9 +346,9 @@ def _load_baseline_weights(
     """Every baseline that has left weights in this run directory.
 
     Presence is the whole mechanism, and it is deliberate: neither baseline
-    runs on the `anamorph train` path, so the figures a fresh run draws have no
+    runs on the `deconvolve train` path, so the figures a fresh run draws have no
     overlay, and re-drawing them after a baseline has run is what puts one
-    there. `anamorph train --load-run <run_dir>` is that re-draw --- it reloads the
+    there. `deconvolve train --load-run <run_dir>` is that re-draw --- it reloads the
     saved generator instead of training, and picks up whatever `*_weights.npz`
     files exist by then.
 
@@ -565,7 +567,7 @@ def _pipeline(
         else:
             raise ValueError(f"Unknown dataset: {dataset!r}")
 
-    g: AnamorphModel
+    g: DeconvolveModel
     history: dict[str, list[float]]
     best_epoch: int
     if load_run is not None:

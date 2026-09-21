@@ -11,14 +11,14 @@
 
 This file is inside the package but is not part of it. Nothing imports it, and
 nothing can: it runs under Python 3.13 with Keras bound to the TensorFlow
-backend, and `anamorph` binds Keras to JAX. Keras binds its backend once per
+backend, and `deconvolve` binds Keras to JAX. Keras binds its backend once per
 interpreter, so those two facts are irreconcilable inside one interpreter --
 which is the whole reason OmniFold is a subprocess rather than a module. The
 project floor is `>=3.12` and so no longer excludes 3.13 on its own; the
 backend binding, and the rule that the project environment never holds
 TensorFlow, are what keep this file out of process. The PEP 723 header above
 is the quarantine; `uv run --no-project` provisions it, and
-`anamorph.baselines.omnifold` on the other side of an `.npz` file is the only caller.
+`deconvolve.baselines.omnifold` on the other side of an `.npz` file is the only caller.
 
 Three constraints the header encodes, each of which is load-bearing:
 
@@ -148,7 +148,7 @@ def run(payload: dict[str, np.ndarray], out_path: Path) -> None:
     # lives at detector level and would not be applicable to `z_target`.
     reweight_started = time.perf_counter()
     weights = unfold.reweight(z_target, unfold.model2).astype(np.single).ravel()
-    # Mean one, matching the normalization `anamorph`'s own weights carry, so the two
+    # Mean one, matching the normalization `deconvolve`'s own weights carry, so the two
     # are comparable without the caller rescaling either.
     weights = weights / weights.mean()
     reweight_seconds = time.perf_counter() - reweight_started

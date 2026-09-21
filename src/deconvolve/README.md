@@ -1,14 +1,14 @@
-# Anamorph
+# Deconvolve
 
-`anamorph` is a library for training and evaluating reweighting adversarial networks: a generator that learns per-event weights, scored by a detector-level discriminator.
+`deconvolve` is a library for training and evaluating reweighting adversarial networks: a generator that learns per-event weights, scored by a detector-level discriminator.
 
-Importing anything under `anamorph` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
+Importing anything under `deconvolve` first pins the Keras 3 backend to JAX and disables JAX's 64-bit mode. Both settings are read once, when `jax`/`keras` are first imported, so they must be in place before any submodule imports either.
 
-`anamorph` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`anamorph.coretypes.constants`, with its annotation twin `EventArray` in :mod:`anamorph.coretypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`anamorph.models` follow from it.
+`deconvolve` is float32 end to end. The pin is `EVENT_DTYPE` in :mod:`deconvolve.coretypes.constants`, with its annotation twin `EventArray` in :mod:`deconvolve.coretypes.types`; `JAX_ENABLE_X64=0` and the `dtype=` arguments in :mod:`deconvolve.models` follow from it.
 
 `setdefault` throughout, so that the environment can be explicitly overridden.
 
-Import the submodule needed (`from anamorph.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
+Import the submodule needed (`from deconvolve.workflow import run`); the CLI re-exports below are the sole exception, and they defer their own imports into the command bodies.
 
 ## module `evaluate`
 
@@ -18,14 +18,14 @@ Computes per-dimension 1D Wasserstein distances, Jensen-Shannon divergences and 
 
 **Every one of them runs on device.** The metrics were scipy and `np.histogram` in a Python loop over columns, which at the shipped 500k jet configuration was 63% of the `evaluate` phase and half of it Wasserstein alone. They are now `jnp`, vectorized across dimensions so one dispatch does every column, and the only thing that crosses back to the host is the handful of numbers per dimension they reduce to. Measured at 100k-vs-100k in 6D: 1.23s of metrics became ~0.28s of compute plus a one-time XLA compile, before any GPU.
 
-Two things did _not_ change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move _toward_ float64 truth, because `np.histogram` accumulates in the weights' dtype and Anamorph's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
+Two things did _not_ change, and are held by `tests/test_evaluate_metrics.py` rather than asserted here. The estimators are the same ones scipy computes, so an existing `metrics.json` is reproduced to 1.4e-6 relative on Wasserstein and 4.7e-5 on the divergences --- and the divergences move _toward_ float64 truth, because `np.histogram` accumulates in the weights' dtype and Deconvolve's weights are float32, which made the pre-port path the less accurate of the two. Scores also stay float64: only the reductions over the full sample happen in float32, and each is arranged so its error is relative to the answer rather than to the largest intermediate.
 
 Usage:
 
 ```bash
-    anamorph evaluate                          # all runs in runs/
-    anamorph evaluate --run-dir runs/2026-...  # single run
-    anamorph evaluate --force                  # recompute existing
+    deconvolve evaluate                          # all runs in runs/
+    deconvolve evaluate --run-dir runs/2026-...  # single run
+    deconvolve evaluate --force                  # recompute existing
 ```
 
 ### `apply_to_runs(run_dir: Path, evaluate_one: Callable[[Path], object], description: str, log: Logger) -> None`
@@ -172,13 +172,13 @@ Generate particle level plots.
 
 - `None`
 
-## :mod:`anamorph.train`
+## :mod:`deconvolve.train`
 
-Adversarial training loop for Anamorph, on Keras 3 with the JAX backend, as a single fused XLA program.
+Adversarial training loop for Deconvolve, on Keras 3 with the JAX backend, as a single fused XLA program.
 
 The min-max game needs two optimizers driven at different cadences against a shared loss, which does not fit `Model.fit`, so this module implements a hand-rolled loop. It follows the standard Keras 3 + JAX pattern: model state lives in JAX pytrees (:class:`TrainState`) for the duration of training, updates go through `stateless_call`/`stateless_apply`, and each step is a single jitted function. Values are written back into the Keras models at the end so the returned objects are ordinary, saveable `keras.Model`s.
 
-The training loop is not a Python loop over batches. The dataset is moved to device once (:mod:`anamorph.data.device`), one epoch is a `lax.scan` over grouped batch indices, and the epoch loop with its early stopping is a `lax.while_loop`, so a whole run compiles to one program and the batch gathers fuse into the first `Dense`.
+The training loop is not a Python loop over batches. The dataset is moved to device once (:mod:`deconvolve.data.device`), one epoch is a `lax.scan` over grouped batch indices, and the epoch loop with its early stopping is a `lax.while_loop`, so a whole run compiles to one program and the batch gathers fuse into the first `Dense`.
 
 The loss math is plain `jnp`. `stateless_call`/`stateless_apply` are the only Keras calls inside the trace. `lax.scan`, `lax.while_loop` and `jax.random` are all native JAX.
 
@@ -197,8 +197,8 @@ Held outside the `keras.Model`s so jitted steps stay pure and no host/device syn
 
 **Fields:**
 
-- :attr:`TrainResult.g: AnamorphModel` The generator model.
-- :attr:`TrainResult.d: AnamorphModel` The discriminator model.
+- :attr:`TrainResult.g: DeconvolveModel` The generator model.
+- :attr:`TrainResult.d: DeconvolveModel` The discriminator model.
 - :attr:`TrainResult.history: dict[str, list[float]]` The training history. Carries `train_d`, `train_g`, `val_d` (the three `lax.scan` columns) plus `val_mmd` and `val_ess` (host additions computed from the retained per-epoch parameters, once the scan is done).
 - :attr:`TrainResult.seed: int` The random seed used for training.
 - :attr:`TrainResult.best_epoch: int` Which epoch's parameters were restored: the argmin of `history["val_mmd"]`.
@@ -280,7 +280,7 @@ Reduced with `jnp.sum(...) / n` rather than a mean: for float64 input `keras.ops
 
 - The weighted binary cross-entropy loss.
 
-### :func:`_make_steps(AnamorphModel, AnamorphModel, StatelessOptimizer, StatelessOptimizer) -> tuple[TrainStep, TrainStep, EvalStep]`
+### :func:`_make_steps(DeconvolveModel, DeconvolveModel, StatelessOptimizer, StatelessOptimizer) -> tuple[TrainStep, TrainStep, EvalStep]`
 
 Build the jitted disc/gen/eval steps, closing over the models.
 
@@ -288,8 +288,8 @@ The models are captured rather than passed so jit sees only array arguments; eac
 
 **Arguments:**
 
-- `g: AnamorphModel` The generator model.
-- `d: AnamorphModel` The discriminator model.
+- `g: DeconvolveModel` The generator model.
+- `d: DeconvolveModel` The discriminator model.
 - `opt_g: StatelessOptimizer` The generator optimizer.
 - `opt_d: StatelessOptimizer` The discriminator optimizer.
 
@@ -320,7 +320,7 @@ One pass over the training split, returning the new state and mean losses.
 Train the generator and discriminator, then select a checkpoint.
 
 This seeds weight initialization _only_. The train/val/test split and the
-per-epoch batch order come from the dataset's own seed (`AnamorphDataset`), which draws from an independent generator. Varying `seed` across runs therefore estimates training/initialization variance at fixed data, i.e., the usual HEP model-uncertainty ensemble, while varying the dataset seed instead would fold in split variance.
+per-epoch batch order come from the dataset's own seed (`DeconvolveDataset`), which draws from an independent generator. Varying `seed` across runs therefore estimates training/initialization variance at fixed data, i.e., the usual HEP model-uncertainty ensemble, while varying the dataset seed instead would fold in split variance.
 
 The networks are Dense-only with no dropout or batch norm and Adam is deterministic, so the two seeds together fully determine a run (up to non-deterministic GPU reductions).
 
@@ -416,7 +416,7 @@ Point XLA's persistent cache at :data:`COMPILE_CACHE_DIR`.
 Compilation is the largest single time cost in a short run. `benchmarks/boundary.py` on an A100 measures 4.60s of compile time against 0.034s per epoch, so a 100-epoch run spends half its wall clock in XLA and only a third of it training. The cache keys on lowered HLO rather than on Python identity. Hence the fresh `jax.jit(lambda ...)` in :func:`_run` can use it regardless and it lives on disk, which is where it pays: an ensemble is N separate interpreters
 compiling the same architecture N times over.
 
-It has two separate settings because JAX's default `min_compile_time_secs` of 1.0s leaves Anamorph's cache _entirely empty_, because the run compiles a few dozen executables that total 4.6s and no single one of them clears a second. The threshold separates a populated cache from a silent no-op.
+It has two separate settings because JAX's default `min_compile_time_secs` of 1.0s leaves Deconvolve's cache _entirely empty_, because the run compiles a few dozen executables that total 4.6s and no single one of them clears a second. The threshold separates a populated cache from a silent no-op.
 
 Whatever the caller configured wins, so `JAX_COMPILATION_CACHE_DIR`, or a `jax.config.update` before :func:`train` still overrides this, and an unwritable directory costs a warning from JAX rather than the run.
 

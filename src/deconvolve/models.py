@@ -7,7 +7,7 @@ import keras
 if TYPE_CHECKING:
     from typing import Protocol
 
-    from .coretypes import AnamorphModel
+    from .coretypes import DeconvolveModel
 
     class _InputFactory(Protocol):
         def __call__(
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
             outputs: keras.KerasTensor,
             *,
             name: str,
-        ) -> AnamorphModel: ...
+        ) -> DeconvolveModel: ...
 
 
 _keras_input = cast("_InputFactory", keras.Input)
@@ -39,7 +39,7 @@ _keras_model = cast("_ModelFactory", keras.Model)
 
 def build_generator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
-) -> AnamorphModel:
+) -> DeconvolveModel:
     """g(z): nominal-level events -> per-event weights."""
     inputs = _keras_input(shape=(dim,), dtype="float32")
     x = inputs
@@ -51,7 +51,7 @@ def build_generator(
 
 def build_discriminator(
     dim: int = 1, hidden_units: int = 64, n_layers: int = 2
-) -> AnamorphModel:
+) -> DeconvolveModel:
     """d(x): reco-level events -> data vs MC probability."""
     inputs = _keras_input(shape=(dim,), dtype="float32")
     x = inputs

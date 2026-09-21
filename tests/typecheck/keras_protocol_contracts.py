@@ -3,29 +3,29 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_type
 
-from anamorph.coretypes import (
-    AnamorphModel,
+from deconvolve.coretypes import (
+    DeconvolveModel,
     KerasVariable,
     Variables,
 )
-from anamorph.evaluate import _get_weights as evaluate_weights
-from anamorph.models import build_discriminator, build_generator
+from deconvolve.evaluate import _get_weights as evaluate_weights
+from deconvolve.models import build_discriminator, build_generator
 
 # Specifically what this test is checking
-from anamorph.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
-from anamorph.train import TrainResult, _make_steps
-from anamorph.workflow import _load_artifacts
+from deconvolve.plotting import _get_weights as plotting_weights  # pyrefly: ignore[implicit-reexport]
+from deconvolve.train import TrainResult, _make_steps
+from deconvolve.workflow import _load_artifacts
 from jax._src.basearray import Array as JaxArray
 
 if TYPE_CHECKING:
     from typing import Any
 
-    from anamorph.coretypes import EvalStep, StatelessOptimizer, TrainStep
+    from deconvolve.coretypes import EvalStep, StatelessOptimizer, TrainStep
     from numpy.typing import ArrayLike, NDArray
 
 
 def check_protocol_surfaces(
-    model: AnamorphModel,
+    model: DeconvolveModel,
     optimizer: StatelessOptimizer,
     variable: KerasVariable,
     inputs: ArrayLike,
@@ -50,22 +50,22 @@ def check_protocol_surfaces(
 
 
 def check_training_boundary(
-    model: AnamorphModel, optimizer: StatelessOptimizer
+    model: DeconvolveModel, optimizer: StatelessOptimizer
 ) -> None:
-    assert_type(build_generator(), AnamorphModel)
-    assert_type(build_discriminator(), AnamorphModel)
+    assert_type(build_generator(), DeconvolveModel)
+    assert_type(build_discriminator(), DeconvolveModel)
     _: tuple[TrainStep, TrainStep, EvalStep] = _make_steps(
         g=model, d=model, opt_g=optimizer, opt_d=optimizer, lambda_dispersion=0.0
     )
 
 
 def check_model_consumers(
-    model: AnamorphModel,
+    model: DeconvolveModel,
     inputs: NDArray[Any],
     result: TrainResult,
 ) -> None:
     _ = evaluate_weights(g=model, z_gen=inputs)
     _ = plotting_weights(g=model, z_gen=inputs)
-    assert_type(result.g, AnamorphModel)
+    assert_type(result.g, DeconvolveModel)
     loaded, _ = _load_artifacts(run_dir=Path("run"))
-    assert_type(loaded, AnamorphModel)
+    assert_type(loaded, DeconvolveModel)

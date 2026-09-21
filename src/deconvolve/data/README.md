@@ -12,7 +12,7 @@ sigma_true: float | list[float] | list[list[float]]
 sigma_detector: float | list[float] | list[list[float]]
 ```
 
-### `anamorph.data.config::sigma_to_covariance`
+### `deconvolve.data.config::sigma_to_covariance`
 
 Promote `sigma` (scalar, vector, or matrix) to a (dim, dim) covariance matrix, where `dim` is the dimension of the data.
 
@@ -22,7 +22,7 @@ Promote `sigma` (scalar, vector, or matrix) to a (dim, dim) covariance matrix, w
 
 Validates positive-definiteness via Cholesky decomposition.
 
-### `anamorph.data.config::parse_gaussian_config`
+### `deconvolve.data.config::parse_gaussian_config`
 
 Parse a Gaussian YAML config file and return a dictionary with the following keys:
 
@@ -33,7 +33,7 @@ Parse a Gaussian YAML config file and return a dictionary with the following key
 - `cov_true: NDArray[np.double]` The covariance matrix of the true data.
 - `cov_detector: NDArray[np.double]` The covariance matrix of the detector.
 
-### `anamorph.data.config::gaussian_config_from_run_config`
+### `deconvolve.data.config::gaussian_config_from_run_config`
 
 Rebuild a `GaussianConfig` from the `gaussian_params` block of a run's `config.json`, across every format runs/ has ever held - two deprecated formats and one current format. Two share their key names:
 
@@ -66,7 +66,7 @@ Draw the four Gaussian populations: `(z_true, z_gen, x_data, x_sim)`.
 
 Runs on the default device, and no longer pins itself to CPU. It used to, because JAX preallocates ~75% of a card on its first allocation and TensorFlow was there to collide with; with TensorFlow out of the build there is nothing on the card to protect. Sharing a node is still a real concern, but it is handled where it belongs — the launchers give each step exactly one visible GPU via `srun --gpus-per-task=1`, so a sibling run cannot have the card swallowed out from under it.
 
-The draw pins its matmul precision to `HIGHEST`. Two dots produce this sample — the `@` against the Cholesky smear, and one inside `multivariate_normal(method="svd")` — and XLA runs both at TF32 on an A100 by default, which would make the sample a function of the hardware as well as of the config and the seed. Neither dot cancels, so TF32 costs only an honest ~5e-4 relative here rather than the unbounded error the same default caused in `anamorph.mmd`; what the pin buys is that a `.npz` drawn on a login node and one drawn on a GPU node are the same sample. The cache key is otherwise a pure function of the physics config, so `_RNG_VERSION` carries `jax-v2` to keep a pre-pin file from being silently reused.
+The draw pins its matmul precision to `HIGHEST`. Two dots produce this sample — the `@` against the Cholesky smear, and one inside `multivariate_normal(method="svd")` — and XLA runs both at TF32 on an A100 by default, which would make the sample a function of the hardware as well as of the config and the seed. Neither dot cancels, so TF32 costs only an honest ~5e-4 relative here rather than the unbounded error the same default caused in `deconvolve.mmd`; what the pin buys is that a `.npz` drawn on a login node and one drawn on a GPU node are the same sample. The cache key is otherwise a pure function of the physics config, so `_RNG_VERSION` carries `jax-v2` to keep a pre-pin file from being silently reused.
 
 No `check_valid` equivalent is needed: `parse_gaussian_config` has already asserted positive-definiteness with a Cholesky factorization.
 
@@ -88,7 +88,7 @@ No `check_valid` equivalent is needed: `parse_gaussian_config` has already asser
 
 An in-memory `ZXY` with deterministic minibatching. One host-resident split of (z, x, y), plus how it should be batched.
 
-This is a container, not an iterator. Batch order is drawn on device, per epoch, by `anamorph.data.device.train_indices` --- so `batch_size` and `seed` are carried here as the split's own parameters and read by
+This is a container, not an iterator. Batch order is drawn on device, per epoch, by `deconvolve.data.device.train_indices` --- so `batch_size` and `seed` are carried here as the split's own parameters and read by
 `DeviceSplits.from_splits`, but nothing iterates this object.
 
 Every split holds a view onto one shared pair of base arrays; slicing is done with indexing at batch time, so splitting costs no extra memory.
@@ -109,9 +109,9 @@ Every split holds a view onto one shared pair of base arrays; slicing is done wi
 - `len() -> int` Number of batches per pass.
 - `as_arrays() -> ZXY` Return the whole split as flat labelled arrays, in stored order.
 
-### `class AnamorphDataset`
+### `class DeconvolveDataset`
 
-Dataset class for Anamorph.
+Dataset class for Deconvolve.
 
 #### Fields
 
@@ -198,7 +198,7 @@ Device-resident training data, the third form alongside `Populations`/`ZXY`.
 
 `Populations` is the physics form and `ZXY` the transport form; both are host NumPy, because they feed Matplotlib, npz I/O and the IBU baseline. This module is the training form: `DeviceSplits.from_splits` is the single host-to-device transfer of a run, and after it no batch crosses the boundary again.
 
-All three forms live under `anamorph.data` because they are all the dataset, just at different points in its trip to the accelerator. Both splits are laid out for a single fused XLA program: the train split stays flat and is gathered by index inside a `lax.scan`, so XLA fuses the gather into the first `Dense`; the eval splits are pre-batched with a mask, so evaluation scans with no gather at all and still sees every event exactly once.
+All three forms live under `deconvolve.data` because they are all the dataset, just at different points in its trip to the accelerator. Both splits are laid out for a single fused XLA program: the train split stays flat and is gathered by index inside a `lax.scan`, so XLA fuses the gather into the first `Dense`; the eval splits are pre-batched with a mask, so evaluation scans with no gather at all and still sees every event exactly once.
 
 Evaluation is forward-only and its batching is not part of the training contract, so it uses a wider batch than training to keep the scan short.
 
@@ -329,7 +329,7 @@ Pull one batch out of the flat split, fused into the first matrix multiplication
 
 One-time download of jet substructure data from Zenodo (record 3548091).
 
-Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to `CACHE_DIR` (`.cache/`, or wherever `ANAMORPH_CACHE_DIR` points), and deletes the raw downloads
+Downloads Pythia26 and Herwig Z+jets Delphes datasets (17 .npz files each), extracts 6 substructure variables, saves per-variable .npz files to `CACHE_DIR` (`.cache/`, or wherever `DECONVOLVE_CACHE_DIR` points), and deletes the raw downloads
 
 ### Degenerate jets
 
@@ -345,7 +345,7 @@ The usual alternative is to nudge the denominator or the log argument by an epsi
 
 For $\beta = 1$ the jet width is $\tau_1$, so $\tau_{21} = \frac{\tau_2}{\tau_1}$. A jet of one constituent has neither: both vanish and the ratio is 0/0. Zero is what <span style="font-variant: small-caps;">OmniFold</span>'s published results assign it and so is what this code reproduces, but it is a convention rather than a measurement. Zero is also the limit a cleanly two-pronged jet approaches, which a one-constituent jet is obviously not.
 
-### `anamorph.data.download::_get_var`
+### `deconvolve.data.download::_get_var`
 
 Extract a substructure variable from raw arrays.
 
@@ -361,7 +361,7 @@ Two of the six are undefined for a jet the detector or the groomer has left with
 
 - `NDArray[np.double]` Substructure variable array.
 
-### `anamorph.data.download::_fetch_generator`
+### `deconvolve.data.download::_fetch_generator`
 
 Fetch every shard for one generator and concatenate the keys needed. Appends each shard path to `all_raw_paths` so the caller can delete the raw downloads once the per-variable caches have been written.
 
@@ -378,11 +378,11 @@ Fetch every shard for one generator and concatenate the keys needed. Appends eac
 
 ## Jets
 
-Load jet substructure data for Anamorph training.
+Load jet substructure data for Deconvolve training.
 
-Checks `CACHE_DIR` (`.cache/`, or wherever `ANAMORPH_CACHE_DIR` points) for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `AnamorphDataset`.
+Checks `CACHE_DIR` (`.cache/`, or wherever `DECONVOLVE_CACHE_DIR` points) for per-variable `.npz` files. If missing, invokes `download_jet_data` to fetch from Zenodo. Loads, subsamples, z-score standardizes (using MC gen-level statistics only), and builds the train/val/test splits via `DeconvolveDataset`.
 
-### `anamorph.data.jets::load_jet_dataset`
+### `deconvolve.data.jets::load_jet_dataset`
 
 Load jet substructure data and return DatasetSplits.
 
@@ -392,15 +392,15 @@ Each selected substructure variable is z-score standardized using the MC gen-lev
 
 - `n_samples: int = 500_000` Number of events to use per class (data and MC).
 - `batch_size: int = 1024` Batch size for the returned splits.
-- `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files. Defaults to `.cache`, relocatable with `ANAMORPH_CACHE_DIR`.
+- `cache_dir: Path = CACHE_DIR` Directory containing per-variable `.npz` files. Defaults to `.cache`, relocatable with `DECONVOLVE_CACHE_DIR`.
 - `variables: Sequence[str] = SUBSTRUCTURE_VARIABLES` Which substructure variables to use, **in column order**.
 
-  The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, that order is what `_save_run` records in `config.json`, and it is what a later `anamorph evaluate` or `anamorph baseline ibu` must reproduce to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
+  The order is load-bearing, not cosmetic: column `i` is filled from `variables[i]`, that order is what `_save_run` records in `config.json`, and it is what a later `deconvolve evaluate` or `deconvolve baseline ibu` must reproduce to label the columns — or to hand a trained generator its own features. A `set` or `frozenset` is refused outright, because its iteration order depends on per-process randomized string hashes and so cannot survive into the second process. Duplicate and unknown names are refused too.
 
 - `seed: int = 42` Dataset seed, controlling the shuffle, the train/val/test split and the per-epoch batch order. Independent of the weight-init seed passed to `train`.
   There is no `dtype` argument. The npz caches on disk are the float64 the Zenodo release ships, and the standardization statistics are computed in that precision; the narrowing to `EVENT_DTYPE` happens once, here, on the way into the pipeline.
 
-Narrowing _after_ the observables are computed is deliberate, not incidental: `anamorph.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
+Narrowing _after_ the observables are computed is deliberate, not incidental: `deconvolve.data.download._get_var` upcasts to float64 first, because the ε it uses to protect degenerate jets is below the smallest float32 denormal. Narrow before that and it rounds to zero, handing back `NaN` for exactly the jets the ε exists to protect.
 
 **Returns**:
 

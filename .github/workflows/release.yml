@@ -77,7 +77,7 @@ jobs:
           fi
 
       # rooster rewrites the version in pyproject.toml but knows nothing about
-      # uv.lock, which pins `anamorph` by that same version. Without this the release
+      # uv.lock, which pins `deconvolve` by that same version. Without this the release
       # commit fails CI's `uv sync --locked` and has to be fixed up by hand.
       # Bare `uv lock` re-pins only what changed; it does not upgrade deps.
       - name: Re-lock
@@ -149,7 +149,7 @@ jobs:
       # PYPI_TOKEN has to be set in repository secrets (Settings -> Secrets).
       # The name itself is no longer a blocker -- it was, under the old name
       # `ran`, which an unrelated package (chenshenchao/ran) already holds, so
-      # every upload returned 403 whatever the token. `anamorph` is claimed for
+      # every upload returned 403 whatever the token. `deconvolve` is claimed for
       # this project, which is what the rename was for.
       - name: Publish to PyPI
         if: inputs.publish_pypi

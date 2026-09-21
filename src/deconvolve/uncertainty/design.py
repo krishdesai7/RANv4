@@ -50,7 +50,7 @@ from ..coretypes import (
     Populations,
     Split,
 )
-from ..data import AnamorphDataset, load_jet_dataset, parse_gaussian_config
+from ..data import DeconvolveDataset, load_jet_dataset, parse_gaussian_config
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -179,7 +179,7 @@ def base_populations(
     if dataset == DatasetName.gaussian:
         if params is None:
             raise ValueError("Gaussian mode requires --config path/to/config.yaml")
-        splits = AnamorphDataset(batch_size, data_seed).generate_gaussian_dataset(
+        splits = DeconvolveDataset(batch_size, data_seed).generate_gaussian_dataset(
             params=params, n_samples=n_samples
         )
         return splits.select(Split.ALL).partition(), params.dim
@@ -211,7 +211,7 @@ def run_cell(
     lambda_dispersion: float = 0.015,
 ) -> Path:
     """Train one `(dataset, seed)` cell and record its weights on the common set."""
-    # Deferred so that `anamorph uncertainty collect`, which only reads npz and
+    # Deferred so that `deconvolve uncertainty collect`, which only reads npz and
     # reports, does not pay for importing keras and jax.
     from ..evaluate import _get_weights
     from ..train import train
@@ -239,7 +239,7 @@ def run_cell(
     # collide on one stream however the base seed is chosen.
     replicate: Populations = bootstrap(evaluation.pool, seed=(spec.data_seed, b))
 
-    splits: DatasetSplits = AnamorphDataset(
+    splits: DatasetSplits = DeconvolveDataset(
         batch_size=batch_size, seed=spec.data_seed
     ).splits_from_data(replicate.interleave())
     result = train(

@@ -12,8 +12,8 @@ from rich.table import Table
 
 from .coretypes import EVENT_DTYPE, RUN_DIR, DatasetName, artifacts_dir
 from .data import (
-    AnamorphDataset,
     ArrayDataset,
+    DeconvolveDataset,
     gaussian_config_from_run_config,
     load_jet_dataset,
 )
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 
     from .coretypes import (
         ZXY,
-        AnamorphModel,
         DatasetSplits,
+        DeconvolveModel,
         EventArray,
         GaussianConfig,
         Populations,
@@ -89,7 +89,7 @@ def _load_splits(config: dict[str, Any]) -> DatasetSplits:
                 },
                 dim,
             )
-        return AnamorphDataset(batch_size, data_seed).generate_gaussian_dataset(
+        return DeconvolveDataset(batch_size, data_seed).generate_gaussian_dataset(
             params=params,
             n_samples=n_samples,
         )
@@ -113,7 +113,7 @@ def _collect_test_data(test_ds: ArrayDataset) -> ZXY:
 
 
 def _generator_weights(
-    g: AnamorphModel, z_gen: NDArray[Any], chunk_size: int = 10_000
+    g: DeconvolveModel, z_gen: NDArray[Any], chunk_size: int = 10_000
 ) -> JaxArray:
     """Normalized generator weights, mean 1, left on device.
 
@@ -133,7 +133,7 @@ def _generator_weights(
 
 
 def _get_weights(
-    g: AnamorphModel, z_gen: NDArray[Any], chunk_size: int = 10_000
+    g: DeconvolveModel, z_gen: NDArray[Any], chunk_size: int = 10_000
 ) -> EventArray:
     """`_generator_weights`, copied back to the host.
 
@@ -220,7 +220,7 @@ def _counts(x: JaxArray, edges: JaxArray, weights: JaxArray) -> JaxArray:
     back through the exact count. Scattering them raw sums ~200 values of
     magnitude ~1 per bin in float32, which is precisely what the `np.histogram`
     this replaces did -- that function accumulates in the weights' own dtype,
-    and Anamorph's weights are float32. Centering leaves the scatter summing
+    and Deconvolve's weights are float32. Centering leaves the scatter summing
     residuals instead of magnitudes, an order of magnitude smaller, while the
     integer count it is added back to is exact in float32 out to 2**24, far
     above any sample this runs on. Measured against float64, that lands the JS
@@ -505,7 +505,7 @@ def evaluate_run(run_dir: Path, force: bool = False) -> dict[str, Any]:
 
     config: dict[str, Any] = json.loads((run_dir / "config.json").read_text())
     logger.info("%s: loading model and data...", run_dir.name)
-    g: AnamorphModel = keras.saving.load_model(
+    g: DeconvolveModel = keras.saving.load_model(
         artifacts_dir(run_dir) / "generator.keras"
     )
 

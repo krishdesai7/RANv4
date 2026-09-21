@@ -1,6 +1,6 @@
 # Uncertainty
 
-The variance budget for a Anamorph measurement, and the bin-to-bin covariance the
+The variance budget for a Deconvolve measurement, and the bin-to-bin covariance the
 field has been assuming away.
 
 ## Three sources, not two
@@ -84,7 +84,7 @@ Unbinned unfolding weights get propagated as though their bin-to-bin
 correlations were zero. They are not. The reason the assumption survives is
 plausibly not that anyone believes it: measuring the covariance takes ~100
 retrainings, which at OmniFold's cost is not an analysis anyone runs, and at
-Anamorph's is a node-hour. That reframes the speed result --- "1000x faster at
+Deconvolve's is a node-hour. That reframes the speed result --- "1000x faster at
 comparable accuracy" invites _so what, we already have the answer_; "fast
 enough to bootstrap the full unfolding a hundred times, which is how you find
 out the covariance you assumed diagonal is not" is a capability claim.
@@ -96,7 +96,7 @@ so the raw between-dataset covariance estimates `Cov_a + Cov_eps / S` and has
 to be corrected before it means what its name says. Skipping the step inflates
 the off-diagonals in the flattering direction.
 
-**The closure floor.** Anamorph's weights preserve the total count, so a spectrum's
+**The closure floor.** Deconvolve's weights preserve the total count, so a spectrum's
 bins sum to a fixed number, its covariance is singular with rank `K - 1`, and
 _that constraint alone_ forces negative off-diagonals. For equal-occupancy
 bins the pure-closure value is the multinomial `-1 / (K - 1)`, and
@@ -122,8 +122,8 @@ One cell per invocation, so a cluster puts every cell on its own GPU and the
 whole design costs one training run of wall clock:
 
 ```bash
-anamorph uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
-anamorph uncertainty collect --design-dir runs/unc_x -B 8 -S 8
+deconvolve uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
+deconvolve uncertainty collect --design-dir runs/unc_x -B 8 -S 8
 bash scripts/submit_uncertainty.sh          # the packed 8x8 on SLURM
 B=50 S=2 bash scripts/submit_uncertainty.sh # replicates on the bootstrap axis
 ```

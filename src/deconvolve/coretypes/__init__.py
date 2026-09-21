@@ -36,7 +36,7 @@ from .events import Split as Split
 from .results import IBUResult as IBUResult
 from .results import UnfoldingPopulations as UnfoldingPopulations
 from .results import VariableOutcome as VariableOutcome
-from .types import AnamorphModel as AnamorphModel
+from .types import DeconvolveModel as DeconvolveModel
 from .types import DiscGradFn as DiscGradFn
 from .types import EvalStep as EvalStep
 from .types import EventArray as EventArray

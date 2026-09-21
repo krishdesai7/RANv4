@@ -26,8 +26,7 @@ weights/
 # Sandbox
 sandbox.ipynb
 
-# LLM docs
-docs/
+site/
 
 # Local task worktrees
 .worktrees/

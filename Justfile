@@ -62,6 +62,17 @@ ci:
     just validate
     just audit
 
+# --- Documentation ---
+
+# Build the documentation site into site/.
+doc-build:
+    uv run --group docs mkdocs build --strict
+
+# Serve the documentation locally with live-reload.
+doc-serve:
+    uv run --group docs mkdocs serve
+
+
 # --- Mutable operations (writes) ---
 
 # Apply safe lint fixes, then format.

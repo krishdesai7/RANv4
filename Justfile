@@ -29,7 +29,7 @@ lint:
 
 # Run Pyrefly type checks.
 typecheck:
-    uv run --locked pyrefly check --min-severity info
+    uv run --locked pyrefly check --min-severity info --remove-unused-ignores=all
     uv check --locked
 
 # Run complexity checks.

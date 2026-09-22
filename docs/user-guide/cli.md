@@ -1,121 +1,240 @@
 # CLI Reference
 
-The `deconvolve` CLI provides a unified command-line interface for running training, evaluation, reporting, and baseline comparisons.
+The `deconvolve` CLI (`uv run deconvolve <subcommand>` in a checkout) is a single Typer
+command tree: `train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu,omnifold}`,
+`uncertainty {freeze,run,collect}`, and `config show`. Flags are kebab-case, and every
+layerable `train`/`uncertainty` option also resolves through the five-layer config stack
+described in [Configuration](configuration.md) (code default → `deconvolve.toml` →
+project config → environment variable → command line).
 
 ---
 
 ## Global Options
 
-All subcommands accept the following global options:
+`--log-level` is global and goes **before** the subcommand:
 
-| Long option | Short option | Type | Default | Description |
+```shell
+deconvolve --log-level DEBUG train --config params/1d_default.yaml
+```
+
+| Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--log-level` | `-v` | `LogLevel` | `INFO` | Set logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
-| `--help` | | `bool` | `False` | Show help message and exit. |
+| `--log-level` | `-L` | `debug\|info\|warning\|error\|critical` | `info` | Application log level. Also settable via the `RAN_LOG_LEVEL` environment variable. |
+| `--install-completion` | | `bool` | | Install shell completion (needs the `deconvolve` script name; does not work through `python -m`). |
+| `--show-completion` | | `bool` | | Print the completion script. |
+| `--help` | | `bool` | | Show help and exit. |
 
 ---
 
 ## `deconvolve train`
 
-Execute the adversarial reweighting training workflow.
-
 ```shell
 deconvolve train [OPTIONS]
 ```
 
-### Dataset Options
+### Dataset
 
-| Long option | Short option | Type | Default | Description |
+| Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--dataset` | `-D` | `DatasetName` | `gaussian` | Dataset to train on: `gaussian` or `jets`. |
-| `--config` | `-c` | `Path` | `None` | Path to YAML config file. |
-| `--samples` | `-n` | `int` | `100000` | Number of events to generate/load. |
-| `--variable` | `-v` | `str` | All | Jet var(s) to train on (e.g. `-vm -vw`). |
-| `--data-seed` | | `int` | `42` | Seed for dataset sampling and splitting. |
+| `--dataset` | `-D` | `gaussian\|jets` | `gaussian` | Dataset to train on. |
+| `--config` | | `Path` | `None` | YAML config file (Gaussian datasets only; see [Configuration](configuration.md)). |
+| `--n-samples` | `-n` | `int` | `500000` | Number of events to generate/load. |
+| `--var` | `-v` | `str`, repeatable | all twelve | Jet substructure variable(s) to train on, e.g. `-v m -v w`. Ignored for `gaussian`. |
+| `--data-seed` | | `int` | `42` | Seed for dataset sampling and the train/val/test split. |
+| `--load-run` | `-r` | `Path` | `None` | Reload a previously saved run directory instead of starting fresh. |
 
-### Network & Training Hyperparameters
+### Architecture & Optimization
 
-| Long option | Short option | Type | Default | Description |
+| Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--epochs` | `-e` | `int` | `100` | Number of training epochs. |
-| `--batch-size` | `-b` | `int` | `512` | Batch size per training step. |
-| `--hidden-units` | `-u` | `int` | `64` | Hidden units per dense layer. |
-| `--n-layers` | `-l` | `int` | `2` | Number of hidden dense layers for generator and discriminator. |
-| `--lr-d` | | `float` | `1e-3` | Learning rate for the discriminator (Adam). |
-| `--lr-g` | | `float` | `1e-3` | Learning rate for the generator (Adam). |
-| `--d-steps` | | `int` | `5` | Discriminator updates per generator update (D:G ratio). |
-| `--seed` | `-s` | `int` | `42` | Seed for model initialization and shuffle order. |
+| `--hidden-units` | `-u` | `int` | `64` | Hidden units per dense layer, generator and discriminator. |
+| `--n-layers` | `-l` | `int` | `2` | Number of hidden dense layers, generator and discriminator. |
+| `--n-epochs` | `-e` | `int` | `100` | Number of training epochs. |
+| `--batch-size` | `-b` | `int` | `1024` | Batch size per training step. |
+| `--n-disc-steps` | `-k` | `int` | `5` | Discriminator updates per generator update. |
+| `--lr-g` | | `float` | `3e-5` | Generator learning rate (Adam). Tuned; see `benchmarks/README.md`. |
+| `--lr-d` | | `float` | `1e-4` | Discriminator learning rate (Adam). |
+| `--lambda-dispersion` | | `float` | `0.015` | Penalty on the variance of the generator's normalized weights. `0` disables it. |
+| `--seed` | | `int` | `None` (random) | Seed for model initialization and shuffle order. |
 
-### Output Options
+### Output
 
-| Long option | Short option | Type | Default | Description |
+| Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--tag` | | `string` | `None` | Optional human-readable tag added to the run directory name. |
-| `--runs-dir` | | `Path` | `runs/` | Parent directory for run outputs. |
+| `--run-dir` | | `Path` | `None` (UTC timestamp under `runs/`) | Where to save this run. |
+| `--plots` / `--no-plots` | | `bool` | `--plots` | Draw diagnostic figures. Metrics are computed either way. |
+| `--log-every` | | `int` | `1` | Log every N epochs. |
+
+There is no `--tag` and no `--runs-dir`; name a run explicitly with `--run-dir`.
 
 ---
 
 ## `deconvolve evaluate`
 
-Compute distance metrics on test sets for completed runs.
+Compute distance metrics for one run, or every run under a parent directory (see [Evaluation & Metrics](evaluation.md)).
 
 ```shell
 deconvolve evaluate [OPTIONS]
 ```
 
-### Options
+| Long option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--run-dir` | `Path` | `runs` | A single run directory, or a parent directory of several. |
+| `--force` / `--no-force` | `bool` | `--no-force` | Recompute even if `metrics.json` already exists. |
 
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--run-dir` | `runs/` | Path to a single run directory, or parent directory of multiple runs. |
-| `--force` | `False` | Force recomputing metrics even if `metrics.json` already exists. |
-| `--n-bins` | `100` | Number of uniform bins per dimension for histograms and distance metrics. |
+There is no `--n-bins`; the histogram resolution used by the Jensen-Shannon and
+triangular-discriminator metrics is fixed in code, not exposed on the CLI.
 
 ---
 
 ## `deconvolve report`
 
-Generate diagnostic plots and compile the LaTeX report dossier.
+Compile a run directory into one PDF dossier (see [Reporting & Artifacts](reporting.md)).
 
 ```shell
-deconvolve report [OPTIONS]
+deconvolve report RUN_DIR [OPTIONS]
 ```
 
-### ReportOptions
+| Argument/option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `run_dir` (positional) | `Path` | required | Run directory to report on. |
+| `--force` | `bool` | `False` | Rebuild an existing `report.pdf`. |
+| `--compile` / `--no-compile` | `bool` | `--compile` | Compile the LaTeX, or stop at `artifacts/report.tex`. |
 
-| Flag | Default | Description |
-| :--- | :--- | :--- |
-| `--run-dir` | Required | Path to the completed run directory. |
-| `--compile-pdf` | `True` | Automatically run `latexmk` / `pdflatex` to produce `report.pdf`. |
+`run_dir` is a positional argument, not `--run-dir`.
 
 ---
 
 ## `deconvolve baseline`
 
-Run comparison baselines against RAN runs.
+Run comparison baselines against the same run directory a `deconvolve train` call produced (see [Comparison Baselines](baselines.md)).
 
 ### `deconvolve baseline ibu`
 
-Runs Iterative Bayesian Unfolding (IBU):
-
 ```shell
-deconvolve baseline ibu --run-dir runs/2026-09-19-164500
+deconvolve baseline ibu [OPTIONS]
 ```
+
+| Long option | Short | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--run-dir` | | `Path` | `runs` | Run directory (or parent of several) to evaluate against. |
+| `--force` / `--no-force` | | `bool` | `--no-force` | Recompute even if already evaluated. |
+| `--niter` | `-i` | `int` | `10` | IBU iterations. |
+| `--purity-threshold` | | `float` | `√0.5 ≈ 0.7071` | Purity threshold used by the response matrix. |
 
 ### `deconvolve baseline omnifold`
 
-Runs OmniFold via an isolated TensorFlow worker process:
+Runs in a quarantined Python 3.13 subprocess; needs `uv` on `PATH`, and on Perlmutter needs `module load cudatoolkit/12.9` (without it, TensorFlow silently falls back to CPU).
 
 ```shell
-deconvolve baseline omnifold --run-dir runs/2026-09-19-164500
+deconvolve baseline omnifold [OPTIONS]
 ```
+
+| Long option | Short | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--run-dir` | | `Path` | `runs` | Run directory (or parent of several) to evaluate against. |
+| `--force` / `--no-force` | | `bool` | `--no-force` | Recompute even if already evaluated. |
+| `--niter` | `-i` | `int` | `3` | OmniFold iterations. |
+| `--n-epochs` | `-e` | `int` | `50` | Epochs per iteration. |
+| `--batch-size` | `-b` | `int` | `512` | Batch size. |
 
 ---
 
 ## `deconvolve leakage-check`
 
-Verify that the held-out test split is never observed during training or model selection:
+Verifies that `z_true` never reaches a network.
 
 ```shell
-deconvolve leakage-check --config params/1d_default.yaml
+deconvolve leakage-check [OPTIONS]
 ```
+
+| Long option | Short | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--poison` / `--clean` | `-X` / | `bool` | `--clean` | Poison mode injects a sentinel to confirm the check would actually catch a leak. |
+| `--sentinel` | `-S` | `float` | `-999.0` | Sentinel value used in `--poison` mode. |
+| `--seed` | | `int` | `42` | Model initialization seed. |
+| `--init-seed` | | `int` | `0` | Bootstrap/init seed. |
+
+There is no `--config`; this command does not read a dataset config file.
+
+---
+
+## `deconvolve uncertainty`
+
+Bootstrap × seed variance decomposition, run as a `freeze` once, followed by many `run`
+cells (typically a SLURM array), then a final `collect`.
+
+### `deconvolve uncertainty freeze`
+
+```shell
+deconvolve uncertainty freeze --design-dir DIR [OPTIONS]
+```
+
+Resolves the full config stack once and writes `DIR/design.json`, which every
+`uncertainty run` cell then reads instead of the ordinary config layers.
+
+| Long option | Short | Type | Default |
+| :--- | :--- | :--- | :--- |
+| `--design-dir` | `-d` | `Path` | required |
+| `--force` | | `bool` | `False` |
+| `--n-datasets` | `-B` | `int` | `8` |
+| `--n-seeds` | `-S` | `int` | `8` |
+| `--n-eval` | | `int` | `100000` |
+| `--dataset` | `-D` | `gaussian\|jets` | `jets` |
+| `--var` | `-v` | `str`, repeatable | all twelve |
+| `--config` | | `Path` | `None` |
+| `--batch-size` | `-b` | `int` | `1024` |
+| `--n-samples` | `-n` | `int` | `500000` |
+| `--hidden-units` | `-u` | `int` | `64` |
+| `--n-layers` | `-l` | `int` | `2` |
+| `--n-epochs` | `-e` | `int` | `100` |
+| `--n-disc-steps` | `-k` | `int` | `5` |
+| `--lr-g` | | `float` | `3e-5` |
+| `--lr-d` | | `float` | `1e-4` |
+| `--lambda-dispersion` | | `float` | `0.015` |
+| `--data-seed` | | `int` | `42` |
+| `--init-seed` | | `int` | `0` |
+
+### `deconvolve uncertainty run`
+
+```shell
+deconvolve uncertainty run --cell N --design-dir DIR
+```
+
+Trains one `(bootstrap dataset, init seed)` cell of the design. Takes the same options
+as `freeze` plus a required `--cell`/`-c`, but reads their values from the frozen
+`design.json` rather than the config stack — an explicit flag on the command line still
+overrides the frozen value, nothing else does.
+
+### `deconvolve uncertainty collect`
+
+```shell
+deconvolve uncertainty collect --design-dir DIR [OPTIONS]
+```
+
+Decomposes a finished design and writes its table, `.npz`, and figure.
+
+| Long option | Short | Type | Default |
+| :--- | :--- | :--- | :--- |
+| `--design-dir` | `-d` | `Path` | required |
+| `--n-datasets` | `-B` | `int` | `8` |
+| `--n-seeds` | `-S` | `int` | `8` |
+| `--n-bins` | | `int` | `20` |
+| `--data-seed` | | `int` | `42` |
+| `--init-seed` | | `int` | `0` |
+
+---
+
+## `deconvolve config show`
+
+Prints the resolved value of every setting next to the file, variable, or default it
+came from.
+
+```shell
+deconvolve config show [COMMAND] [OPTIONS]
+```
+
+| Argument/option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `command` (positional, optional) | `str` | `None` | Scope the listing to one command, e.g. `deconvolve config show train`. |
+| `--json` | `bool` | `False` | Emit the same content as JSON, for scripting. |

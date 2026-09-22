@@ -60,7 +60,7 @@ deconvolve train [OPTIONS]
 Compute distance metrics on test sets for completed runs.
 
 ```shell
-ran evaluate [OPTIONS]
+deconvolve evaluate [OPTIONS]
 ```
 
 ### Options
@@ -99,7 +99,7 @@ Run comparison baselines against RAN runs.
 Runs Iterative Bayesian Unfolding (IBU):
 
 ```shell
-ran baseline ibu --run-dir runs/2026-09-19-164500
+deconvolve baseline ibu --run-dir runs/2026-09-19-164500
 ```
 
 ### `deconvolve baseline omnifold`
@@ -107,7 +107,7 @@ ran baseline ibu --run-dir runs/2026-09-19-164500
 Runs OmniFold via an isolated TensorFlow worker process:
 
 ```shell
-ran baseline omnifold --run-dir runs/2026-09-19-164500
+deconvolve baseline omnifold --run-dir runs/2026-09-19-164500
 ```
 
 ---
@@ -117,5 +117,5 @@ ran baseline omnifold --run-dir runs/2026-09-19-164500
 Verify that the held-out test split is never observed during training or model selection:
 
 ```shell
-ran leakage-check --config params/1d_default.yaml
+deconvolve leakage-check --config params/1d_default.yaml
 ```

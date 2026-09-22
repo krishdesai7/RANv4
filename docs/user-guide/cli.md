@@ -1,6 +1,6 @@
 # CLI Reference
 
-The `ran` CLI provides a unified command-line interface for running training, evaluation, reporting, and baseline comparisons.
+The `deconvolve` CLI provides a unified command-line interface for running training, evaluation, reporting, and baseline comparisons.
 
 ---
 
@@ -8,10 +8,10 @@ The `ran` CLI provides a unified command-line interface for running training, ev
 
 All subcommands accept the following global options:
 
-| Flag | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--log-level`, `-v` | `LogLevel` | `INFO` | Set logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
-| `--help` | `bool` | `False` | Show help message and exit. |
+| Long option | Short option | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--log-level` | `-v` | `LogLevel` | `INFO` | Set logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
+| `--help` | | `bool` | `False` | Show help message and exit. |
 
 ---
 
@@ -20,38 +20,38 @@ All subcommands accept the following global options:
 Execute the adversarial reweighting training workflow.
 
 ```shell
-ran train [OPTIONS]
+deconvolve train [OPTIONS]
 ```
 
 ### Dataset Options
 
-| Flag | Short | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--dataset` | `-D` | `gaussian` | Dataset to train on: `gaussian` or `jets`. |
-| `--config` | `-c` | `None` | Path to YAML configuration file (required for Gaussian datasets). |
-| `--samples` | `-n` | `100000` | Number of events to generate/load. |
-| `--variable` | `-v` | `()` | Jet variable name(s) to train on (e.g. `-v m -v w`). Can be specified multiple times. |
-| `--data-seed` | | `42` | Seed for dataset sampling and splitting. |
+| Long option | Short option | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--dataset` | `-D` | `DatasetName` | `gaussian` | Dataset to train on: `gaussian` or `jets`. |
+| `--config` | `-c` | `Path` | `None` | Path to YAML config file. |
+| `--samples` | `-n` | `int` | `100000` | Number of events to generate/load. |
+| `--variable` | `-v` | `str` | All | Jet var(s) to train on (e.g. `-vm -vw`). |
+| `--data-seed` | | `int` | `42` | Seed for dataset sampling and splitting. |
 
 ### Network & Training Hyperparameters
 
-| Flag | Short | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--epochs` | `-e` | `100` | Number of training epochs. |
-| `--batch-size` | `-b` | `512` | Batch size per training step. |
-| `--hidden-units` | `-u` | `64` | Hidden units per dense layer. |
-| `--n-layers` | `-l` | `2` | Number of hidden dense layers for generator and discriminator. |
-| `--lr-d` | | `1e-3` | Learning rate for the discriminator (Adam). |
-| `--lr-g` | | `1e-3` | Learning rate for the generator (Adam). |
-| `--d-steps` | | `5` | Discriminator updates per generator update (D:G ratio). |
-| `--seed` | `-s` | `42` | Seed for model initialization and shuffle order. |
+| Long option | Short option | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--epochs` | `-e` | `int` | `100` | Number of training epochs. |
+| `--batch-size` | `-b` | `int` | `512` | Batch size per training step. |
+| `--hidden-units` | `-u` | `int` | `64` | Hidden units per dense layer. |
+| `--n-layers` | `-l` | `int` | `2` | Number of hidden dense layers for generator and discriminator. |
+| `--lr-d` | | `float` | `1e-3` | Learning rate for the discriminator (Adam). |
+| `--lr-g` | | `float` | `1e-3` | Learning rate for the generator (Adam). |
+| `--d-steps` | | `int` | `5` | Discriminator updates per generator update (D:G ratio). |
+| `--seed` | `-s` | `int` | `42` | Seed for model initialization and shuffle order. |
 
 ### Output Options
 
-| Flag | Description |
-| :--- | :--- |
-| `--tag` | Optional human-readable tag added to the run directory name. |
-| `--runs-dir` | Parent directory for run outputs (default: `runs/`). |
+| Long option | Short option | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--tag` | | `string` | `None` | Optional human-readable tag added to the run directory name. |
+| `--runs-dir` | | `Path` | `runs/` | Parent directory for run outputs. |
 
 ---
 
@@ -78,10 +78,10 @@ ran evaluate [OPTIONS]
 Generate diagnostic plots and compile the LaTeX report dossier.
 
 ```shell
-ran report [OPTIONS]
+deconvolve report [OPTIONS]
 ```
 
-### Options
+### ReportOptions
 
 | Flag | Default | Description |
 | :--- | :--- | :--- |

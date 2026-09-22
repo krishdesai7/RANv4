@@ -1,90 +1,85 @@
 # Quickstart
 
-This walkthrough takes you from zero to a fully trained and evaluated reweighting model in five minutes.
+This page walks through training, evaluating, and reporting an unfolding run, first on a 1D Gaussian toy model, then on a jet substructure dataset.
 
 ---
 
 ## 1. Train a 1D Gaussian Model
 
-Gaussian toy models provide an intuitive testbed where the truth is analytically known. In this example, the Monte Carlo simulation differs from nature by a shift in mean ($\mu = 0.5$ vs $0.0$) and a slight difference in width ($\sigma = 0.9$ vs $1.0$).
-
-Run the training workflow using the pre-configured YAML parameters in `params/1d_default.yaml`:
+This example trains on a 1D Gaussian toy model with an analytically known truth. Generation is distributed as \(Z_{\text{Gen.}} \sim \mathcal{N}(\mu = 0.5, \sigma = 0.9)\), while Truth is distributed as \(Z_{\text{Truth}} \sim \mathcal{N}(\mu = 0.0, \sigma = 1.0)\).
 
 ```shell
-ran train --config params/1d_default.yaml
+deconvolve train --config params/1d_default.yaml
 ```
 
-During training, RAN logs progress via Rich:
+This logs per-epoch discriminator/generator loss and validation Maximum Mean Discrepancy, then reports the epoch selected as the best checkpoint. It writes to a run directory `runs/<yyyy-mm-dd>T<hhmmss>Z/`.
+
+### CLI overrides
+
+Any training hyperparameter can be set through the command line arguments, overriding the configured defaults:
 
 ```shell
-[INFO] Initializing Gaussian dataset (dim=1, samples=100,000)
-[INFO] Generator: 2 layers, 64 hidden units
-[INFO] Discriminator: 2 layers, 64 hidden units
-[INFO] Epoch  10/100 | D Loss: 0.6912 | G Loss: 0.6945 | MMD: 0.00342
-...
-[INFO] Best model selected at Epoch 82 (Validation MMD: 0.00018)
-[INFO] Run artifacts saved to runs/2026-09-19-164500/
+# 128 hidden units, 3 layers, 200 epochs
+$ deconvolve train --config params/1d_default.yaml -u128 -l3 -e200
+
+# name the run directory explicitly
+$ deconvolve train --config params/1d_default.yaml --run-dir runs/test-run
 ```
 
-### Useful CLI Overrides
-
-You can easily override hyperparameters directly from the command line:
-
-```shell
-# Train with 128 hidden units, 3 layers, and 200 epochs
-ran train --config params/1d_default.yaml -u 128 -l 3 -e 200
-
-# Specify a custom run directory tag
-ran train --config params/1d_default.yaml --tag test-run
-```
+See the [API Reference](../api/training.md) for the full list of command line arguments and options.
 
 ---
 
 ## 2. Evaluate the Run
 
-Once training completes, evaluate the quality of the reweighting on the held-out test split:
-
 ```shell
-ran evaluate --run-dir runs/2026-09-19-164500
+deconvolve evaluate --run-dir runs/test-run
 ```
 
-This calculates three distance metrics before and after reweighting:
+This computes the following three metrics before and after reweighting,
 
-1. **1D Wasserstein-1 Distance**: $\int |F_{\text{ref}}(t) - F_{\text{comp}}(t)| \, dt$
-2. **Jensen-Shannon Divergence**: Symmetrized relative entropy
-3. **Triangular Discriminator**: $\int \frac{(p(x) - q(x))^2}{p(x) + q(x)} \, dx$
+1. **1D Wasserstein-1 distance**:
 
-The evaluated metrics are written back to `runs/2026-09-19-164500/metrics.json`.
+    \[
+    W_1(p, q) = \int_{-\infty}^\infty \left\vert{} \int_{-\infty}^t (p(x) - q(x)) \, \d x \right\vert{} \d t
+    \]
+
+2. **Jensen-Shannon divergence**:
+
+    \[
+    D_{\text{JS}}(p, q) = \frac{1}{2} \int_{-\infty}^\infty \left( p(x) \ln \frac{p(x)}{m(x)} + q(x) \ln \frac{q(x)}{m(x)} \right) \d x
+    \]
+
+    where the mixing distribution is \(m(x) = \frac{1}{2}(p(x) + q(x))\).
+
+3. **Triangular discriminator (Vincze-LeCam divergence)**:
+
+    \[
+    \Delta(p, q) = \int_{-\infty}^\infty \frac{(p(x) - q(x))^2}{p(x) + q(x)} \d x
+    \]
+
+and writes the result to `<run-dir>/artifacts/metrics.json`.
 
 ---
 
-## 3. Generate a Summary Report
-
-Generate publication-ready diagnostic plots and a LaTeX report summarizing the run:
+## 3. Generate a Report
 
 ```shell
-ran report --run-dir runs/2026-09-19-164500
+deconvolve report --run-dir <run-dir>
 ```
 
-This generates:
-
-- Cumulative distribution function (CDF) comparisons
-- Histogram ratio plots
-- Loss curves and MMD trajectory over epochs
-- `report.tex` and compiled `report.pdf` inside `runs/2026-09-19-164500/artifacts/`
+This command generates a report with the computed metrics for before and after reweighting, and plots of the probability density function comparisons, loss curves, and the MMD trajectory, and compiles `report.tex`/`report.pdf` under `<run-dir>/artifacts/`.
 
 ---
 
-## 4. Jet Substructure (High-Dimensional Physics)
+## 4. Jet Substructure
 
-To train on real high-energy physics data (12 jet substructure observables from the Zenodo dataset):
+This example trains on a set of twelve jet substructure observables (Zenodo, downloaded and cached under `.cache/` on first use):
 
 ```shell
-# Train on all 12 jet variables
-ran train -D jets
+# all twelve variables
+deconvolve train -Djets
 
-# Or train on specific variables (e.g. mass and width)
-ran train -D jets -v m -v w
+# a subset, e.g. mass and width
+deconvolve train -Djets -vm -vw
 ```
-
-Dataset downloads and cache management are handled automatically under `.cache/`.

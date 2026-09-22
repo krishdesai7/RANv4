@@ -27,7 +27,7 @@ Unfolding is the process of recovering particle-level distributions from the det
 
 Concretely, two networks are trained through an adversarial objective:
 
-1. **Generator $g(z)$**: Predicts a continuous per-event weight from Generation (particle-level MC) features $z_{\text Gen.$, parameterized by a neural network:
+1. **Generator $g(z)$**: Predicts a continuous per-event weight from Generation (particle-level MC) features $z_{\text Gen.}$, parameterized by a neural network:
 
     $$
     w_i = \frac{g(z_i)}{\frac{1}{N}\sum_{j=1}^N g(z_j)}

@@ -1,17 +1,19 @@
 <!-- markdownlint-disable-file no-inline-html list-marker-space -->
 # <span style="font-variant: small-caps;">Deconvolve</span>
 
-**<span style="font-variant: small-caps;">Deconvolve</span>** is a machine learning framework for high-energy physics (HEP) that learns continuous per-event weights to correct simulated (Monte Carlo) distributions so they match observed detector data.
+**<span style="font-variant: small-caps;">Deconvolve</span>** learns continuous, unbinned per-event weights that correct simulated (Monte Carlo) distributions to match observed detector data, through an adversarial learning algorithm between a truth-level generator and a reco-level discriminator.
 
-Built on **Keras 3** with the **JAX** backend, <span style="font-variant: small-caps;">Deconvolve</span> is engineered end-to-end for performance, mathematical precision, and scalable multidimensional unfolding.
+It is built on [<span style="font-variant: small-caps;">Keras 3</span>](https://keras.io) with the [<span style="font-variant: small-caps;">JAX</span>](https://docs.jax.dev/) backend, with single-precision floating-point arithmetic pipeline and JIT-compiled training loop.
 
 ---
 
 ## Introduction
 
-In particle physics experiments, Monte Carlo (MC) simulations model physical processes and detector responses. However, simulations never perfectly reproduce observed data due to physics mismodellings and detector effects.
+Cross-section measurements from particle physics experiments are recorded as reco-level quantities, smeared by finite resolution and distorted by acceptance and efficiency. However, in order to compared them against theory predictions and across experiments, they must be corrected to the particle-level.
 
-Traditional reweighting schemes bin events in one or two kinematic variables and apply hand-tuned correction factors. This approach degrades rapidly as the dimensionality of the feature space increases.
+Unfolding is the process of recovering particle-level distributions from the detector-level ones. In some form, every unfolding method involves inverting a response kernel (or response matrix for binned data) built from simulation. Traditional unfolding methods bin the data in a small number of kinematic variables and invert (or regularize and invert, as in Iterative Bayesian Unfolding or SVD unfolding). That machinery does not extend to the multi-differential regime. Every additional observable multiplies the number of bins, response matrices become ill-conditioned or singular, and hand-tuned regularization stops being tractable well before number of jet substructure variables a modern analysis might seek to unfold jointly.
+
+[<span style="font-variant: small-caps;">OmniFold</span>](https://arxiv.org/abs/1911.09107) unfolds without binning by replacing the response matrix with classifiers that estimate likelihood ratios directly from unbinned events, alternating between particle level and detector level until the reweighting converges. <span style="font-variant: small-caps;">Deconvolve</span> instead poses the whole problem as a single adversarial learning algorithm: a generator learns a continuous particle-level weight function in one pass, with a discriminator at detector level supplying the training signal, rather than iterating several pairs of independently-refit classifiers to a fixed point.
 
 <figure class="ran-figure" markdown="span">
   ![<span style="font-variant: small-caps;">Deconvolve</span> reweights particle-level events and is scored at detector level](assets/schematic.svg){ .ran-schematic }
@@ -23,31 +25,30 @@ Traditional reweighting schemes bin events in one or two kinematic variables and
   </figcaption>
 </figure>
 
-<span style="font-variant: small-caps;">Deconvolve</span> solves this problem through a two-player adversarial game:
+Concretely, two networks are trained through an adversarial objective:
 
-1. **Generator $g(z)$**: Predicts a continuous per-event weight from particle-level (truth) features $z$, parameterized by a neural network with $\text{softplus}$ activation:
+1. **Generator $g(z)$**: Predicts a continuous per-event weight from Generation (particle-level MC) features $z_{\text Gen.$, parameterized by a neural network:
 
     $$
     w_i = \frac{g(z_i)}{\frac{1}{N}\sum_{j=1}^N g(z_j)}
     $$
 
-2. **Discriminator $d(x)$**: Evaluates detector-level (reconstructed) features $x$, learning to distinguish real observed data ($y = 1$) from reweighted simulation ($y = 0$).
+2. **Discriminator $d(x)$**: Evaluates detector-level (reconstructed) features $x$, learning to distinguish Data (detector-level measurement, $y = 1$) from reweighted Simulation (detector-level MC, $y = 0$).
 
-At convergence, the discriminator cannot distinguish reweighted simulation from real data ($d(x) \to 0.5$, loss $\to \log 2$), and the generator's weights yield an optimal, unbinned multi-differential correction.
+At convergence, the discriminator cannot distinguish reweighted simulation from real data ($d(x) \to 0.5$, loss $\to \ln 2$), and the generator's weights yield an optimal, unbinned multi-differential correction.
 
 ---
 
 ## Features
 
-- **High-Performance JAX Backend**: JIT-compiled training loops, fused gradient steps, and on-device metric evaluations.
-- **Strict Float32 Pipeline**: Guaranteed deterministic numerical precision with `HIGHEST` matrix multiplication accuracy and zero silent precision downcasting.
-- **MMD Model Selection**: Unbiased Maximum Mean Discrepancy (MMD) with multi-scale Gaussian kernels evaluated on validation splits for robust checkpoint selection.
-- **Unfolding Baselines**: Integrated comparison baselines including Iterative Bayesian Unfolding (IBU) and OmniFold (with an isolated TensorFlow worker environment).
-- **Automated LaTeX Dossiers**: End-to-end report generation compiling publication-quality summary tables, pull plots, and covariance matrices into standalone LaTeX/PDF documents.
+- **JAX backend**: the training loop is a fused `lax.scan` program, JIT-compiled with on-device metric evaluation.
+- **Single-precision floating-point arithmetic pipeline**: fixed precision throughout, with no silent downcasting, for reproducible numerics.
+- **MMD-based checkpoint selection**: unbiased Maximum Mean Discrepancy with multi-scale Gaussian kernels, evaluated on held-out validation splits.
+- **Baselines**: Iterative Bayesian Unfolding and <span style="font-variant: small-caps;">OmniFold</span> for direct comparisons.
 
 ---
 
-## Quick Navigation
+## Navigation
 
 <div class="grid cards" markdown>
 
@@ -55,28 +56,24 @@ At convergence, the discriminator cannot distinguish reweighted simulation from 
 
     ---
 
-    Install dependencies using `uv`, configure CUDA, and train
-    your first 1D Gaussian model in minutes.
+    Installation instructions, optional GPU setup, and a quickstart guide.  
 
 -   **[User Guide](user-guide/cli.md)**
 
     ---
 
-    Explore the `deconvolve` CLI commands: training, evaluation, automated LaTeX
-    reporting, and baseline comparisons.
+    The `deconvolve` CLI: `train`, `evaluate`, `report`; commands to evaluate the baselines.
 
 -   **[Theory & Methodology](theory/reweighting.md)**
 
     ---
 
-    Delve into the mathematics: the min-max game, MMD model selection, and
-    empirical saturation diagnostics.
+    The adversarial learning algorithm, Maximum Mean Discrepancy-based model selection, and empirical convergence diagnostics.
 
 -   **[API Reference](api/overview.md)**
 
     ---
 
-    Comprehensive Python API documentation for `deconvolve.training`, `deconvolve.data`,
-    `deconvolve.evaluation`, `deconvolve.uncertainty`, and more.
+    Python API for `deconvolve.training`, `deconvolve.data`, `deconvolve.evaluation`, `deconvolve.uncertainty` and other package commands.
 
 </div>

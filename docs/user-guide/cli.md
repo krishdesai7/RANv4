@@ -1,28 +1,38 @@
 # CLI Reference
 
-The `deconvolve` CLI (`uv run deconvolve <subcommand>` in a checkout) is a single Typer
-command tree: `train`, `evaluate`, `report`, `leakage-check`, `baseline {ibu,omnifold}`,
-`uncertainty {freeze,run,collect}`, and `config show`. Flags are kebab-case, and every
-layerable `train`/`uncertainty` option also resolves through the five-layer config stack
-described in [Configuration](configuration.md) (code default → `deconvolve.toml` →
-project config → environment variable → command line).
+The `deconvolve` CLI is a single Typer command tree with the following subcommands:
+
+- `train`
+- `evaluate`
+- `report`
+- `leakage-check`
+- `baseline`
+    - `ibu`
+    - `omnifold`
+- `uncertainty`
+    - `freeze`
+    - `run`
+    - `collect`
+- `config show`
+
+Every layerable `train` and `uncertainty` option also resolves as described in [Configuration](configuration.md).
 
 ---
 
 ## Global Options
 
-`--log-level` is global and goes **before** the subcommand:
+`--log-level` (`-L`) is a global option and must be placed **before** the subcommand. For example:
 
 ```shell
-deconvolve --log-level DEBUG train --config params/1d_default.yaml
+deconvolve -Ldebug train --config params/1d_default.yaml
 ```
 
-| Long option | Short | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--log-level` | `-L` | `debug\|info\|warning\|error\|critical` | `info` | Application log level. Also settable via the `RAN_LOG_LEVEL` environment variable. |
-| `--install-completion` | | `bool` | | Install shell completion (needs the `deconvolve` script name; does not work through `python -m`). |
-| `--show-completion` | | `bool` | | Print the completion script. |
-| `--help` | | `bool` | | Show help and exit. |
+| Long option | Short | Type | Default | Env Var | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `--log-level` | `-L` | `LogLevel` | `info` | `DECONVOLVE_LOG_LEVEL` | Application log level. Options: `debug`, `info`, `warning`, `error`, `critical`. |
+| `--install-completion` | | `bool` | | | Install shell autocompletion. |
+| `--show-completion` | | `bool` | | | Print the completion script. |
+| `--help` | | `bool` | | | |
 
 ---
 
@@ -36,10 +46,10 @@ deconvolve train [OPTIONS]
 
 | Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--dataset` | `-D` | `gaussian\|jets` | `gaussian` | Dataset to train on. |
-| `--config` | | `Path` | `None` | YAML config file (Gaussian datasets only; see [Configuration](configuration.md)). |
+| `--dataset` | `-D` | `Dataset` | `gaussian` | Dataset to train on. Options: `gaussian`, `jets`. |
+| `--config` | | `Path` | `None` | YAML config file (Gaussian datasets only). |
 | `--n-samples` | `-n` | `int` | `500000` | Number of events to generate/load. |
-| `--var` | `-v` | `str`, repeatable | all twelve | Jet substructure variable(s) to train on, e.g. `-v m -v w`. Ignored for `gaussian`. |
+| `--var` | `-v` | `str`, repeatable | all twelve | Jet substructure variable(s) to train on, e.g. `-vm -vw`. Ignored for `gaussian`. |
 | `--data-seed` | | `int` | `42` | Seed for dataset sampling and the train/val/test split. |
 | `--load-run` | `-r` | `Path` | `None` | Reload a previously saved run directory instead of starting fresh. |
 

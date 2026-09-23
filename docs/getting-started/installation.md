@@ -9,33 +9,49 @@
 - **Python** `>= 3.12`
 - A **Python installer** such as `uv`, `pipx` or `pip`. `uv` can fetch a suitable python interpreter, and therefore does not require one to be available on the system.
 
-To install `uv` see the instructions from [UV-Astral](https://docs.astral.sh/uv/getting-started/installation/).
+## Running <span style="font-variant: small-caps;">Deconvolve</span> without installation
 
-=== "uv (recommended)"
+Use [`uvx`](https://docs.astral.sh/uv/guides/tools/) or a similar CLI runner to quickly invoke `deconvolve` in an ephemeral environment without permanent installation.
 
-    ```shell
-    uv tool install deconvolve@latest
-    deconvolve --help
-    ```
-
-    `uv tool install` places `deconvolve` on the system `PATH` in its own isolated environment, so that its dependencies cannot collide with any other installed tools.
-
-=== "uvx (no install)"
+=== "uvx"
 
     ```shell
-    uvx deconvolve --help
+    uvx deconvolve
     ```
-
-    Runs <span style="font-variant: small-caps;">Deconvolve</span> in an ephemeral environment without permanent installation.
 
 === "pipx"
 
     ```shell
-    pipx install deconvolve
-    deconvolve --help
+    pipx run deconvolve
     ```
 
-    The same isolated-environment model as `uv tool install`.
+## Installation methods
+
+### Adding <span style="font-variant: small-caps;">Deconvolve</span> to a project
+
+!!! tip
+
+    Adding `deconvolve` as a dependency ensures that all collaborators on the project are using the same version of the module.
+
+Use [`uv`](https://docs.astral.sh/uv/getting-started/installation/) or a project manager of choice to add `deconvolve` as a project dependency:
+
+=== "uv (recommended)"
+
+    ```shell
+    uv add deconvolve
+    ```
+
+    Then to invoke `deconvolve`, run:
+
+    ```shell
+    uv run deconvolve
+    ```
+
+    To update `deconvolve`, use `--upgrade-package`
+
+    ```shell
+    uv lock --upgrade-package deconvolve
+    ```
 
 === "pip"
 
@@ -43,10 +59,51 @@ To install `uv` see the instructions from [UV-Astral](https://docs.astral.sh/uv/
     python -m venv .venv
     source .venv/bin/activate
     pip install deconvolve
-    deconvolve --help
+    ```
+
+    Then to invoke `deconvolve`, run:
+
+    ```shell
+    deconvolve
+    ```
+
+    To update `deconvolve`, run:
+
+    ```shell
+    pip install -U deconvolve
     ```
 
     It is recommended that <span style="font-variant: small-caps;">Deconvolve</span> be installed into a virtual environment rather than the system interpreter. <span style="font-variant: small-caps;">Deconvolve</span> requires JAX and Keras, amongst other dependencies, and pinning them system-wide may conflict with other installed tools.
+
+### Installing <span style="font-variant: small-caps;">Deconvolve</span> globally
+
+=== "uv (recommended)"
+
+    ```shell
+    uv tool install deconvolve@latest
+    ```
+
+    `uv tool install` places `deconvolve` on the system `PATH` in its own isolated environment, so that its dependencies cannot collide with any other installed tools.
+
+    To update `deconvolve`, use `uv tool upgrade`:
+
+    ```shell
+    uv tool upgrade deconvolve
+    ```
+
+=== "pipx"
+
+    ```shell
+    pipx install deconvolve
+    ```
+
+    Like `uv tool install`, `pipx install` places `deconvolve` on the system `PATH` in its own isolated environment, so that its dependencies cannot collide with any other installed tools.
+    
+    To update `deconvolve`, use `pipx upgrade`:
+
+    ```shell
+    pipx upgrade deconvolve
+    ```
 
 ---
 
@@ -72,9 +129,13 @@ The JAX dependency resolves by platform, so the correct build is selected automa
 
 ---
 
-## Shell completion
+## Shell autocompletion
 
-The `deconvolve` CLI is built with [Typer](https://typer.tiangolo.com/) and can install its own completion script:
+The `deconvolve` CLI is built with [Typer](https://typer.tiangolo.com/) and can install its own autocompletion script:
+
+!!! tip
+
+    You can run `echo $SHELL` to help you determine your shell.
 
 === "zsh"
 
@@ -94,13 +155,15 @@ The `deconvolve` CLI is built with [Typer](https://typer.tiangolo.com/) and can 
     deconvolve --install-completion fish
     ```
 
-Shell completion requires the `deconvolve` program to be on the `PATH`: completion is registered against the command name, and therefore cannot be activated through `uv run -m deconvolve` or `python -m deconvolve`.
+Then restart the shell or source the shell config file.
+
+Shell completion requires the `deconvolve` program to be on the `PATH`: completion is registered against the command name, and therefore cannot be activated through `uv run (-m) deconvolve` or `python -m deconvolve`.
 
 ---
 
 ## Contributing
 
-Working on <span style="font-variant: small-caps;">Deconvolve</span> itself requires `uv` to be installed in addition to a checkout of the repository.
+Working on <span style="font-variant: small-caps;">Deconvolve</span> requires `uv` to be installed in addition to a checkout of the repository.
 
 1. **Clone the repository:**
 

@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-deconvolve = "deconvolve.cli:app"
+deconvolve = "deconvolve.__main__:main"
 
 [project.urls]
 repository = "https://github.com/krishdesai7/deconvolve"

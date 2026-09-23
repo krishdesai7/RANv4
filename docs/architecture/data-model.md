@@ -1,6 +1,6 @@
 # Data Model
 
-RAN represents events in two distinct forms at opposite ends of the pipeline: the **physics representation** (`Populations`) and the **machine learning transport representation** (`ZXY`).
+Deconvolve represents particle-level events in two distinct forms at opposite ends of the pipeline: the **physics representation** (`Populations`) and the **machine learning transport representation** (`ZXY`).
 
 ---
 

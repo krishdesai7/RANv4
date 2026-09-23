@@ -1,12 +1,12 @@
 # Precision & Hardware
 
-RAN is strictly **float32 end-to-end**. This section explains how precision is enforced, how backend initialization is handled, and how hardware divergence is prevented.
+Deconvolve is strictly **float32 end-to-end**. This section explains how precision is enforced, how backend initialization is handled, and how hardware divergence is prevented.
 
 ---
 
 ## The Float32 Pin
 
-High Energy Physics calculations often mix float64 and float32 unpredictably. RAN eliminates silent casts and memory bloat through a strict float32 design:
+High Energy Physics calculations often mix float64 and float32 unpredictably. Deconvolve eliminates silent casts and memory bloat through a strict float32 design:
 
 1. **`EVENT_DTYPE`**: Pinned in `deconvolve.coretypes.constants` as `np.float32`.
 2. **`EventArray`**: Pinned in `deconvolve.coretypes.types` as `Float[Array, "N D"]` with `beartype` validation.
@@ -14,11 +14,11 @@ High Energy Physics calculations often mix float64 and float32 unpredictably. RA
 
 ---
 
-## Backend Bootstrapping (`ran/__init__.py`)
+## Backend Bootstrapping (`deconvolve/__init__.py`)
 
 Keras 3 and JAX inspect environment variables **once**, at the exact moment they are imported.
 
-To ensure consistent behavior, `ran/__init__.py` sets the following defaults before any other submodule is loaded:
+To ensure consistent behavior, `deconvolve/__init__.py` sets the following defaults before any other submodule is loaded:
 
 ```python
 import os
@@ -27,7 +27,7 @@ os.environ.setdefault("KERAS_BACKEND", "jax")
 os.environ.setdefault("JAX_ENABLE_X64", "0")
 ```
 
-If a user script imports `keras` or `jax` before importing `ran`, `deconvolve.training.engine` detects this and raises an informative `RuntimeError` rather than failing cryptically inside an XLA trace.
+If a user script imports `keras` or `jax` before importing `deconvolve`, `deconvolve.training.engine` detects this and raises an informative `RuntimeError` rather than failing cryptically inside an XLA trace.
 
 ---
 

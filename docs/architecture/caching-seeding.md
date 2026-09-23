@@ -23,16 +23,16 @@ All regenerable artifacts share a common cache root configured by `deconvolve.co
 On high-performance computing (HPC) clusters where `$HOME` has strict quotas, set `DECONVOLVE_CACHE_DIR` to point to scratch storage:
 
 ```shell
-export DECONVOLVE_CACHE_DIR=$SCRATCH/ran_cache
+export DECONVOLVE_CACHE_DIR=$SCRATCH/deconvolve_cache
 ```
 
-RAN deliberately avoids `XDG_CACHE_HOME` because that variable often points to `~/.cache`, which would silently displace local checkouts.
+Deconvolve deliberately avoids `XDG_CACHE_HOME` because that variable often points to `~/.cache`, which would silently displace local checkouts.
 
 ---
 
 ## Two-Tier Seeding Architecture
 
-RAN separates dataset generation from model initialization using two independent seeds:
+Deconvolve separates dataset generation from model initialization using two independent seeds:
 
 | Seed Parameter | Default | Role           | What it Controls                                                   |
 | :------------- | :------ | :------------- | :----------------------------------------------------------------- |

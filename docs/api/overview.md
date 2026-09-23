@@ -1,6 +1,6 @@
 # API Reference Overview
 
-The RAN Python library is structured into specialized modules. The following sections provide auto-generated reference documentation directly from the source code, type annotations, and docstrings.
+The Deconvolve Python library is structured into specialized modules. The following sections provide auto-generated reference documentation directly from the source code, type annotations, and docstrings.
 
 ---
 

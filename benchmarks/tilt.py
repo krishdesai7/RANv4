@@ -1,9 +1,9 @@
 """Exponential-tilt reweighting: the most regularized generator there is.
 
-RAN's generator is an arbitrary function `z -> w`, and `benchmarks/ceiling.py`
+'s generator is an arbitrary function `z -> w`, and `benchmarks/ceiling.py`
 diagnostic D shows what that costs: the detector-level objective does not
 identify the truth. The oracle particle-level likelihood ratio scores *worse*
-on detector-level MMD than a trained RAN does, on held-out events. Many weight
+on detector-level MMD than a trained Deconvolve does, on held-out events. Many weight
 functions match `p(x)`; the right one is not the one the objective prefers.
 
 This replaces the network with a `d`-parameter exponential family:

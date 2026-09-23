@@ -3,7 +3,7 @@
 This answers "what did the config files say", not "what is every option's
 effective value": `resolved.values` only ever holds keys a file actually
 supplied, so an option left at its code default, or set only through a
-`RAN_*` environment variable, never appears here. See `render`'s docstring
+`DECONVOLVE_*` environment variable, never appears here. See `render`'s docstring
 for the fully-resolved alternatives.
 
 `rich` with an injectable `Console`, matching `uncertainty/report.py`; `print`
@@ -153,7 +153,7 @@ def render(
     """Print what the config files said, as a table or as JSON.
 
     Not a full accounting of every option's effective value: a value at its
-    code default, or set only through a `RAN_*` environment variable, is
+    code default, or set only through a `DECONVOLVE_*` environment variable, is
     absent from `resolved.values` and so absent here too. For that, use
     `deconvolve <command> --help` (which renders the effective default Click would
     apply) or a run's `config.json` `_origin` block, which records where
@@ -161,7 +161,7 @@ def render(
     """
     active: Console = console or Console()
     if as_json:
-        active.print_json(json.dumps(obj=_payload(resolved, command), default=str))
+        active.print_json(json=json.dumps(obj=_payload(resolved, command), default=str))
         return
     active.print(_layers_table(resolved))
     active.print(_values_table(resolved, command))

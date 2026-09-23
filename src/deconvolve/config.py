@@ -131,7 +131,7 @@ def _display(key: str, /) -> str:
 
 def _suggestion(key: str, candidates: Iterable[str], /) -> str:
     matches: list[str] = get_close_matches(
-        _normalize(key), [_normalize(c) for c in candidates], n=1
+        word=_normalize(key), possibilities=[_normalize(c) for c in candidates], n=1
     )
     return f", did you mean `{_display(matches[0])}`?" if matches else ""
 

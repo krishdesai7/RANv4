@@ -60,12 +60,14 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[1]
 
 def _builders_at(dtype: str) -> tuple[ModelBuilder, ModelBuilder]:
     """Rebuild the model factories at `dtype` without mutating the source file."""
-    source: str = (REPO_ROOT / "src" / "ran" / "training" / "models.py").read_text()
+    source: str = (
+        REPO_ROOT / "src" / "deconvolve" / "training" / "models.py"
+    ).read_text()
     namespace: dict[str, Any] = {}
     exec(  # ruff: ignore[exec-builtin] -- module's own source, recompiled with one literal changed
         compile(
             source=source.replace('"float32"', f'"{dtype}"'),
-            filename="ran/training/models.py",
+            filename="deconvolve/training/models.py",
             mode="exec",
         ),
         namespace,

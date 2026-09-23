@@ -39,7 +39,7 @@ cd Deconvolve
 uv sync
 ```
 
-This installs the `ran` console script into `.venv/bin`. Commands below are written as `deconvolve ...`; from a checkout without an activated virtualenv, prefix them with `uv run` (`uv run deconvolve train --config params/1d_default.yaml`). Tab completion for subcommands, flags and enum values is available with `deconvolve --install-completion`.
+This installs the `deconvolve` console script into `.venv/bin`. Commands below are written as `deconvolve ...`; from a checkout without an activated virtualenv, prefix them with `uv run` (`uv run deconvolve train --config params/1d_default.yaml`). Tab completion for subcommands, flags and enum values is available with `deconvolve --install-completion`.
 
 ### GPU Support
 
@@ -51,7 +51,7 @@ Built against `jax[cuda13]` on x86_64 Linux, compiled against CUDA version 13.0.
 
 #### macOS, arm64 (Apple Silicon)
 
-The official macOS arm64 wheels for JAX do not provide GPU acceleration. Therefore JAX and consequentially RAN only offer CPU support on Apple Silicon. Experimental alternatives, such as `jax-mps` or `IREE`-based workflows, may enable Metal acceleration, but these configurations are not tested or supported by RAN. Users should independently validate their correctness and performance.
+The official macOS arm64 wheels for JAX do not provide GPU acceleration. Therefore JAX and consequentially deconvolve only offer CPU support on Apple Silicon. Experimental alternatives, such as `jax-mps` or `IREE`-based workflows, may enable Metal acceleration, but these configurations are not tested or supported by deconvolve. Users should independently validate their correctness and performance.
 
 ## Usage
 
@@ -139,7 +139,7 @@ The pipeline will:
 
 1. Generate (or load from cache) the dataset
 2. Split into train / validation / test sets (70 / 10 / 20%)
-3. Train the RAN for a fixed number of epochs, then restore the checkpoint minimizing detector-level MMD
+3. Train the network for a fixed number of epochs, then restore the checkpoint minimizing detector-level MMD
 4. Save models, training history, and plots to `runs/<UTC-timestamp>/`
 5. Compute distance metrics on the test set
 
@@ -192,7 +192,7 @@ deconvolve baseline ibu --run-dir runs/2026-03-14T061023Z
 deconvolve baseline ibu
 ```
 
-Results are saved to `metrics_ibu.json` in each run directory using the same metric format as RAN.
+Results are saved to `metrics_ibu.json` in each run directory using the same metric format as deconvolve.
 
 #### OmniFold
 
@@ -233,7 +233,7 @@ bit-identical between the clean and poisoned arms.
 
 This build relies on the JAX backend.
 
-`src/deconvolve/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using RAN as a library module rather than a command-line tool, ensure that **any `ran.*` import must come before `import keras`**. `src/deconvolve/training/engine.py` raises a clear error if the backend has been initialized to something else.
+`src/deconvolve/__init__.py` sets `KERAS_BACKEND=jax` and `JAX_ENABLE_X64=0`. If using deconvolve as a library module rather than a command-line tool, ensure that **any `deconvolve.*` import must come before `import keras`**. `src/deconvolve/training/engine.py` raises a clear error if the backend has been initialized to something else.
 
 ### Precision
 
@@ -241,7 +241,7 @@ The project runs in single precision end to end. The pin is a single constant, `
 
 Every jet observable is float32-clean. In particular, `mass` and `mult` survive a float32 round trip bit-exactly, and the others lose exactly half a ULP, the least a cast can cost. Across 320 paired seeds, single and double precision are indistinguishable on unfolding improvement to within 3.5 sigma, while the seed-to-seed spread within either precision is larger than the gap between them. `benchmarks/precision.py` reproduces the comparison and `benchmarks/compare_precision.py` runs the statistics.
 
-`ran.data.download` computes jet observables in double precision, because the ε protecting degenerate jets is below the smallest single precision denormal.
+`deconvolve.data.download` computes jet observables in double precision, because the ε protecting degenerate jets is below the smallest single precision denormal.
 
 `src/deconvolve/training/engine.py` is a hand-rolled loop, since the two-optimizer min-max game does not fit a standard `keras.Model.fit`. It does, however, follow the standard Keras 3 + JAX pattern:
 
@@ -273,8 +273,8 @@ Because the networks are Dense-only (no dropout or batch norm) and Adam is deter
 Deconvolve/
 ├── src/deconvolve/                      Python package
 │   ├── __init__.py               Pins KERAS_BACKEND=jax and JAX_ENABLE_X64=0
-│   ├── __main__.py               Fallback entry point (python -m ran)
-│   ├── cli.py                    Unified Typer command tree; target of the `ran` script
+│   ├── __main__.py               Fallback entry point (python -m deconvolve)
+│   ├── cli.py                    Unified Typer command tree; target of the `deconvolve` script
 │   ├── py.typed                  PEP 561 typing marker
 │   ├── coretypes/
 │   │   ├── events.py             Split, Events, ZXY, Populations, DatasetSplits
@@ -285,7 +285,7 @@ Deconvolve/
 │   │   └── types.py              TypedDicts and array aliases
 │   ├── data/
 │   │   ├── config.py             YAML config parsing, sigma promotion
-│   │   ├── datasets.py           DatasetSplits, RANDataset, caching
+│   │   ├── datasets.py           DatasetSplits, DeconvolveDataset, caching
 │   │   ├── jets.py               Jet substructure loading and standardization
 │   │   ├── device.py             Device-resident training form (TrainSplit/EvalSplit)
 │   │   └── download.py           One-time Zenodo data download

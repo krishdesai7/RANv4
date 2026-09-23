@@ -8,16 +8,16 @@
 # ///
 """The TensorFlow half of `gpu_coexistence.py`. Never imported -- only `uv run`.
 
-This file deliberately has no `ran` import and is not reachable from the
+This file deliberately has no `deconvolve` import and is not reachable from the
 package: it runs under Python 3.13 with the TensorFlow Keras backend, which is
-exactly the environment `src/ran` cannot coexist with. The PEP 723 header above
+exactly the environment `src/deconvolve` cannot coexist with. The PEP 723 header above
 is the whole quarantine mechanism; `uv run --no-project` provisions it.
 
 It answers one question -- **can TensorFlow get usable GPU memory right now?**
 -- and is careful to separate three outcomes that a naive probe collapses into
 one:
 
-* `ok`            TF deconvolve the op on the GPU. The coexistence works.
+* `ok`            TF ran the op on the GPU. The coexistence works.
 * `cpu_fallback`  TF ran, but on the CPU, because it saw no GPU at all. This is
                   the dangerous outcome: nothing raises, the baseline just runs
                   ~50x slower and the result looks fine. An explicit
@@ -255,31 +255,31 @@ def _preload_wheels_and_reexec() -> None:
     loader when the process starts, so rewriting it inside a running
     interpreter changes nothing for libraries TF has yet to open -- a detail
     that makes an in-process "fix" look like it works while measuring the
-    unfixed path. `_RAN_PROBE_REEXEC` guards against looping.
+    unfixed path. `_DECONVOLVE_PROBE_REEXEC` guards against looping.
     """
-    if os.environ.get("RAN_PROBE_PRELOAD_WHEELS") != "1":
+    if os.environ.get(key="DECONVOLVE_PROBE_PRELOAD_WHEELS") != "1":
         return
-    if os.environ.get("_RAN_PROBE_REEXEC") == "1":
+    if os.environ.get(key="_DECONVOLVE_PROBE_REEXEC") == "1":
         return
 
-    dirs = _wheel_lib_dirs()
+    dirs: list[str] = _wheel_lib_dirs()
     if not dirs:
         return
 
-    existing = os.environ.get("LD_LIBRARY_PATH", "")
+    existing: str = os.environ.get(key="LD_LIBRARY_PATH", default="")
     os.environ["LD_LIBRARY_PATH"] = (
         ":".join([*dirs, existing]) if existing else ":".join(dirs)
     )
-    os.environ["_RAN_PROBE_REEXEC"] = "1"
+    os.environ["_DECONVOLVE_PROBE_REEXEC"] = "1"
     os.execv(sys.executable, [sys.executable, *sys.argv])  # ruff: ignore[start-process-with-no-shell]
 
 
 def main() -> None:
     _preload_wheels_and_reexec()
     # Before any TensorFlow import, for the reason given in `_environment`.
-    dlopen = _dlopen_report()
+    dlopen: dict[str, str] = _dlopen_report()
     try:
-        result = probe(dlopen)
+        result: dict[str, object] = probe(dlopen)
     # The driver needs a reason on stdout, not a traceback on stderr: an
     # unparseable worker is indistinguishable from a crashed one.
     except BaseException as exc:  # ruff: ignore[blind-except]
@@ -290,7 +290,7 @@ def main() -> None:
         }
     # One line of JSON on stdout is the entire protocol. TF writes banners to
     # stderr regardless of TF_CPP_MIN_LOG_LEVEL, so stdout must stay clean.
-    print(json.dumps(result))
+    print(json.dumps(obj=result))
 
 
 if __name__ == "__main__":

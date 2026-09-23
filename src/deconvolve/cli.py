@@ -4,10 +4,11 @@ import logging
 import os
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, override
 
 import numpy as np
 import typer
+from typer.core import TyperGroup, TyperOption
 
 from .baselines import ibu_evaluate_runs, omnifold_evaluate_runs
 from .config import ConfigError, default_map, discover, load, origins_for
@@ -27,14 +28,59 @@ from .workflows import run, run_leakage_check
 
 if TYPE_CHECKING:
     from logging import Logger
-    from typing import Any
+    from typing import Any, Final, LiteralString
 
-    from typer._click.core import ParameterSource
+    from typer._click.core import Command, Context, ParameterSource
 
     from .config import Resolved
     from .config_spec import CommandSpec
 
 logger: Logger = logging.getLogger(name=__name__)
+
+
+def _gate_autoenv(command: Command, spec: CommandSpec | None, /) -> None:
+    """Give an environment variable only to options the config files may set.
+
+    Layer 4 is the same key set as layers 2-3, not every option Click could
+    derive a name for: `--force` should be typed each time, not inherited
+    from a shell profile, for the same reason `NOT_LAYERABLE` keeps it out of
+    `deconvolve.toml`. A command outside the spec (`FROZEN_COMMANDS`) gets no
+    variables at all, so `uncertainty run --help` does not advertise
+    `DECONVOLVE_UNCERTAINTY_RUN_N_EPOCHS` that `_resolve_cell_settings` would
+    then ignore -- and `--cell`, which it would not ignore, cannot be
+    supplied ambiently. Derived from the spec rather than marked per option,
+    so the denylist stays the one list to maintain. Typer's own
+    `--install-completion`/`--show-completion` are in no spec either, which is
+    what keeps an exported `DECONVOLVE_INSTALL_COMPLETION` from firing on
+    every invocation.
+    """
+    for param in command.params:
+        if isinstance(param, TyperOption) and param.name is not None:
+            param.allow_from_autoenv = spec is not None and param.name in spec.options
+    if isinstance(command, TyperGroup):
+        for name, child in command.commands.items():
+            _gate_autoenv(child, spec.children.get(name) if spec is not None else None)
+
+
+class _GatedGroup(TyperGroup):
+    """The root group, gating every option's variable before anything parses.
+
+    Not the root callback: the root's own options, completion flags included,
+    are read from the environment while the root context is being built,
+    before that callback runs, and `deconvolve --help` never reaches it at all.
+    """
+
+    @override
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: Context | None = None,
+        **extra: Any,
+    ) -> Context:
+        _gate_autoenv(self, _spec())
+        return super().make_context(info_name, args, parent, **extra)
+
 
 baseline_app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 uncertainty_app: typer.Typer = typer.Typer(
@@ -42,7 +88,18 @@ uncertainty_app: typer.Typer = typer.Typer(
 )
 config_app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
 
-app: typer.Typer = typer.Typer(rich_markup_mode="rich", no_args_is_help=True)
+# Layer 4. Click derives each option's variable from the command path, so
+# `train --n-epochs` reads `DECONVOLVE_TRAIN_N_EPOCHS` and the root
+# `--log-level` reads `DECONVOLVE_LOG_LEVEL`; `_gate_autoenv` narrows this to
+# the options the config files may also set.
+ENVVAR_PREFIX: Final[LiteralString] = "DECONVOLVE"
+
+app: typer.Typer = typer.Typer(
+    rich_markup_mode="rich",
+    no_args_is_help=True,
+    cls=_GatedGroup,
+    context_settings={"auto_envvar_prefix": ENVVAR_PREFIX},
+)
 app.add_typer(
     typer_instance=baseline_app, name="baseline", help="Run comparison baselines."
 )
@@ -102,7 +159,6 @@ def configure(
             "--log-level",
             "-L",
             case_sensitive=False,
-            envvar="DECONVOLVE_LOG_LEVEL",
             help="Application log level.",
         ),
     ] = LogLevel.info,

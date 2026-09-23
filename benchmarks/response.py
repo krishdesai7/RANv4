@@ -1,4 +1,4 @@
-"""Test whether Herwig and Pythia induce the same response on RAN's summaries.
+"""Test whether Herwig and Pythia induce the same response on Deconvolve's summaries.
 
 The generator label is S (Herwig=1, Pythia=0).  Two classifiers are fitted:
 
@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import os
 
-os.environ.setdefault("KERAS_BACKEND", "jax")  # pyrefly: ignore[unused-call-result]
+os.environ.setdefault(key="KERAS_BACKEND", value="jax")  # pyrefly: ignore[unused-call-result]
 
 import argparse
 import logging
@@ -81,7 +81,7 @@ if TYPE_CHECKING:
 
 LOG2: float = math.log(2.0)
 _P_CLIP: float = 1e-7
-logger: logging.Logger = logging.getLogger("deconvolve.response")
+logger: logging.Logger = logging.getLogger(name="deconvolve.response")
 
 
 @dataclass(frozen=True)

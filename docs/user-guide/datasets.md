@@ -1,6 +1,10 @@
-# Configuration
+<!-- markdownlint-disable no-inline-html -->
+# Datasets
 
-RAN supports two dataset regimes: synthetic **Gaussian toy datasets** configured via YAML, and **Jet Substructure observables** pulled from Zenodo.
+<span style="font-variant: small-caps;">Deconvolve</span> supports two dataset regimes, selected with `--dataset` (`-D`): synthetic **Gaussian datasets** (`gaussian`, the default for `train`) described by a YAML file, and **jet substructure observables** (`jets`) downloaded from Zenodo.
+
+!!! note
+    The Gaussian YAML file passed with `--config` describes a *dataset*. It is unrelated to `deconvolve.toml`, which sets default *CLI options*; see [Configuration](configuration.md).
 
 ---
 
@@ -22,11 +26,11 @@ sigma_detector: 0.5
 
 ### Sigma-to-Covariance Promotion
 
-RAN automatically promotes `sigma_*` entries into `(dim, dim)` positive-definite covariance matrices:
+<span style="font-variant: small-caps;">Deconvolve</span> automatically promotes `sigma_*` entries into `(dim, dim)` positive-definite covariance matrices:
 
-- **Scalar** $\sigma \to \sigma^2 I$ (isotropic diagonal covariance)
-- **Vector** $[\sigma_1, \sigma_2, \dots] \to \text{diag}(\sigma_1^2, \sigma_2^2, \dots)$ (uncorrelated diagonal covariance)
-- **Matrix** $\Sigma \to$ used as-is (full correlated covariance)
+- **Scalar** \(\sigma \to \sigma^2 I\) (isotropic diagonal covariance)
+- **Vector** \(\lbrack \sigma_1, \sigma_2, \dots \rbrack \to \text{diag}(\sigma_1^2, \sigma_2^2, \dots)\) (uncorrelated diagonal covariance)
+- **Matrix** \(\Sigma\) used as-is (full correlated covariance)
 
 Positive-definiteness is verified via Cholesky decomposition during configuration parsing.
 
@@ -34,7 +38,7 @@ Positive-definiteness is verified via Cholesky decomposition during configuratio
 
 Pre-configured examples are provided in the `params/` directory:
 
-=== "1D Uncorrelated (`params/1d_default.yaml`)"
+=== "1D (`params/1d_default.yaml`)"
     ```yaml
     mu_gen: [0.5]
     mu_true: [0.0]
@@ -56,41 +60,95 @@ Pre-configured examples are provided in the `params/` directory:
     sigma_detector: 0.5
     ```
 
-=== "4D / 6D Correlated"
-    See `params/4d_correlated.yaml` and `params/6d_correlated.yaml` for higher-dimensional covariance structures.
+=== "4D Correlated (`params/4d_correlated.yaml`)"
+    ```yaml
+    mu_gen: [1.0, 0.0, -0.5, 0.5]
+    mu_true: [0.8, 0.1, -0.6, 0.7]
+    sigma_gen:
+      - [ 1.0,   0.07, -0.22,  0.24 ]
+      - [ 0.07,  0.49,  0.0,   0.056]
+      - [-0.22,  0.0,   1.21,  0.616]
+      - [ 0.24,  0.056, 0.616, 0.64 ]
+    sigma_true:
+      - [ 0.64,  0.0,  -0.24,  0.192]
+      - [ 0.0,   0.36,  0.12,  0.0  ]
+      - [-0.24,  0.12,  1.0,   0.3  ]
+      - [ 0.192, 0.0,   0.3,   0.36 ]
+    sigma_detector: [0.4, 0.5, 0.6, 0.3]
+    ```
+
+=== "6D Correlated (`params/6d_correlated.yaml`)"
+    ```yaml
+    mu_gen: [1.0, 0.0, -0.5, 0.5, -1.0, 0.3]
+    mu_true: [0.8, 0.1, -0.6, 0.7, -0.8, 0.1]
+    sigma_gen:
+      - [ 1.0,   0.07,  0.22, -0.24,  0.0,   0.0  ]
+      - [ 0.07,  0.49,  0.0,  -0.112, 0.252, 0.098]
+      - [ 0.22,  0.0,   1.21,  0.088,-0.264, 0.462]
+      - [-0.24, -0.112, 0.088, 0.64,  0.096, 0.0  ]
+      - [ 0.0,   0.252,-0.264, 0.096, 1.44,  1.176]
+      - [ 0.0,   0.098, 0.462, 0.0,   1.176, 1.96 ]
+    sigma_true:
+      - [ 0.64,  0.0,   0.16, -0.096, 0.08,  0.0  ]
+      - [ 0.0,   0.36,  0.0,  -0.036, 0.12,  0.0  ]
+      - [ 0.16,  0.0,   1.0,   0.0,  -0.3,   0.44 ]
+      - [-0.096,-0.036, 0.0,   0.36,  0.12,  0.0  ]
+      - [ 0.08,  0.12, -0.3,   0.12,  1.0,   0.55 ]
+      - [ 0.0,   0.0,   0.44,  0.0,   0.55,  1.21 ]
+    sigma_detector: [0.4, 0.5, 0.6, 0.3, 0.4, 0.4]
+    ```
 
 ---
 
-## Jet Substructure Configuration
+## Jet Substructure Observables
 
-Jet substructure observables are selected directly via CLI flags or config dictionaries:
+Jet substructure observables are selected with `--var` (`-v`):
 
 ```shell
-ran train -D jets -v m -v w
+deconvolve train -Djets -vm -vw
 ```
 
-### Supported Observables
+`--var` (`-v`) is repeatable. With no `--var`, all twelve observables are used. The order typed in does not matter. E.g., `-vw -vm` and `-vm -vw` are equivalent.
 
-The dataset contains 12 jet observables from Pythia 8 and Herwig 7 simulations:
+The data is derived from [Zenodo record 3548091](https://zenodo.org/record/3548091): $Z+$jets events with $p_T^Z > 200$ GeV and [<span style="font-variant: small-caps;">Delphes</span>](https://github.com/delphes/delphes) detector simulation. <span style="font-variant: small-caps;">Herwig</span> plays the role of data and <span style="font-variant: small-caps;">Pythia26</span> the role of simulation. Each observable is available at both particle (nominal) level and detector (reconstructed) level.
 
-| Short Name | Observable | Description |
-| :--- | :--- | :--- |
-| `m` | $m$ | Jet invariant mass |
-| `w` | $w$ | Jet width / girth |
-| `mult` | $n_{\text{constituents}}$ | Constituent multiplicity |
-| `ptd` | $p_T D$ | Dispersion of constituent $p_T$ |
-| `sd_m` | $m_{sd}$ | Soft Drop groomed mass |
-| `sd_z` | $z_g$ | Soft Drop momentum fraction |
-| `sd_dr` | $\Delta R_g$ | Soft Drop opening angle |
-| `tau1` - `tau4` | $\tau_1, \tau_2, \tau_3, \tau_4$ | N-subjettiness variables |
-| `tau21` | $\tau_{21} = \tau_2 / \tau_1$ | Subjettiness ratio |
+!!! warning
+    Names are case-sensitive: `m` is the jet mass, `M` the constituent multiplicity.
 
----
+### Mass and hard scale
 
-## Configuration Precedence
+| Name | Symbol | Observable | Source |
+| :--- | :--- | :--- | :--- |
+| `m` | \(m\) | Jet mass | Directly from the release |
+| `sdm` | \(\ln\rho\) | Soft Drop jet mass, \(\ln\left(\frac{m_{\text{SD}}^2}{p_T^2}\right)\) | Derived: release provides the groomed mass and jet \(p_T\); `-14.0` for a jet groomed to nothing |
 
-When running a workflow, configuration values are resolved with strict precedence:
+### Continuous angularities
 
-1. **Explicit CLI Flags** (highest priority: `--batch-size 256`, `--epochs 50`)
-2. **YAML Config File** (values loaded from `--config path.yaml`)
-3. **Internal Defaults** (defined in `deconvolve.coretypes.configs.RunConfig`)
+| Name | Symbol | Observable | Source |
+| :--- | :--- | :--- | :--- |
+| `lha` | \(\lambda^1_{0.5}\) | Les Houches angularity | Directly from the release |
+| `w` | \(w = \lambda^1_1\) | Jet width | Directly from the release |
+| `ang2` | \(\lambda^1_2\) | Angularity with \(\beta = 2\) | Directly from the release |
+
+### Splitting and 2-prong substructure
+
+| Name | Symbol | Observable | Source |
+| :--- | :--- | :--- | :--- |
+| `zg` | \(z_g\) | Soft Drop groomed momentum fraction | Directly from the release |
+| `tau21` | \(\tau_{21}^{(\beta=1)}\) | \(N\)-subjettiness ratio \(\frac{\tau_2}{\tau_1}\) | Derived: release provides \(\tau_2\) and \(w = \tau_1^{(\beta=1)}\); `0` for a zero-width jet |
+
+### Hadronization, multiplicity and fragmentation (IRC-unsafe)
+
+| Name | Symbol | Observable | Source |
+| :--- | :--- | :--- | :--- |
+| `M` | \(M\) | Constituent multiplicity | Directly from the release |
+| `n_ch` | \(n_{ch}\) | Charged constituent multiplicity | Computed from constituents |
+| `f_ch` | \(f_{ch}\) | Charged fraction of the jet's constituent \(p_T\) | Computed from constituents |
+| `ptd` | \(p_T^D\) | \(p_T\) dispersion, \(\frac{\sqrt{\sum p_{T,i}^2}}{\sum p_{T,i}}\) | Computed from constituents |
+| `q` | \(q\) | Jet charge, \(p_T-\)weighted with \(\kappa = \frac12\) | Computed from constituents |
+
+!!! tip
+    The original OmniFold study used the observables `m`, `M`, `w`, `tau21`, `zg`, `sdm`. To use only those:
+    ```shell
+    deconvolve train -Djets -vm -vM -vw -vtau21 -vzg -vsdm
+    ```

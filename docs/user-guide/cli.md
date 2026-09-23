@@ -16,19 +16,7 @@ The `deconvolve` CLI is a single Typer command tree with the following subcomman
     - `collect`
 - `config show`
 
-Every layerable `train` and `uncertainty` option also resolves as described in [Configuration](configuration.md).
-
-## Environment Variables
-
-Any option that a config file can set can also be set with an environment variable. The name is `DECONVOLVE_`, then the command path, then the option's parameter name, all upper-case with `-` turned into `_`:
-
-```shell
-export DECONVOLVE_TRAIN_N_EPOCHS=500              # train --n-epochs 500
-export DECONVOLVE_BASELINE_IBU_N_ITERATIONS=20   # baseline ibu --niter 20
-export DECONVOLVE_LOG_LEVEL=debug                 # --log-level debug
-```
-
-An environment variable beats a config file, and a flag on the command line beats both. Each command's `--help` lists its variables as `[env var: ...]`. Options that must be typed each time have no variable: `--force`, `--load-run`, and every option of `uncertainty run`, which reads its frozen `design.json` instead. Positional arguments such as `RUN_DIR`, `DESIGN_DIR` and `CELL` never read the environment.
+Most options can also be set in a `deconvolve.toml`, a `[tool.deconvolve]` table in `pyproject.toml`, or a `DECONVOLVE_*` environment variable, e.g. `DECONVOLVE_TRAIN_N_EPOCHS=500`. A flag on the command line always wins. See [Configuration](configuration.md) for where the files are found, the precedence order, and which options can't be configured.
 
 ---
 

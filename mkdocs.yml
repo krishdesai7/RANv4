@@ -90,6 +90,7 @@ nav:
   - User Guide:
       - CLI Reference: user-guide/cli.md
       - Configuration: user-guide/configuration.md
+      - Datasets: user-guide/datasets.md
       - Evaluation & Metrics: user-guide/evaluation.md
       - Baselines: user-guide/baselines.md
       - Reporting & Artifacts: user-guide/reporting.md

@@ -434,7 +434,7 @@ def _arms_table(
     # The spread is the reason the whole tool exists, so it is a column and not
     # a footnote: a difference smaller than this is not a result.
     arms.add_column(header="SD", justify="right")
-    # The oracle sits at 80.1% of the MMD subsample and RAN at 73.3%, so ESS is
+    # The oracle sits at 80.1% of the MMD subsample and deconvolve at 73.3%, so ESS is
     # how a dispersion coefficient is calibrated rather than guessed.
     arms.add_column(header="ESS", justify="right")
     # Admissibility before performance: an arm the criterion can separate from

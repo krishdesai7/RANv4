@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated, get_args, get_origin, get_type_hint
 from typer.models import ArgumentInfo
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from typing import Any, Final, LiteralString
 
     import typer
@@ -62,15 +62,15 @@ class CommandSpec:
 
 def _is_argument(annotation: Any, /) -> bool:
     """Whether a parameter is positional, i.e. carries a `typer.Argument`."""
-    if get_origin(annotation) is not Annotated:
+    if get_origin(tp=annotation) is not Annotated:
         return False
-    return any(isinstance(meta, ArgumentInfo) for meta in get_args(annotation)[1:])
+    return any(isinstance(meta, ArgumentInfo) for meta in get_args(tp=annotation)[1:])
 
 
 def _base_type(annotation: Any, /) -> Any:
     """Strip `Annotated[...]` down to the declared type."""
-    if get_origin(annotation) is Annotated:
-        return get_args(annotation)[0]
+    if get_origin(tp=annotation) is Annotated:
+        return get_args(tp=annotation)[0]
     return annotation
 
 
@@ -78,12 +78,12 @@ def _options_of(
     callback: Any, path: tuple[str, ...], /
 ) -> tuple[dict[str, Any], frozenset[str]]:
     """Split one command's parameters into layerable and excluded."""
-    hints: dict[str, Any] = get_type_hints(callback, include_extras=True)
+    hints: dict[str, Any] = get_type_hints(obj=callback, include_extras=True)
     denied: frozenset[str] = NOT_LAYERABLE.get(path, frozenset())
 
     options: dict[str, Any] = {}
     excluded: set[str] = set(denied)
-    for name in inspect.signature(callback).parameters:
+    for name in inspect.signature(obj=callback).parameters:
         if name in _CONTEXT_PARAMS:
             continue
         annotation: Any = hints.get(name, str)
@@ -100,7 +100,7 @@ def _command_children(
     """Describe each `@app.command()` registered directly on `app`."""
     children: dict[str, CommandSpec] = {}
     for command in app.registered_commands:
-        callback = command.callback
+        callback: Callable[..., Any] | None = command.callback
         if callback is None:
             continue
         name: str = command.name or getattr(callback, "__name__", "")
@@ -122,7 +122,9 @@ def _group_children(
     for group in app.registered_groups:
         if group.name is None or group.typer_instance is None:
             continue
-        children[group.name] = build_spec(group.typer_instance, (*path, group.name))
+        children[group.name] = build_spec(
+            app=group.typer_instance, path=(*path, group.name)
+        )
     return children
 
 

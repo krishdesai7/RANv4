@@ -1,3 +1,4 @@
+<!-- markdownlint-disable ul-indent -->
 # CLI Reference
 
 The `deconvolve` CLI is a single Typer command tree with the following subcommands:

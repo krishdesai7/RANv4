@@ -1,6 +1,6 @@
 # Configuration
 
-`ran` resolves every layerable option through a five-layer stack, matching the
+`deconvolve` resolves every layerable option through a five-layer stack, matching the
 convention uv, ruff and pyrefly use, so a machine-level or project-level
 preference lives in a file instead of a person's shell history or a
 `RUN_ARGS` string wedged into a submit script.
@@ -8,9 +8,9 @@ preference lives in a file instead of a person's shell history or a
 | # | Layer | Location |
 | --- | --- | --- |
 | 1 | Code default | the Typer signature in `cli.py` |
-| 2 | Global config | `$XDG_CONFIG_HOME/ran/deconvolve.toml`, default `~/.config/ran/deconvolve.toml` |
+| 2 | Global config | `$XDG_CONFIG_HOME/deconvolve/deconvolve.toml`, default `~/.config/deconvolve/deconvolve.toml` |
 | 3 | Project config | nearest `deconvolve.toml`, or `[tool.deconvolve]` in `pyproject.toml` |
-| 4 | Environment | `RAN_*`, via Typer's existing `envvar=` |
+| 4 | Environment | `DECONVOLVE_<COMMAND>_<OPTION>`, via Click's `auto_envvar_prefix` |
 | 5 | Command line | `--n-epochs 500` |
 
 Each layer overrides everything above it. Layers 2-3 are files `src/deconvolve/config.py`
@@ -20,6 +20,44 @@ testable without importing JAX, Keras or Typer. It does not import `os` itself
 — `discover()` takes the environment mapping as a parameter, injected by the
 caller (`cli.py` passes `os.environ`), which is what keeps this module
 testable against an arbitrary environment rather than the process's real one.
+
+## Layer 4: the environment
+
+The root Typer app sets `context_settings={"auto_envvar_prefix": "DECONVOLVE"}`
+(`cli.py`, `ENVVAR_PREFIX`), and Click derives each option's variable name
+from the command path plus the option's *Python parameter* name, upper-cased
+with `-` turned into `_`:
+
+| Option | Variable |
+| --- | --- |
+| root `--log-level` | `DECONVOLVE_LOG_LEVEL` |
+| `train --n-epochs` | `DECONVOLVE_TRAIN_N_EPOCHS` |
+| `baseline ibu --niter` | `DECONVOLVE_BASELINE_IBU_N_ITERATIONS` (parameter `n_iterations`, not the flag) |
+| `uncertainty freeze --lr-g` | `DECONVOLVE_UNCERTAINTY_FREEZE_LR_G` |
+
+The name follows the parameter because the TOML key does too (`n-iterations`
+under `[baseline.ibu]`), so one name works for both layers. `--help` shows
+each variable as `[env var: ...]`.
+
+**Only layerable options get a variable.** Layer 4 covers the same keys as
+layers 2-3. `cli.py`'s `_gate_autoenv` walks the built Click tree next to
+`_spec()` and sets `allow_from_autoenv` to whether the option is in that
+node's `CommandSpec.options`. So everything in `NOT_LAYERABLE` (`--force`,
+`--load-run`, `--design-dir`, ...) has no variable, and `uncertainty run`
+(in `FROZEN_COMMANDS`, so absent from the spec) has none. Typer's own
+`--install-completion`/`--show-completion` are in no spec either. Without
+the gate, an exported `DECONVOLVE_INSTALL_COMPLETION` would fire on every
+invocation. The denylist stays the only list to maintain.
+
+The gate runs in `_GatedGroup.make_context`, the root group's override,
+not in the `configure()` callback. Click reads the root's own options from
+the environment while it builds the root context, which is before that
+callback runs, and `deconvolve --help` never reaches the callback at all.
+
+`DECONVOLVE_CACHE_DIR` and `DECONVOLVE_TIMING` share the prefix but aren't
+part of this layer (see "Deferred" below). No derived name can collide with
+them, because every derived name except `DECONVOLVE_LOG_LEVEL` includes a
+command segment.
 
 ## Discovery for layer 3
 
@@ -67,7 +105,7 @@ lr-g = 3e-5
 n-eval = 100000
 ```
 
-`deconvolve.toml` drops the `tool.ran` prefix: a top-level table names a command, a
+`deconvolve.toml` drops the `tool.deconvolve` prefix: a top-level table names a command, a
 top-level key names a group-level option (today just `log-level`, the only
 thing declared on `@app.callback()` itself). `[train]` in `deconvolve.toml` and
 `[tool.deconvolve.train]` in `pyproject.toml` are the same table.
@@ -163,9 +201,9 @@ deconvolve config show --json     # same content, for scripting
 This answers **"what did the config files say"**, not "what is every option's
 effective value". `_values_table` iterates `resolved.values`, which only ever
 holds keys a *file* actually supplied. An option left at its code default, or
-set only through a `RAN_*` environment variable, does not appear — verified:
-`RAN_LOG_LEVEL=debug deconvolve config show` with no config files anywhere renders
-an empty values table. This is a deliberate scope decision, not a bug to fix
+set only through a `DECONVOLVE_*` environment variable, does not appear:
+`DECONVOLVE_LOG_LEVEL=debug deconvolve config show` with no config files anywhere
+renders an empty values table. This is a deliberate scope decision, not a bug to fix
 by enumerating every option; for the fully resolved picture, use
 `deconvolve <command> --help` (which renders the effective default Click would
 apply for that command) or a run's `config.json` `_origin` block, which
@@ -234,7 +272,7 @@ Each cell then calls `load_frozen`, which requires `design.json` to exist and
 to carry every key `freeze` would have written — a truncated, hand-edited, or
 older-`freeze` file is rejected by name at cell 0, `_require_complete` in
 `cli.py`, rather than one key silently falling back to a bare code default a
-different cell would not share. Absent entirely, the error names `ran
+different cell would not share. Absent entirely, the error names `deconvolve
 uncertainty freeze` directly. This is a breaking change from the previous
 workflow, where a design directory had no configuration file at all and every
 cell just used whatever flags `scripts/submit_uncertainty.zsh` happened to
@@ -244,11 +282,14 @@ Precedence inside a cell is `COMMANDLINE > design.json > code default` —
 strictly narrower than the ordinary stack. `_resolve_cell_settings` checks
 `ctx.get_parameter_source(name) is COMMANDLINE` per parameter and only then
 lets a typed flag override the frozen value; everything else, including an
-exported `RAN_*` environment variable, is ignored. Environment variables are
-excluded on purpose: an exported `RAN_N_EPOCHS` in a batch script is exactly
+exported `DECONVOLVE_*` environment variable, is ignored. Environment variables are
+excluded on purpose: an exported variable in a batch script is exactly
 as capable of splitting a design as an edited `deconvolve.toml` is, and a hand-rerun
 of one failed cell under a different shell environment must train under the
-same settings as the rest of the array.
+same settings as the rest of the array. Two mechanisms enforce this:
+`_gate_autoenv` gives `uncertainty run` no environment variables at all, and
+`_resolve_cell_settings` would ignore an ENVIRONMENT source even if one
+reached it.
 
 `scripts/submit_uncertainty.zsh` calls `freeze` on the login node, between
 creating the design directory and calling `sbatch`; every cell inside the job

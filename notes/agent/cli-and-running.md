@@ -14,7 +14,7 @@ goes before the subcommand.
 
 Every layerable option above also resolves through the five-layer config
 stack — code default, global `deconvolve.toml`, project `deconvolve.toml`/`[tool.deconvolve]`,
-`RAN_*` environment, then the command line — documented in full in
+`DECONVOLVE_<COMMAND>_<OPTION>` environment, then the command line — documented in full in
 [configuration.md](configuration.md). `deconvolve config show` prints the resolved
 value of every setting next to the file, variable or default it came from;
 `deconvolve config show train` scopes the listing to one command, and `--json` emits

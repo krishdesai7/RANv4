@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
 
 runner: CliRunner = CliRunner()
 
+# Read at import, not through the CLI; see "Deferred" in configuration.md.
+_ENVIRONMENT_ONLY: frozenset[str] = frozenset(
+    {"DECONVOLVE_CACHE_DIR", "DECONVOLVE_TIMING"}
+)
+
 
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -22,7 +28,11 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / ".git").mkdir()
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "no-global"))
-    monkeypatch.delenv("RAN_LOG_LEVEL", raising=False)
+    # Layer 4 reads every `DECONVOLVE_<COMMAND>_<OPTION>`, so anything exported
+    # in the shell running the suite would otherwise leak into these tests.
+    for name in os.environ:
+        if name.startswith("DECONVOLVE_") and name not in _ENVIRONMENT_ONLY:
+            monkeypatch.delenv(name)
     return tmp_path
 
 
@@ -328,16 +338,47 @@ def test_a_flag_overrides_a_frozen_value(
     assert seen[-1] == 3
 
 
-def test_environment_does_not_override_a_frozen_value() -> None:
-    """An exported `RAN_*` must never split a design the way a flag legitimately can.
+def test_environment_does_not_override_a_frozen_value(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An exported variable must never split a design the way a flag legitimately can.
 
-    No `uncertainty run` option currently declares `envvar=`, so there is no flag
-    to route an environment variable through end-to-end today. This pins the
-    other half of the property directly against `_resolve_cell_settings`: a
-    value Click attributes to its ENVIRONMENT source is not treated as an
-    override, only COMMANDLINE is. If a future change adds an `envvar=` to one
-    of these options, this guards against it silently gaining override power.
+    `_gate_autoenv` gives `uncertainty run` no variables at all, so
+    `DECONVOLVE_UNCERTAINTY_RUN_N_EPOCHS` is never read; and even if it were,
+    `_resolve_cell_settings` only lets a COMMANDLINE source beat the frozen
+    file. Both halves are pinned: end to end here, and directly below.
     """
+    from deconvolve import uncertainty
+
+    seen: list[object] = []
+
+    def fake_run_cell(
+        cell: int, design_dir: Path, spec: object, /, **kwargs: object
+    ) -> Path:
+        _ = (cell, spec)
+        seen.append(kwargs["n_epochs"])
+        return design_dir / "cell_0000.npz"
+
+    monkeypatch.setattr(uncertainty, "run_cell", fake_run_cell)
+
+    design = project / "design"
+    freeze = runner.invoke(
+        app, ["uncertainty", "freeze", "-d", str(design), "--n-epochs", "77"]
+    )
+    assert freeze.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        ["uncertainty", "run", "--cell", "0", "-d", str(design)],
+        env={"DECONVOLVE_UNCERTAINTY_RUN_N_EPOCHS": "3"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen[-1] == 77
+
+
+def test_an_environment_source_does_not_override_a_frozen_value() -> None:
+    """The second line of defence, should a variable ever reach `run` again."""
     from deconvolve.cli import _resolve_cell_settings
 
     class _Ctx:
@@ -351,6 +392,72 @@ def test_environment_does_not_override_a_frozen_value() -> None:
     settings = _resolve_cell_settings(cast("typer.Context", _Ctx()), {"n_epochs": 77})
 
     assert settings["n_epochs"] == 77
+
+
+def test_the_environment_overrides_a_config_file(project: Path) -> None:
+    import json
+
+    _ = (project / "deconvolve.toml").write_text("[uncertainty.freeze]\nn-epochs = 7\n")
+    design = project / "design"
+
+    result = runner.invoke(
+        app,
+        ["uncertainty", "freeze", "-d", str(design)],
+        env={"DECONVOLVE_UNCERTAINTY_FREEZE_N_EPOCHS": "11"},
+    )
+
+    assert result.exit_code == 0, result.output
+    frozen = json.loads((design / "design.json").read_text())
+    assert frozen["config"]["n_epochs"] == 11
+    assert frozen["_origin"]["n_epochs"] == "environment"
+
+
+def test_a_flag_overrides_the_environment(project: Path) -> None:
+    import json
+
+    design = project / "design"
+
+    result = runner.invoke(
+        app,
+        ["uncertainty", "freeze", "-d", str(design), "--n-epochs", "13"],
+        env={"DECONVOLVE_UNCERTAINTY_FREEZE_N_EPOCHS": "11"},
+    )
+
+    assert result.exit_code == 0, result.output
+    frozen = json.loads((design / "design.json").read_text())
+    assert frozen["config"]["n_epochs"] == 13
+    assert frozen["_origin"]["n_epochs"] == "command-line"
+
+
+def test_a_not_layerable_option_has_no_environment_variable(project: Path) -> None:
+    """`--force` is typed each time, not inherited from a shell profile."""
+    design = project / "design"
+    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    assert first.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        ["uncertainty", "freeze", "-d", str(design)],
+        env={"DECONVOLVE_UNCERTAINTY_FREEZE_FORCE": "1"},
+    )
+
+    assert result.exit_code != 0
+    assert "--force" in result.output
+
+
+@pytest.mark.usefixtures("project")
+def test_help_advertises_exactly_the_layerable_variables() -> None:
+    root = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
+    train = runner.invoke(app, ["train", "--help"], env={"COLUMNS": "200"})
+    cell = runner.invoke(app, ["uncertainty", "run", "--help"], env={"COLUMNS": "200"})
+
+    assert "DECONVOLVE_LOG_LEVEL" in root.stdout
+    # Typer's own completion flags are in no spec: exported, they would fire
+    # on every invocation.
+    assert "DECONVOLVE_INSTALL_COMPLETION" not in root.stdout
+    assert "DECONVOLVE_TRAIN_N_EPOCHS" in train.stdout
+    assert "DECONVOLVE_TRAIN_LOAD_RUN" not in train.stdout
+    assert "DECONVOLVE_" not in cell.stdout
 
 
 def test_freeze_and_run_take_the_same_options() -> None:

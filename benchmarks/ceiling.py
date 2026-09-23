@@ -92,7 +92,7 @@ def _fit_classifier(
     """Converge a plain binary classifier and report its held-out BCE floor.
 
     `build_discriminator` is reused rather than reimplemented so that the number
-    this returns is comparable to RAN's `val_d` -- same depth, same width, same
+    this returns is comparable to deconvolve's `val_d` -- same depth, same width, same
     activations, same sigmoid output, and therefore the same Keras epsilon
     clipping in the loss. Only the training regime differs, which is the point:
     no adversary, no per-event weights, and a fixed target.
@@ -154,7 +154,7 @@ def _likelihood_ratio(model: keras.Model, z: EventArray, /) -> NDArray[np.double
     """`p / (1 - p)` from a calibrated classifier, normalized to preserve count.
 
     The normalization matches `train.normalize_weights` so the weights entering
-    the metrics below are on the same footing as the ones RAN produces.
+    the metrics below are on the same footing as the ones Deconvolve produces.
     """
     p: NDArray[np.double] = (
         np.asarray(a=model.predict(z, batch_size=8192, verbose=0))
@@ -230,7 +230,7 @@ def diagnostic_a(
 ) -> Fit:
     """How much detector-level signal is there for `d` to find?
 
-    Deliberately fitted on train and scored on val, the same two splits RAN's
+    Deliberately fitted on train and scored on val, the same two splits deconvolve's
     `val_d` is built from, so the two numbers are directly comparable.
     """
     logger.info(msg="")
@@ -384,7 +384,7 @@ def diagnostic_c(
     epoch: int | None = None,
     **kwargs: dict[str, Any],
 ) -> None:
-    """Did `g` really match detector level, or was RAN's `d` just too weak?"""
+    """Did `g` really match detector level, or was deconvolve's `d` just too weak?"""
     logger.info(msg="")
     logger.info(msg="C. A fresh discriminator against a finished run's weights")
     logger.info(
@@ -430,26 +430,26 @@ def diagnostic_c(
         dtype=np.double,
     )
     best_epoch: int = int(config["best_epoch"]) if epoch is None else epoch
-    ran_val_d: float = float(curve[best_epoch])
+    deconvolve_val_d: float = float(curve[best_epoch])
     logger.info(
         "  fresh d, scored as val_d   %.6f  (log2 - BCE = %+.6f)", bce, LOG2 - bce
     )
     logger.info(
-        "  RAN's own d at epoch %-3d   %.6f  (log2 - BCE = %+.6f)",
+        "  deconvolve's own d at epoch %-3d   %.6f  (log2 - BCE = %+.6f)",
         best_epoch,
-        ran_val_d,
-        LOG2 - ran_val_d,
+        deconvolve_val_d,
+        LOG2 - deconvolve_val_d,
     )
     logger.info(
         "  unweighted floor from A    %.6f  (log2 - BCE = %+.6f)", floor, LOG2 - floor
     )
     present: float = LOG2 - floor
     found = float(LOG2 - bce)
-    missed: float = found - (LOG2 - ran_val_d)
+    missed: float = found - (LOG2 - deconvolve_val_d)
     logger.info(
         "  Of the %.6f nats of detector-level mismatch present before "
         "reweighting, g removed %.1f%%, leaving %.6f that a converged d can "
-        "still find. RAN's own d found %.6f less than that.",
+        "still find. deconvolve's own d found %.6f less than that.",
         present,
         100.0 * (1.0 - found / present),
         found,
@@ -499,7 +499,7 @@ def diagnostic_d(
     seed: int,
     /,
 ) -> None:
-    """Does the selection criterion prefer the oracle, or prefer RAN?
+    """Does the selection criterion prefer the oracle, or prefer deconvolve?
 
     A and C establish that detector level is nearly saturated after
     reweighting. That leaves one question the resolution of the estimator
@@ -532,7 +532,9 @@ def diagnostic_d(
     if run_dir is not None:
         config: dict[str, Any] = json.loads(s=(run_dir / "config.json").read_text())
         _, y, w = _run_weights(run_dir, test_pop, config=config)
-        rows.append((f"RAN {run_dir.name}", np.asarray(a=w[y == 0], dtype=np.single)))
+        rows.append(
+            (f"deconvolve {run_dir.name}", np.asarray(a=w[y == 0], dtype=np.single))
+        )
 
     logger.info(
         "   m = %d of %d nature / %d mc test events, median-heuristic bandwidths",
@@ -652,7 +654,8 @@ def main(
         LOG2 - a.val_bce,
     )
     logger.info(
-        msg="  Compare against `val_d` in a run's history.npz. RAN's `d` scoring far"
+        msg="\tCompare against `val_d` in a run's history.npz."
+        "deconvolve's `d` scoring far"
     )
     logger.info(
         msg="  above this floor means `d` is the bottleneck, not `g`; scoring at it"

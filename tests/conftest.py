@@ -55,16 +55,16 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "writes_default_cache: needs a writable RAN default cache dir "
+        "writes_default_cache: needs a writable default cache dir "
         "(skipped where the filesystem is read-only, e.g. local sandbox runs; "
-        "force with RAN_RUN_CACHE_TESTS=1)",
+        "force with DECONVOLVE_RUN_CACHE_TESTS=1)",
     )
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
     if "writes_default_cache" not in item.keywords:
         return
-    if _CACHE_WRITABLE or os.environ.get("RAN_RUN_CACHE_TESTS"):
+    if _CACHE_WRITABLE or os.environ.get("DECONVOLVE_RUN_CACHE_TESTS"):
         return
     pytest.skip(f"default cache dir {constants.CACHE_DIR} is not writable")
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from .config_spec import CommandSpec
 
-# `tool.ran` in a pyproject; the whole document in a `deconvolve.toml`.
+# `tool.deconvolve` in a pyproject; the whole document in a `deconvolve.toml`.
 _PYPROJECT_TABLE: Final[tuple[LiteralString, ...]] = ("tool", "deconvolve")
 
 
@@ -60,7 +60,7 @@ def _table(data: Mapping[str, Any], keys: tuple[str, ...], /) -> dict[str, Any] 
 
 
 def _global_layer(environ: Mapping[str, str], /) -> Layer | None:
-    """`$XDG_CONFIG_HOME/ran/deconvolve.toml`, defaulting to `~/.config`."""
+    """`$XDG_CONFIG_HOME/deconvolve/deconvolve.toml`, defaulting to `~/.config`."""
     base: str | None = environ.get("XDG_CONFIG_HOME")
     root: Path = (
         Path(base) if base else Path(environ.get("HOME", "~")).expanduser() / ".config"

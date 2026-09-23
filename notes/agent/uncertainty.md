@@ -17,7 +17,7 @@ would change what cells 30-63 measure, splitting one array into two designs
 that share an output directory with no record that it happened. `freeze`
 resolves the full configuration stack exactly once and writes
 `design.json`; every cell reads that file instead, so nothing an operator
-touches on the login node mid-array — a config file, an exported `RAN_*` — can
+touches on the login node mid-array — a config file, an exported `DECONVOLVE_*` — can
 reach a cell already running. `deconvolve uncertainty run` refuses to start without a
 `design.json` present, naming `freeze` in the error, and refuses one missing
 any expected key rather than letting a cell fall back to a code default the

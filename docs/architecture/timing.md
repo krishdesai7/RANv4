@@ -29,8 +29,8 @@ with phase("train_epoch", epoch=1):
 Profiling is disabled by default to avoid memory accumulation on long runs. Enable it via the environment:
 
 ```shell
-export RAN_ENABLE_TIMING=1
-ran train -c params/1d_default.yaml
+export DECONVOLVE_TIMING=1
+deconvolve train --config params/1d_default.yaml
 ```
 
 When enabled, `timing.json` records per-phase statistics (calls, total duration, mean, min, max, standard deviation), which are rendered into the final LaTeX report dossier.

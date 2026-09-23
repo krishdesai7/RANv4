@@ -102,14 +102,14 @@ def configure(
             "--log-level",
             "-L",
             case_sensitive=False,
-            envvar="RAN_LOG_LEVEL",
+            envvar="DECONVOLVE_LOG_LEVEL",
             help="Application log level.",
         ),
     ] = LogLevel.info,
 ) -> None:
     # Assigned here rather than through `Typer(context_settings=)` so that
     # discovery is lazy: it walks the filesystem once, at invocation, not at
-    # import. `rantypes/constants.py` resolving `DECONVOLVE_CACHE_DIR` at import is the
+    # import. `coretypes/constants.py` resolving `DECONVOLVE_CACHE_DIR` at import is the
     # failure mode this avoids.
     #
     # Click then applies its own precedence to what we hand it:

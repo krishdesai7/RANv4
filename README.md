@@ -152,7 +152,7 @@ Distance metrics can be computed independently on existing runs:
 deconvolve evaluate
 
 # Evaluate a single run
-deconvolve evaluate --run-dir runs/2026-03-14T061023Z
+deconvolve evaluate runs/2026-03-14T061023Z
 
 # Recompute even if metrics.json exists
 deconvolve evaluate --force
@@ -186,7 +186,7 @@ Run IBU (Iterative Bayesian Unfolding) on the same datasets for head-to-head com
 
 ```shell
 # IBU — single run
-deconvolve baseline ibu --run-dir runs/2026-03-14T061023Z
+deconvolve baseline ibu runs/2026-03-14T061023Z
 
 # IBU — all runs
 deconvolve baseline ibu
@@ -200,7 +200,7 @@ OmniFold is the second baseline this project implements. It runs in its own PEP 
 
 ```shell
 # OmniFold — single run (writes metrics_omnifold.json)
-deconvolve baseline omnifold --run-dir runs/2026-03-14T061023Z
+deconvolve baseline omnifold runs/2026-03-14T061023Z
 
 # Reload to redraw the figures with the OmniFold overlay
 deconvolve train -r runs/2026-03-14T061023Z

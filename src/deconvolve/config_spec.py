@@ -33,9 +33,9 @@ NOT_LAYERABLE: Final[Mapping[tuple[str, ...], frozenset[str]]] = {
     # layerable: it is a presentation choice for `collect`'s figure, not part
     # of the grid.
     ("uncertainty", "collect"): frozenset(
-        {"design_dir", "n_datasets", "n_seeds", "data_seed", "init_seed"}
+        {"n_datasets", "n_seeds", "data_seed", "init_seed"}
     ),
-    ("uncertainty", "freeze"): frozenset({"design_dir", "force"}),
+    ("uncertainty", "freeze"): frozenset({"force"}),
     # None of `show`'s own options are layerable: `command` is positional
     # already, and `as_json` is a per-invocation output-format toggle, not a
     # preference worth inheriting from a file.

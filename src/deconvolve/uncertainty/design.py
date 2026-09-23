@@ -459,7 +459,7 @@ def load_frozen(design_dir: Path) -> dict[str, Any]:
     path: Path = design_dir / FROZEN_NAME
     if not path.is_file():
         raise FileNotFoundError(
-            f"{path} not found; run `deconvolve uncertainty freeze --design-dir "
+            f"{path} not found; run `deconvolve uncertainty freeze "
             f"{design_dir}` once before submitting the array"
         )
     frozen: dict[str, Any] = json.loads(s=path.read_text())

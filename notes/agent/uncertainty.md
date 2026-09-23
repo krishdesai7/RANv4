@@ -4,9 +4,9 @@
 bootstrap datasets crossed with initialization seeds, one cell per invocation.
 
 ```bash
-deconvolve uncertainty freeze --design-dir runs/unc_x -B 8 -S 8   # once, on the login node
-deconvolve uncertainty run --cell 0 --design-dir runs/unc_x       # per cell; reads design.json
-deconvolve uncertainty collect --design-dir runs/unc_x -B 8 -S 8
+deconvolve uncertainty freeze runs/unc_x -B 8 -S 8   # once, on the login node
+deconvolve uncertainty run 0 runs/unc_x              # per cell; reads design.json
+deconvolve uncertainty collect runs/unc_x
 bash scripts/submit_uncertainty.zsh                       # freeze + packed 8x8 array on SLURM
 ```
 

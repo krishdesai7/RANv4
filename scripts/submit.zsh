@@ -74,9 +74,9 @@ RUN_DIR=$RUN_DIR[-1]
 
 echo "Run dir: ${RUN_DIR}"
 
-uv run deconvolve baseline ibu --run-dir "${RUN_DIR}"
+uv run deconvolve baseline ibu "${RUN_DIR}"
 uv run deconvolve train --load-run "${RUN_DIR}"
-uv run deconvolve evaluate --run-dir "${RUN_DIR}" --force
+uv run deconvolve evaluate "${RUN_DIR}" --force
 
 if (( ! $+commands[pdflatex] )); then
   source "${PROJECT_DIR}/scripts/_lmod.zsh"

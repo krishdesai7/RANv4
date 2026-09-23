@@ -18,7 +18,7 @@ stack — code default, global `deconvolve.toml`, project `deconvolve.toml`/`[to
 [configuration.md](configuration.md). `deconvolve config show` prints the resolved
 value of every setting next to the file, variable or default it came from;
 `deconvolve config show train` scopes the listing to one command, and `--json` emits
-the same content for scripting. `deconvolve uncertainty freeze --design-dir DIR
+the same content for scripting. `deconvolve uncertainty freeze DIR
 [options]` resolves that stack once and writes `DIR/design.json`, which every
 `deconvolve uncertainty run` cell in the array then reads instead of the ordinary
 layers — see "The freeze path" in [configuration.md](configuration.md) for why
@@ -58,14 +58,14 @@ deconvolve train --dataset jets --var m --var w                      # a subset 
 deconvolve train --dataset jets --lr-g 3e-4 -k 2 --no-plots          # tuning: see benchmarks/README.md
 deconvolve train --dataset jets --seed 3 --run-dir runs/hp_x/lrg1e-4_seed03  # one arm of a sweep
 deconvolve train --load-run runs/2026-03-14T061023Z                  # reload a saved run
-deconvolve evaluate                                                  # compute metrics for all runs
-deconvolve evaluate --run-dir runs/2026-...                          # single run
-deconvolve baseline ibu --run-dir runs/2026-...                      # IBU comparison
-deconvolve baseline omnifold --run-dir runs/2026-...                 # OmniFold (see omnifold.md)
+deconvolve evaluate runs                                             # compute metrics for all runs
+deconvolve evaluate runs/2026-...                                    # single run
+deconvolve baseline ibu runs/2026-...                                # IBU comparison
+deconvolve baseline omnifold runs/2026-...                           # OmniFold (see omnifold.md)
 deconvolve report runs/2026-...                                      # PDF dossier (see reporting.md)
 deconvolve leakage-check --clean                                     # z_true leakage sanity check
 deconvolve config show                                                # resolved settings and their origins
-deconvolve uncertainty freeze --design-dir runs/unc_x -B 8 -S 8       # freeze a design before submitting its array
+deconvolve uncertainty freeze runs/unc_x -B 8 -S 8                    # freeze a design before submitting its array
 deconvolve --log-level DEBUG train --config params/1d_default.yaml
 sbatch scripts/submit.zsh                                      # end-to-end 12-var jet run
 sbatch scripts/submit.zsh --dataset gaussian --config params/2d_correlated.yaml

@@ -33,7 +33,7 @@ See the [API Reference](../api/training.md) for the full list of command line ar
 ## 2. Evaluate the Run
 
 ```shell
-deconvolve evaluate --run-dir runs/test-run
+deconvolve evaluate runs/test-run
 ```
 
 This computes the following three metrics before and after reweighting,

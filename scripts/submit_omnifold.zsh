@@ -70,7 +70,7 @@ source "${PROJECT_DIR}/scripts/_lmod.zsh"
 module load cudatoolkit/12.9
 trap 'module unload cudatoolkit/12.9' EXIT
 
-uv run deconvolve baseline omnifold --run-dir "${RUN_DIR}" "${@:2}"
+uv run deconvolve baseline omnifold "${RUN_DIR}" "${@:2}"
 
 module unload cudatoolkit/12.9
 trap - EXIT
@@ -80,7 +80,7 @@ trap - EXIT
 # up whichever `*_weights.npz` exist at draw time. Then re-score, so
 # `metrics.json` and the report agree with the figures.
 uv run deconvolve train --load-run "${RUN_DIR}"
-uv run deconvolve evaluate --run-dir "${RUN_DIR}" --force
+uv run deconvolve evaluate "${RUN_DIR}" --force
 
 module load texlive
 uv run deconvolve report "${RUN_DIR}" --force

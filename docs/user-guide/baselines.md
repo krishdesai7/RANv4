@@ -27,7 +27,7 @@ Iterative Bayesian Unfolding (also known as D'Agostini unfolding) is a classic b
 ### Running IBU
 
 ```shell
-ran baseline ibu --run-dir runs/2026-09-19-164500
+ran baseline ibu runs/2026-09-19-164500
 ```
 
 ---
@@ -65,5 +65,5 @@ flowchart LR
 ### Running OmniFold
 
 ```shell
-ran baseline omnifold --run-dir runs/2026-09-19-164500
+ran baseline omnifold runs/2026-09-19-164500
 ```

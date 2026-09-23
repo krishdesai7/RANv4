@@ -125,7 +125,7 @@ Presence is the mechanism, and it is the same one IBU has always used.
 exists in `artifacts/` when the figures are drawn, so:
 
 ```zsh
-deconvolve baseline omnifold --run-dir runs/<timestamp>Z   # writes omnifold_weights.npz
+deconvolve baseline omnifold runs/<timestamp>Z   # writes omnifold_weights.npz
 deconvolve train --load-run runs/<timestamp>Z              # reloads, redraws with it
 ```
 

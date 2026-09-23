@@ -91,8 +91,8 @@ It is implemented in the [**`ibu.py`**](ibu.py) file.
 Usage:
 
 ```shell
-ran baseline ibu --run-dir runs/2026-...
-ran baseline ibu --run-dir runs # all runs
+ran baseline ibu runs/2026-...
+ran baseline ibu runs # all runs
 ```
 
 IBU performs 1D per-variable unfolding with purity-based automatic binning. It builds the response matrix from MC, unfolds data, and converts the result to per-event weights for evaluation with the same metrics as RAN.

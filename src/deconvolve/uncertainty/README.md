@@ -122,10 +122,11 @@ One cell per invocation, so a cluster puts every cell on its own GPU and the
 whole design costs one training run of wall clock:
 
 ```bash
-ran uncertainty run --cell 0 --design-dir runs/unc_x -B 8 -S 8
-ran uncertainty collect --design-dir runs/unc_x -B 8 -S 8
-bash scripts/submit_uncertainty.sh          # the packed 8x8 on SLURM
-B=50 S=2 bash scripts/submit_uncertainty.sh # replicates on the bootstrap axis
+deconvolve uncertainty freeze runs/unc_x -B 8 -S 8
+deconvolve uncertainty run 0 runs/unc_x
+deconvolve uncertainty collect runs/unc_x
+bash scripts/submit_uncertainty.zsh          # the packed 8x8 on SLURM
+B=50 S=2 bash scripts/submit_uncertainty.zsh # replicates on the bootstrap axis
 ```
 
 Cells are numbered seed-major, so a design cut short after `k * S` cells is a

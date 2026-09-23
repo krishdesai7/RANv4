@@ -238,9 +238,7 @@ def test_uncertainty_run_without_a_frozen_design_names_freeze(project: Path) -> 
     design = project / "design"
     design.mkdir()
 
-    result = runner.invoke(
-        app, ["uncertainty", "run", "--cell", "0", "--design-dir", str(design)]
-    )
+    result = runner.invoke(app, ["uncertainty", "run", "0", str(design)])
 
     assert result.exit_code != 0
     assert "freeze" in result.output
@@ -250,7 +248,7 @@ def test_freeze_writes_the_resolved_values(project: Path) -> None:
     _ = (project / "deconvolve.toml").write_text("[uncertainty.freeze]\nn-epochs = 7\n")
     design = project / "design"
 
-    result = runner.invoke(app, ["uncertainty", "freeze", "--design-dir", str(design)])
+    result = runner.invoke(app, ["uncertainty", "freeze", str(design)])
 
     assert result.exit_code == 0
     import json
@@ -262,10 +260,10 @@ def test_freeze_writes_the_resolved_values(project: Path) -> None:
 
 def test_freeze_refuses_to_overwrite_without_force(project: Path) -> None:
     design = project / "design"
-    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    first = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert first.exit_code == 0
 
-    result = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    result = runner.invoke(app, ["uncertainty", "freeze", str(design)])
 
     assert result.exit_code != 0
     assert "--force" in result.output
@@ -273,10 +271,10 @@ def test_freeze_refuses_to_overwrite_without_force(project: Path) -> None:
 
 def test_freeze_overwrites_with_force(project: Path) -> None:
     design = project / "design"
-    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    first = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert first.exit_code == 0
 
-    result = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design), "--force"])
+    result = runner.invoke(app, ["uncertainty", "freeze", str(design), "--force"])
 
     assert result.exit_code == 0
 
@@ -287,7 +285,7 @@ def test_a_config_edit_after_freeze_does_not_reach_a_cell(project: Path) -> None
 
     _ = (project / "deconvolve.toml").write_text("[uncertainty.freeze]\nn-epochs = 7\n")
     design = project / "design"
-    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    first = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert first.exit_code == 0
 
     _ = (project / "deconvolve.toml").write_text(
@@ -303,11 +301,11 @@ def test_a_flag_overrides_a_frozen_value(
 ) -> None:
     """The one thing that still beats the frozen file: a flag on this line.
 
-    `cli.py` imports `run_cell` lazily, inside the command body
-    (`from .uncertainty import ... run_cell`), so it has to be patched on the
-    `deconvolve.uncertainty` module rather than as a name in `deconvolve.cli`.
+    `cli.py` binds `run_cell` at import (`from .uncertainty import ...
+    run_cell`), so it has to be patched as a name in `deconvolve.cli`; patching
+    the `deconvolve.uncertainty` module would leave the bound name untouched.
     """
-    from deconvolve import uncertainty
+    from deconvolve import cli
 
     seen: list[object] = []
 
@@ -318,21 +316,21 @@ def test_a_flag_overrides_a_frozen_value(
         seen.append(kwargs["n_epochs"])
         return design_dir / "cell_0000.npz"
 
-    monkeypatch.setattr(uncertainty, "run_cell", fake_run_cell)
+    monkeypatch.setattr(cli, "run_cell", fake_run_cell)
 
     design = project / "design"
     freeze = runner.invoke(
-        app, ["uncertainty", "freeze", "-d", str(design), "--n-epochs", "77"]
+        app, ["uncertainty", "freeze", str(design), "--n-epochs", "77"]
     )
     assert freeze.exit_code == 0
 
-    bare = runner.invoke(app, ["uncertainty", "run", "--cell", "0", "-d", str(design)])
+    bare = runner.invoke(app, ["uncertainty", "run", "0", str(design)])
     assert bare.exit_code == 0, bare.output
     assert seen[-1] == 77
 
     flagged = runner.invoke(
         app,
-        ["uncertainty", "run", "--cell", "0", "-d", str(design), "--n-epochs", "3"],
+        ["uncertainty", "run", "0", str(design), "--n-epochs", "3"],
     )
     assert flagged.exit_code == 0, flagged.output
     assert seen[-1] == 3
@@ -348,7 +346,7 @@ def test_environment_does_not_override_a_frozen_value(
     `_resolve_cell_settings` only lets a COMMANDLINE source beat the frozen
     file. Both halves are pinned: end to end here, and directly below.
     """
-    from deconvolve import uncertainty
+    from deconvolve import cli
 
     seen: list[object] = []
 
@@ -359,17 +357,17 @@ def test_environment_does_not_override_a_frozen_value(
         seen.append(kwargs["n_epochs"])
         return design_dir / "cell_0000.npz"
 
-    monkeypatch.setattr(uncertainty, "run_cell", fake_run_cell)
+    monkeypatch.setattr(cli, "run_cell", fake_run_cell)
 
     design = project / "design"
     freeze = runner.invoke(
-        app, ["uncertainty", "freeze", "-d", str(design), "--n-epochs", "77"]
+        app, ["uncertainty", "freeze", str(design), "--n-epochs", "77"]
     )
     assert freeze.exit_code == 0
 
     result = runner.invoke(
         app,
-        ["uncertainty", "run", "--cell", "0", "-d", str(design)],
+        ["uncertainty", "run", "0", str(design)],
         env={"DECONVOLVE_UNCERTAINTY_RUN_N_EPOCHS": "3"},
     )
 
@@ -402,7 +400,7 @@ def test_the_environment_overrides_a_config_file(project: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["uncertainty", "freeze", "-d", str(design)],
+        ["uncertainty", "freeze", str(design)],
         env={"DECONVOLVE_UNCERTAINTY_FREEZE_N_EPOCHS": "11"},
     )
 
@@ -419,7 +417,7 @@ def test_a_flag_overrides_the_environment(project: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["uncertainty", "freeze", "-d", str(design), "--n-epochs", "13"],
+        ["uncertainty", "freeze", str(design), "--n-epochs", "13"],
         env={"DECONVOLVE_UNCERTAINTY_FREEZE_N_EPOCHS": "11"},
     )
 
@@ -432,12 +430,12 @@ def test_a_flag_overrides_the_environment(project: Path) -> None:
 def test_a_not_layerable_option_has_no_environment_variable(project: Path) -> None:
     """`--force` is typed each time, not inherited from a shell profile."""
     design = project / "design"
-    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    first = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert first.exit_code == 0
 
     result = runner.invoke(
         app,
-        ["uncertainty", "freeze", "-d", str(design)],
+        ["uncertainty", "freeze", str(design)],
         env={"DECONVOLVE_UNCERTAINTY_FREEZE_FORCE": "1"},
     )
 
@@ -495,7 +493,7 @@ def test_freeze_writes_exactly_the_spec_declares(project: Path) -> None:
     from deconvolve.config_spec import build_spec
 
     design = project / "design"
-    result = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    result = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert result.exit_code == 0
 
     frozen: dict[str, Any] = json.loads((design / "design.json").read_text())
@@ -507,11 +505,11 @@ def test_freeze_writes_exactly_the_spec_declares(project: Path) -> None:
 def test_freeze_force_refuses_once_cells_exist(project: Path) -> None:
     """`--force` may only rewrite settings nothing has trained under yet."""
     design = project / "design"
-    first = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design)])
+    first = runner.invoke(app, ["uncertainty", "freeze", str(design)])
     assert first.exit_code == 0
     _ = (design / "cell_0000.npz").write_bytes(b"")
 
-    result = runner.invoke(app, ["uncertainty", "freeze", "-d", str(design), "--force"])
+    result = runner.invoke(app, ["uncertainty", "freeze", str(design), "--force"])
 
     assert result.exit_code != 0
     assert "cell" in result.output.lower()
@@ -527,9 +525,7 @@ def test_run_with_a_truncated_design_names_the_missing_keys(project: Path) -> No
         json.dumps({"config": {"n_epochs": 7}, "_origin": {}})
     )
 
-    result = runner.invoke(
-        app, ["uncertainty", "run", "--cell", "0", "--design-dir", str(design)]
-    )
+    result = runner.invoke(app, ["uncertainty", "run", "0", str(design)])
 
     assert result.exit_code != 0
     assert "n_datasets" in result.output
@@ -543,7 +539,7 @@ def test_uncertainty_collect_without_a_frozen_design_names_freeze(
     design = project / "design"
     design.mkdir()
 
-    result = runner.invoke(app, ["uncertainty", "collect", "--design-dir", str(design)])
+    result = runner.invoke(app, ["uncertainty", "collect", str(design)])
 
     assert result.exit_code != 0
     assert "freeze" in result.output
@@ -559,11 +555,11 @@ def test_uncertainty_collect_uses_the_frozen_grid_shape_not_the_flags(
     frozen at one grid shape but `collect`-ed under another silently
     misattributed variance between the bootstrap and seed axes.
     """
-    from deconvolve import uncertainty
+    from deconvolve import cli
 
     design = project / "design"
     freeze = runner.invoke(
-        app, ["uncertainty", "freeze", "-d", str(design), "-B", "2", "-S", "6"]
+        app, ["uncertainty", "freeze", str(design), "-B", "2", "-S", "6"]
     )
     assert freeze.exit_code == 0, freeze.output
 
@@ -576,12 +572,12 @@ def test_uncertainty_collect_uses_the_frozen_grid_shape_not_the_flags(
         seen.append(spec)
         return {}
 
-    monkeypatch.setattr(uncertainty, "collect", fake_collect)
+    monkeypatch.setattr(cli, "collect", fake_collect)
 
     # The code default for `-B`/`-S` (8x8) differs from the frozen 2x6 grid.
     # If `collect` were still deriving its shape from these flags/config
     # rather than `design.json`, this would decompose the wrong grid.
-    result = runner.invoke(app, ["uncertainty", "collect", "-d", str(design)])
+    result = runner.invoke(app, ["uncertainty", "collect", str(design)])
 
     assert result.exit_code == 0, result.output
     spec = seen[-1]

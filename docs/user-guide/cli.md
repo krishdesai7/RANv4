@@ -28,7 +28,7 @@ export DECONVOLVE_BASELINE_IBU_N_ITERATIONS=20   # baseline ibu --niter 20
 export DECONVOLVE_LOG_LEVEL=debug                 # --log-level debug
 ```
 
-An environment variable beats a config file, and a flag on the command line beats both. Each command's `--help` lists its variables as `[env var: ...]`. Options that must be typed each time have no variable: `--force`, `--load-run`, `--design-dir`, and every option of `uncertainty run`, which reads its frozen `design.json` instead.
+An environment variable beats a config file, and a flag on the command line beats both. Each command's `--help` lists its variables as `[env var: ...]`. Options that must be typed each time have no variable: `--force`, `--load-run`, and every option of `uncertainty run`, which reads its frozen `design.json` instead. Positional arguments such as `RUN_DIR`, `DESIGN_DIR` and `CELL` never read the environment.
 
 ---
 
@@ -350,7 +350,7 @@ Decomposes a finished design and writes an uncertainty table, `.npz`, and figure
 | :--- | :--- | :--- | :--- |
 | `--n-datasets` | `-B` | `int` | Value from `design.json`. |
 | `--n-seeds` | `-S` | `int` | Value from `design.json`. |
-| `--n-bins` | | `int` | Value from `design.json`. |
+| `--n-bins` | | `int` | `20` (not frozen; layerable) |
 | `--data-seed` | | `int` | Value from `design.json`. |
 | `--init-seed` | | `int` | Value from `design.json`. |
 

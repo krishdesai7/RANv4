@@ -43,7 +43,7 @@ each variable as `[env var: ...]`.
 layers 2-3. `cli.py`'s `_gate_autoenv` walks the built Click tree next to
 `_spec()` and sets `allow_from_autoenv` to whether the option is in that
 node's `CommandSpec.options`. So everything in `NOT_LAYERABLE` (`--force`,
-`--load-run`, `--design-dir`, ...) has no variable, and `uncertainty run`
+`--load-run`, ...) has no variable, and `uncertainty run`
 (in `FROZEN_COMMANDS`, so absent from the spec) has none. Typer's own
 `--install-completion`/`--show-completion` are in no spec either. Without
 the gate, an exported `DECONVOLVE_INSTALL_COMPLETION` would fire on every
@@ -138,12 +138,12 @@ need revisiting.
 
 Every Typer **Option** is layerable except:
 
-- Every positional **Argument** (`report`'s `run_dir`).
-- `design_dir` and `cell` on `uncertainty run` — per-job identity. The whole
-  point of a SLURM array is that these differ per invocation. But see below:
-  `uncertainty run` is excluded by a different, stronger mechanism than the
-  denylist that rejects these two by name on every other command.
-- `design_dir`, and `n_datasets`/`n_seeds`/`data_seed`/`init_seed`, on
+- Every positional **Argument**: `run_dir` on `evaluate`, `report` and
+  `baseline {ibu,omnifold}`; `design_dir` on `uncertainty {freeze,run,collect}`;
+  `cell` on `uncertainty run`. These are per-invocation identity (the whole
+  point of a SLURM array is that `cell` differs per job), and making them
+  positional excludes them without a denylist entry.
+- `n_datasets`/`n_seeds`/`data_seed`/`init_seed` on
   `uncertainty collect` — the design's grid shape, which `design.json` is the
   single authority for once `freeze` has run (see "The freeze path"); an
   ambient file must not be able to reach these even though `collect` itself
@@ -254,8 +254,8 @@ FROZEN_COMMANDS` excludes `("uncertainty", "run")` from the command tree
 `default_map` even by accident. Instead:
 
 ```bash
-deconvolve uncertainty freeze --design-dir DIR [options]   # once, on the login node
-deconvolve uncertainty run --cell N --design-dir DIR       # once per cell, in the array
+deconvolve uncertainty freeze DIR [options]   # once, on the login node
+deconvolve uncertainty run N DIR              # once per cell, in the array
 ```
 
 `freeze` resolves the full five-layer stack exactly once and writes
@@ -278,8 +278,11 @@ workflow, where a design directory had no configuration file at all and every
 cell just used whatever flags `scripts/submit_uncertainty.zsh` happened to
 pass.
 
-Precedence inside a cell is `COMMANDLINE > design.json > code default` —
-strictly narrower than the ordinary stack. `_resolve_cell_settings` checks
+Precedence inside a cell is `COMMANDLINE > design.json` — strictly narrower
+than the ordinary stack. `run`'s override options, and `collect`'s grid-shape
+ones, default to `None` rather than to code defaults: a cell has no code
+default to fall back to, since `_require_complete` has already refused a
+`design.json` missing any key. `_resolve_cell_settings` checks
 `ctx.get_parameter_source(name) is COMMANDLINE` per parameter and only then
 lets a typed flag override the frozen value; everything else, including an
 exported `DECONVOLVE_*` environment variable, is ignored. Environment variables are
@@ -293,7 +296,7 @@ reached it.
 
 `scripts/submit_uncertainty.zsh` calls `freeze` on the login node, between
 creating the design directory and calling `sbatch`; every cell inside the job
-script invokes only `--cell` and `--design-dir`.
+script passes only its `CELL` and `DESIGN_DIR` positionals.
 
 ## Deferred: `cache-dir` and `timing`
 

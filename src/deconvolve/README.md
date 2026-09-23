@@ -24,7 +24,7 @@ Usage:
 
 ```bash
     deconvolve evaluate                          # all runs in runs/
-    deconvolve evaluate --run-dir runs/2026-...  # single run
+    deconvolve evaluate runs/2026-...  # single run
     deconvolve evaluate --force                  # recompute existing
 ```
 

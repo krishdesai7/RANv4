@@ -48,9 +48,9 @@ def _gate_autoenv(command: Command, spec: CommandSpec | None, /) -> None:
     `deconvolve.toml`. A command outside the spec (`FROZEN_COMMANDS`) gets no
     variables at all, so `uncertainty run --help` does not advertise
     `DECONVOLVE_UNCERTAINTY_RUN_N_EPOCHS` that `_resolve_cell_settings` would
-    then ignore -- and `--cell`, which it would not ignore, cannot be
-    supplied ambiently. Derived from the spec rather than marked per option,
-    so the denylist stays the one list to maintain. Typer's own
+    then ignore. (Positional arguments such as `run`'s `CELL` never read the
+    environment in Typer, gated or not.) Derived from the spec rather than
+    marked per option, so the denylist stays the one list to maintain. Typer's own
     `--install-completion`/`--show-completion` are in no spec either, which is
     what keeps an exported `DECONVOLVE_INSTALL_COMPLETION` from firing on
     every invocation.
@@ -429,7 +429,7 @@ def _require_complete(frozen: dict[str, Any], design_dir: Path, /) -> None:
     if missing:
         raise typer.BadParameter(
             f"{design_dir / 'design.json'} is missing {sorted(missing)}; rerun "
-            f"`deconvolve uncertainty freeze --design-dir {design_dir}` to write a "
+            f"`deconvolve uncertainty freeze {design_dir}` to write a "
             f"complete file"
         )
 
@@ -449,7 +449,9 @@ def uncertainty_run_command(
     config: Annotated[Path | None, typer.Option()] = None,
     batch_size: Annotated[int | None, typer.Option("--batch-size", "-b", min=1)] = None,
     n_samples: Annotated[int | None, typer.Option("--n-samples", "-n", min=1)] = None,
-    hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
+    hidden_units: Annotated[
+        int | None, typer.Option("--hidden-units", "-u", min=1)
+    ] = None,
     n_layers: Annotated[int | None, typer.Option("--n-layers", "-l", min=1)] = None,
     n_epochs: Annotated[int | None, typer.Option("--n-epochs", "-e", min=1)] = None,
     n_disc_steps: Annotated[
@@ -536,7 +538,7 @@ def uncertainty_collect_command(
     design_dir: Annotated[Path, typer.Argument(help="Design directory to collect.")],
     n_datasets: Annotated[int | None, typer.Option("--n-datasets", "-B", min=2)] = None,
     n_seeds: Annotated[int | None, typer.Option("--n-seeds", "-S", min=2)] = None,
-    n_bins: Annotated[int | None, typer.Option(min=2)] = None,
+    n_bins: Annotated[int, typer.Option(min=2)] = 20,
     data_seed: Annotated[int | None, typer.Option()] = None,
     init_seed: Annotated[int | None, typer.Option()] = None,
 ) -> None:

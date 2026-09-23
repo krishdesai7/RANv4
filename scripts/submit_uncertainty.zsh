@@ -69,7 +69,7 @@ mkdir -p "${DESIGN_DIR}"
 # Fix the design's settings once, here on the login node, before any cell
 # exists. Cells read this file rather than the config layers, so an edit to
 # deconvolve.toml while the array is in flight cannot split the design.
-uv run deconvolve uncertainty freeze --design-dir "${DESIGN_DIR}" ${RUN_ARGS} \
+uv run deconvolve uncertainty freeze "${DESIGN_DIR}" ${RUN_ARGS} \
     -B "${B}" -S "${S}" --n-eval "${N_EVAL}"
 
 echo "Design dir: ${DESIGN_DIR}"
@@ -96,7 +96,7 @@ for cell in $(seq 0 $((CELLS - 1))); do
   # hand-rerun of one failed cell with a different RUN_ARGS must not be able
   # to diverge from what the rest of the array trained under.
   $step bash -c "
-      uv run deconvolve uncertainty run --cell '${cell}' --design-dir '${DESIGN_DIR}'
+      uv run deconvolve uncertainty run '${cell}' '${DESIGN_DIR}'
     " > "${log}" 2>&1 &
 
   while (( $(jobs -rp | wc -l) >= GPUS_TOTAL )); do
@@ -107,10 +107,10 @@ done
 wait || true
 
 uv run deconvolve uncertainty collect \
-    --design-dir "${DESIGN_DIR}" -B "${B}" -S "${S}" --n-bins "${N_BINS}"
+    "${DESIGN_DIR}" -B "${B}" -S "${S}" --n-bins "${N_BINS}"
 EOF
 )
 
 echo "Submitted packed job: ${JOB}"
 echo "Logs:    ${DESIGN_DIR}/slurm-${JOB}.log  (+ per-cell cell_NNNN.log)"
-echo "Collect: uv run deconvolve uncertainty collect --design-dir ${DESIGN_DIR} -B ${B} -S ${S}"
+echo "Collect: uv run deconvolve uncertainty collect ${DESIGN_DIR} -B ${B} -S ${S}"

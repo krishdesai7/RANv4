@@ -21,7 +21,7 @@ reproducible from a command in this directory._
 ### 1. The detector-level objective is saturated
 
 A converged, unweighted classifier separates `x_sim` from `x_data` by
-**0.014786 nats** (`ceiling.py` A). After RAN reweights, a _fresh_ converged
+**0.014786 nats** (`ceiling.py` A). After Deconvolve reweights, a _fresh_ converged
 classifier at a learning rate that demonstrably works finds only **0.000087
 nats** (`ceiling.py` C) — `g` removes **99.4%** of the available mismatch.
 Stable across seeds (0.000087 / 0.000173 / 0.000176).
@@ -32,16 +32,16 @@ There is essentially nothing left at detector level for a better `d`, a better
 ### 2. The detector-level objective does not identify the truth
 
 Scoring the **oracle** weight function `w*(z)` — the particle-level likelihood
-ratio, fitted on truth — against RAN's own weights on the criterion RAN selects
+ratio, fitted on truth — against Deconvolve's own weights on the criterion Deconvolve selects
 with (`ceiling.py` D, held-out test split):
 
 | weights     | detector MMD² | particle MMD² |   ESS |
 | ----------- | ------------: | ------------: | ----: |
 | unweighted  |      3.960e-2 |      5.899e-2 |  100% |
 | oracle `w*` |     +8.020e-4 |     −1.898e-4 | 80.1% |
-| RAN         | **−2.322e-4** |      4.579e-3 | 73.3% |
+| Deconvolve         | **−2.322e-4** |      4.579e-3 | 73.3% |
 
-**RAN scores better than the truth on the detector-level criterion**, on events
+**Deconvolve scores better than the truth on the detector-level criterion**, on events
 it never saw, while scoring far worse at particle level. This is not noise and
 not overfitting: `p(x | z)` is many-to-one, so the particle-level likelihood
 ratio pushed through the detector response is not the detector-level likelihood
@@ -54,7 +54,7 @@ more correct.
 
 ### 3. Capacity is irrelevant; the objective sets the performance
 
-`tilt.py` replaces the generator with an exponential family
+`tilt.py` replaces the generator with an exponential family`
 `w(z; b) = exp(-b·T(z))`, fitted by moment-matching at detector level — a convex
 root-find with no adversary and no training:
 
@@ -62,7 +62,7 @@ root-find with no adversary and no training:
 | ------------------------ | ---------: | ---------: | -------: |
 | tilt, degree 1           |      **6** |     +78.5% |   +92.5% |
 | tilt, degree 2           |         27 |     +77.0% |   +94.8% |
-| RAN                      |    ~34,000 |     +78.9% |   +92.1% |
+| Deconvolve                      |    ~34,000 |     +78.9% |   +92.1% |
 | oracle (fitted on truth) |          — | **+93.2%** |   +82.8% |
 
 **Six parameters match thirty-four thousand.** Across three orders of magnitude
@@ -72,7 +72,7 @@ price of not having truth, and it is not an optimisation failure.
 
 Degree 2 is the sharpest demonstration: 21 extra parameters **improve the
 fitted objective (92.5 → 94.8) and degrade the target (78.5 → 77.0)** in a
-deterministic convex solve. RAN's pathology reproduces with no adversary, no
+deterministic convex solve. Deconvolve's pathology reproduces with no adversary, no
 stochasticity and no epoch selection, which rules out every explanation
 involving the optimiser.
 
@@ -275,7 +275,7 @@ nothing was found, not that nothing is there. `hparam_collect.py` and
   argument, and the four runs do not test it.
 - **Generator capacity** — solid where it rests on `tilt.py` (§3), which is a
   deterministic convex solve with no seed: 6 parameters reach +78.5% and 27
-  reach +77.0%. The _RAN_ number in that table (+78.9%) is a single run and
+  reach +77.0%. The _Deconvolve_ number in that table (+78.9%) is a single run and
   carries a ±3 error bar, so read the tilt ladder, not the comparison to it.
 - **More observables** — 6 → 7 (`+ang2`) → 12 gave particle mass 22.5% → 31.1%
   → 31.4%, which looks like the predicted pattern but is **not evidence**: nine
@@ -303,7 +303,7 @@ rule recovers the headroom, and why better resolution would not help.
 
 ### Reading
 
-RAN performs at the ceiling its **objective** permits. The remaining gap is a
+Deconvolve performs at the ceiling its **objective** permits. The remaining gap is a
 property of the problem — the detector-level objective is unidentifying, and
 for jet mass the response is measurably non-universal between generators. The
 oracle comparison quantifies the ceiling; the tilt shows it is reached by six
@@ -349,8 +349,8 @@ uv run benchmarks/ceiling.py --run-dir runs/2026-… --epoch 43
 
 **A, the detector-level BCE floor.** A converged, unweighted classifier
 separating `x_sim` from `x_data`, in the architecture `build_discriminator`
-gives RAN, fitted on train and scored on val — the same two splits `val_d`
-comes from. RAN's `d` scoring far above this floor means `d` is the bottleneck;
+gives Deconvolve, fitted on train and scored on val — the same two splits `val_d`
+comes from. Deconvolve's `d` scoring far above this floor means `d` is the bottleneck;
 scoring at it means the residual is real. Those imply opposite moves on
 `lr_g`/`lr_d`/`n_disc_steps`, and `log 2 − BCE` estimates the Jensen–Shannon
 divergence only when `d` is near-optimal — so without this number a `val_d` of
@@ -388,7 +388,7 @@ it is then scored against reports a match it will not reproduce anywhere else,
 which is the failure the diagnostic exists to rule out.
 
 This reads `z_true` and hands it to a network, which is why it lives here and
-not under `src/ran/`: nothing importable as `deconvolve.*` should be able to do that by
+not under `src/deconvolve/`: nothing importable as `deconvolve.*` should be able to do that by
 accident. It is legitimate only because the stated goal is to tune against truth
 and say so.
 
@@ -526,7 +526,7 @@ score while still reporting it — §4 measures why mass is limited for reasons 
 hyperparameter reaches.
 
 **ESS is a column.** `val_ess` at the selected epoch, over the MMD subsample,
-so it is directly comparable to §2's oracle at 80.1% (13124 of 16384) and RAN
+so it is directly comparable to §2's oracle at 80.1% (13124 of 16384) and Deconvolve
 at 73.3%. It is the mechanism variable for `--lambda-dispersion`, which is how
 that coefficient gets calibrated instead of guessed. The `lr_g` sweep shows why
 it belongs here: ESS runs 11654 → 12175 → 12566 (71.1% → 74.3% → 76.7%) as
@@ -611,7 +611,7 @@ The primary metric is the ratio of host numpy time to training loop time. Traini
 
 Does float32 cost unfolding accuracy, or is the difference just seed variance?
 
-One run proves nothing: RAN is an adversarial min-max game, so two runs at different seeds in the _same_ dtype already differ by ~1 percentage point per dimension. Run an ensemble in each dtype and compare the two distributions. The script runs two ensembles in each dtype, and compares them.
+One run proves nothing: Deconvolve is an adversarial min-max game, so two runs at different seeds in the _same_ dtype already differ by ~1 percentage point per dimension. Run an ensemble in each dtype and compare the two distributions. The script runs two ensembles in each dtype, and compares them.
 
 ```zsh
 for s in $(seq 0 9); do
@@ -660,7 +660,7 @@ OmniFold needs TensorFlow, TensorFlow ships no wheels for this project's Python
 floor, and Keras binds its backend once per interpreter. The quarantine that
 answers all three is a PEP 723 script run through `uv run --no-project`, which
 provisions Python 3.13 and TensorFlow in an interpreter that cannot import
-`ran`. What the quarantine does not settle is the GPU, and that is what this
+`deconvolve`. What the quarantine does not settle is the GPU, and that is what this
 measures.
 
 ```zsh

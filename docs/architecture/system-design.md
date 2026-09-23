@@ -1,6 +1,6 @@
 # System Design
 
-RAN is structured by pipeline stage into specialized subpackages with strict, unidirectional dependency constraints.
+Deconvolve is structured by pipeline stage into specialized subpackages with strict, unidirectional dependency constraints.
 
 ---
 
@@ -27,7 +27,7 @@ src/deconvolve/
 
 ## Unidirectional Dependency Rule
 
-RAN strictly enforces a layered dependency hierarchy:
+Deconvolve strictly enforces a layered dependency hierarchy:
 
 ```mermaid
 flowchart TD
@@ -41,11 +41,11 @@ flowchart TD
     Evaluation --> Data
     Baselines --> Data
 
-    Training --> Rantypes["Types & Constants (deconvolve.coretypes)"]
-    Evaluation --> Rantypes
-    Baselines --> Rantypes
-    Data --> Rantypes
-    Reporting --> Rantypes
+    Training --> Coretypes["Types & Constants (deconvolve.coretypes)"]
+    Evaluation --> Coretypes
+    Baselines --> Coretypes
+    Data --> Coretypes
+    Reporting --> Coretypes
 
     Training --> Instrumentation["Instrumentation (deconvolve.instrumentation)"]
 ```

@@ -1,4 +1,4 @@
-<!-- markdownlint-disable ul-indent -->
+<!-- markdownlint-disable ul-indent no-inline-html -->
 # CLI Reference
 
 The `deconvolve` CLI is a single Typer command tree with the following subcommands:
@@ -18,7 +18,7 @@ The `deconvolve` CLI is a single Typer command tree with the following subcomman
 
 Every layerable `train` and `uncertainty` option also resolves as described in [Configuration](configuration.md).
 
-### Environment Variables
+## Environment Variables
 
 Any option that a config file can set can also be set with an environment variable. The name is `DECONVOLVE_`, then the command path, then the option's parameter name, all upper-case with `-` turned into `_`:
 
@@ -34,61 +34,78 @@ An environment variable beats a config file, and a flag on the command line beat
 
 ## Global Options
 
-`--log-level` (`-L`) is a global option and must be placed **before** the subcommand. For example:
+| Long option | Short option | Type | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--log-level` | `-L` | `LogLevel` | `info` | Application log level. Options: `debug`, `info`, `warning`, `error`, `critical`. |
+| `--install-completion` | | `bool` | | Install shell autocompletion. |
+| `--show-completion` | | `bool` | | Print the completion script. |
+| `--help` | | `bool` | | |
 
-```shell
-deconvolve -Ldebug train --config params/1d_default.yaml
-```
+!!! note
+    `--log-level` (`-L`) can precede a subcommand, and must be placed **before** the subcommand. For example:
 
-| Long option | Short | Type | Default | Env Var | Description |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `--log-level` | `-L` | `LogLevel` | `info` | `DECONVOLVE_LOG_LEVEL` | Application log level. Options: `debug`, `info`, `warning`, `error`, `critical`. |
-| `--install-completion` | | `bool` | | | Install shell autocompletion. |
-| `--show-completion` | | `bool` | | | Print the completion script. |
-| `--help` | | `bool` | | | |
-
+    ```shell
+    deconvolve -Ldebug train --config params/1d_default.yaml
+    ```
 ---
 
 ## `deconvolve train`
 
+Usage:
+
 ```shell
-deconvolve train [OPTIONS]
+deconvolve train [-D{gaussian|jets}]
+                 [--config <path>]
+                 [-v<str>]...
+                 [-n<int>]
+                 [--data-seed <int>]
+                 [-r<path>]
+                 [-u<int>]
+                 [-l<int>]
+                 [-e<int>]
+                 [-b<int>]
+                 [-k<int>]
+                 [--lr-g <float>]
+                 [--lr-d <float>]
+                 [--lambda-dispersion <float>]
+                 [--seed <int>]
+                 [--run-dir <path>]
+                 [--plots | --no-plots]
+                 [--log-every <int>]
 ```
 
 ### Dataset
 
-| Long option | Short | Type | Default | Description |
+| Long option | Short option | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `--dataset` | `-D` | `Dataset` | `gaussian` | Dataset to train on. Options: `gaussian`, `jets`. |
 | `--config` | | `Path` | `None` | YAML config file (Gaussian datasets only). |
 | `--n-samples` | `-n` | `int` | `500000` | Number of events to generate/load. |
-| `--var` | `-v` | `str`, repeatable | all twelve | Jet substructure variable(s) to train on, e.g. `-vm -vw`. Ignored for `gaussian`. |
+| `--var` | `-v` | `str`, repeatable | all | Jet substructure variable(s) to train on, e.g. `-vm -vw`. Ignored for `gaussian`. |
 | `--data-seed` | | `int` | `42` | Seed for dataset sampling and the train/val/test split. |
 | `--load-run` | `-r` | `Path` | `None` | Reload a previously saved run directory instead of starting fresh. |
 
 ### Architecture & Optimization
 
-| Long option | Short | Type | Default | Description |
+| Long option | Short option | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `--hidden-units` | `-u` | `int` | `64` | Hidden units per dense layer, generator and discriminator. |
 | `--n-layers` | `-l` | `int` | `2` | Number of hidden dense layers, generator and discriminator. |
 | `--n-epochs` | `-e` | `int` | `100` | Number of training epochs. |
 | `--batch-size` | `-b` | `int` | `1024` | Batch size per training step. |
 | `--n-disc-steps` | `-k` | `int` | `5` | Discriminator updates per generator update. |
-| `--lr-g` | | `float` | `3e-5` | Generator learning rate (Adam). Tuned; see `benchmarks/README.md`. |
-| `--lr-d` | | `float` | `1e-4` | Discriminator learning rate (Adam). |
+| `--lr-g` | | `float` | `3e-5` | Generator learning rate (<span style="font-variant: small-caps;">Adam</span>). Tuned; see `benchmarks/README.md`. |
+| `--lr-d` | | `float` | `1e-4` | Discriminator learning rate (<span style="font-variant: small-caps;">Adam</span>). |
 | `--lambda-dispersion` | | `float` | `0.015` | Penalty on the variance of the generator's normalized weights. `0` disables it. |
-| `--seed` | | `int` | `None` (random) | Seed for model initialization and shuffle order. |
+| `--seed` | | `int` | `None` | Seed for model initialization and shuffle order. Defaults to a random value. |
 
 ### Output
 
-| Long option | Short | Type | Default | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `--run-dir` | | `Path` | `None` (UTC timestamp under `runs/`) | Where to save this run. |
-| `--plots` / `--no-plots` | | `bool` | `--plots` | Draw diagnostic figures. Metrics are computed either way. |
-| `--log-every` | | `int` | `1` | Log every N epochs. |
-
-There is no `--tag` and no `--runs-dir`; name a run explicitly with `--run-dir`.
+| Long option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--run-dir` | `Path` | `None` | Where to save this run. Defaults to UTC timestamp under `runs/` |
+| `--plots` / `--no-plots` | `bool` | `True` | Draw diagnostic figures. Metrics are computed either way. |
+| `--log-every` | `int` | `1` | Log every N epochs. |
 
 ---
 
@@ -96,17 +113,19 @@ There is no `--tag` and no `--runs-dir`; name a run explicitly with `--run-dir`.
 
 Compute distance metrics for one run, or every run under a parent directory (see [Evaluation & Metrics](evaluation.md)).
 
+Usage:
+
 ```shell
-deconvolve evaluate [OPTIONS]
+deconvolve evaluate RUN_DIR [--force]
 ```
 
-| Long option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--run-dir` | `Path` | `runs` | A single run directory, or a parent directory of several. |
-| `--force` / `--no-force` | `bool` | `--no-force` | Recompute even if `metrics.json` already exists. |
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `RUN_DIR` | `Path` | Run directory to evaluate. |
 
-There is no `--n-bins`; the histogram resolution used by the Jensen-Shannon and
-triangular-discriminator metrics is fixed in code, not exposed on the CLI.
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--force` | `bool` | `False` | Recompute even if `metrics.json` already exists. |
 
 ---
 
@@ -114,17 +133,20 @@ triangular-discriminator metrics is fixed in code, not exposed on the CLI.
 
 Compile a run directory into one PDF dossier (see [Reporting & Artifacts](reporting.md)).
 
+Usage:
+
 ```shell
-deconvolve report RUN_DIR [OPTIONS]
+deconvolve report RUN_DIR [--force] [--no-compile]
 ```
 
-| Argument/option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `run_dir` (positional) | `Path` | required | Run directory to report on. |
-| `--force` | `bool` | `False` | Rebuild an existing `report.pdf`. |
-| `--compile` / `--no-compile` | `bool` | `--compile` | Compile the LaTeX, or stop at `artifacts/report.tex`. |
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `RUN_DIR` | `Path` | Run directory to evaluate. |
 
-`run_dir` is a positional argument, not `--run-dir`.
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--force` | `bool` | `False` | Rebuild an existing `report.pdf`. |
+| `--compile`/`--no-compile` | `bool` | `True` | Compile the LaTeX, or stop at `artifacts/report.tex`. |
 
 ---
 
@@ -134,31 +156,39 @@ Run comparison baselines against the same run directory a `deconvolve train` cal
 
 ### `deconvolve baseline ibu`
 
+Usage:
+
 ```shell
-deconvolve baseline ibu [OPTIONS]
+deconvolve baseline ibu RUN_DIR [--force] [-i<int>] [--purity-threshold <float>]
 ```
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `RUN_DIR` | `Path` | Run directory to add the IBU baseline to. |
 
 | Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--run-dir` | | `Path` | `runs` | Run directory (or parent of several) to evaluate against. |
-| `--force` / `--no-force` | | `bool` | `--no-force` | Recompute even if already evaluated. |
-| `--niter` | `-i` | `int` | `10` | IBU iterations. |
+| `--force` | | `bool` | `False` | Recompute even if already evaluated. |
+| `--niter` | `-i` | `int` | `10` | Number of IBU iterations. |
 | `--purity-threshold` | | `float` | `√0.5 ≈ 0.7071` | Purity threshold used by the response matrix. |
 
 ### `deconvolve baseline omnifold`
 
-Runs in a quarantined Python 3.13 subprocess; needs `uv` on `PATH`, and on Perlmutter needs `module load cudatoolkit/12.9` (without it, TensorFlow silently falls back to CPU).
+Runs in a Python 3.13 subprocess; needs `uv` on `PATH`, and CUDA 12 (without it, TensorFlow silently falls back to CPU). On many HPC systems, CUDA 12.9 can be loaded with `module load cudatoolkit/12`.
 
 ```shell
-deconvolve baseline omnifold [OPTIONS]
+deconvolve baseline omnifold RUN_DIR [--force] [-i<int>] [-e<int>] [-b<int>]
 ```
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `RUN_DIR` | `Path` | Run directory to add the OmniFold baseline to. |
 
 | Long option | Short | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--run-dir` | | `Path` | `runs` | Run directory (or parent of several) to evaluate against. |
-| `--force` / `--no-force` | | `bool` | `--no-force` | Recompute even if already evaluated. |
-| `--niter` | `-i` | `int` | `3` | OmniFold iterations. |
-| `--n-epochs` | `-e` | `int` | `50` | Epochs per iteration. |
+| `--force` | | `bool` | `False` | Recompute even if already evaluated. |
+| `--niter` | `-i` | `int` | `3` | Number of OmniFold iterations. |
+| `--n-epochs` | `-e` | `int` | `50` | Number of epochs per iteration. |
 | `--batch-size` | `-b` | `int` | `512` | Batch size. |
 
 ---
@@ -167,8 +197,13 @@ deconvolve baseline omnifold [OPTIONS]
 
 Verifies that `z_true` never reaches a network.
 
+Usage:
+
 ```shell
-deconvolve leakage-check [OPTIONS]
+deconvolve leakage-check [--poison | --clean]
+                         [-S<float>]
+                         [--seed <int>]
+                         [--init-seed <int>]
 ```
 
 | Long option | Short | Type | Default | Description |
@@ -177,8 +212,6 @@ deconvolve leakage-check [OPTIONS]
 | `--sentinel` | `-S` | `float` | `-999.0` | Sentinel value used in `--poison` mode. |
 | `--seed` | | `int` | `42` | Model initialization seed. |
 | `--init-seed` | | `int` | `0` | Bootstrap/init seed. |
-
-There is no `--config`; this command does not read a dataset config file.
 
 ---
 
@@ -189,22 +222,44 @@ cells (typically a SLURM array), then a final `collect`.
 
 ### `deconvolve uncertainty freeze`
 
+Usage:
+
 ```shell
-deconvolve uncertainty freeze --design-dir DIR [OPTIONS]
+deconvolve uncertainty freeze DESIGN_DIR
+                                [--force]
+                                [-B<int>]
+                                [-S<int>]
+                                [--n-eval <int>]
+                                [-D{gaussian|jets}]
+                                [-v<str>]...
+                                [--config <path>]
+                                [-b<int>]
+                                [-n<int>]
+                                [-u<int>]
+                                [-l<int>]
+                                [-k<int>]
+                                [--lr-g <float>]
+                                [--lr-d <float>]
+                                [--lambda-dispersion <float>]
+                                [--data-seed <int>]
+                                [--init-seed <int>]
+
 ```
 
-Resolves the full config stack once and writes `DIR/design.json`, which every
-`uncertainty run` cell then reads instead of the ordinary config layers.
+Resolves the full config stack once and writes `DESIGN_DIR/design.json`, which every `uncertainty run` cell then reads instead of the ordinary config layers.
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `DESIGN_DIR` | `Path` | Design directory to freeze. |
 
 | Long option | Short | Type | Default |
 | :--- | :--- | :--- | :--- |
-| `--design-dir` | `-d` | `Path` | required |
 | `--force` | | `bool` | `False` |
 | `--n-datasets` | `-B` | `int` | `8` |
 | `--n-seeds` | `-S` | `int` | `8` |
 | `--n-eval` | | `int` | `100000` |
-| `--dataset` | `-D` | `gaussian\|jets` | `jets` |
-| `--var` | `-v` | `str`, repeatable | all twelve |
+| `--dataset` | `-D` | `Dataset` | `jets` |
+| `--var` | `-v` | `str`, repeatable | all |
 | `--config` | | `Path` | `None` |
 | `--batch-size` | `-b` | `int` | `1024` |
 | `--n-samples` | `-n` | `int` | `500000` |
@@ -220,44 +275,99 @@ Resolves the full config stack once and writes `DIR/design.json`, which every
 
 ### `deconvolve uncertainty run`
 
-```shell
-deconvolve uncertainty run --cell N --design-dir DIR
-```
-
-Trains one `(bootstrap dataset, init seed)` cell of the design. Takes the same options
-as `freeze` plus a required `--cell`/`-c`, but reads their values from the frozen
-`design.json` rather than the config stack — an explicit flag on the command line still
-overrides the frozen value, nothing else does.
-
-### `deconvolve uncertainty collect`
+Usage:
 
 ```shell
-deconvolve uncertainty collect --design-dir DIR [OPTIONS]
+deconvolve uncertainty run CELL DESIGN_DIR
+                                [--force]
+                                [-B<int>]
+                                [-S<int>]
+                                [--n-eval <int>]
+                                [-D{gaussian|jets}]
+                                [-v<str>]...
+                                [--config <path>]
+                                [-b<int>]
+                                [-n<int>]
+                                [-u<int>]
+                                [-l<int>]
+                                [-k<int>]
+                                [--lr-g <float>]
+                                [--lr-d <float>]
+                                [--lambda-dispersion <float>]
+                                [--data-seed <int>]
+                                [--init-seed <int>]
+
 ```
 
-Decomposes a finished design and writes its table, `.npz`, and figure.
+Trains one `(bootstrap dataset, init seed)` cell of the design. Takes the same argument and options as `freeze` plus a required CELL argument, but reads their values from the frozen `DESIGN_DIR/design.json` rather than the config stack. An explicit flag on the command line still overrides the frozen value.
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `CELL` | `int` | Cell number to train. |
+| `DESIGN_DIR` | `Path` | Design directory to read options from. |
 
 | Long option | Short | Type | Default |
 | :--- | :--- | :--- | :--- |
-| `--design-dir` | `-d` | `Path` | required |
-| `--n-datasets` | `-B` | `int` | `8` |
-| `--n-seeds` | `-S` | `int` | `8` |
-| `--n-bins` | | `int` | `20` |
-| `--data-seed` | | `int` | `42` |
-| `--init-seed` | | `int` | `0` |
+| `--force` | | `bool` | `False` |
+| `--n-datasets` | `-B` | `int` | Value from `design.json`. |
+| `--n-seeds` | `-S` | `int` | Value from `design.json`. |
+| `--n-eval` | | `int` | Value from `design.json`. |
+| `--dataset` | `-D` | `Dataset` | Value from `design.json`. |
+| `--var` | `-v` | `str`, repeatable | Value from `design.json`. |
+| `--config` | | `Path` | Value from `design.json`. |
+| `--batch-size` | `-b` | `int` | Value from `design.json`. |
+| `--n-samples` | `-n` | `int` | Value from `design.json`. |
+| `--hidden-units` | `-u` | `int` | Value from `design.json`. |
+| `--n-layers` | `-l` | `int` | Value from `design.json`. |
+| `--n-epochs` | `-e` | `int` | Value from `design.json`. |
+| `--n-disc-steps` | `-k` | `int` | Value from `design.json`. |
+| `--lr-g` | | `float` | Value from `design.json`. |
+| `--lr-d` | | `float` | Value from `design.json`. |
+| `--lambda-dispersion` | | `float` | Value from `design.json`. |
+| `--data-seed` | | `int` | Value from `design.json`. |
+| `--init-seed` | | `int` | Value from `design.json`. |
+
+### `deconvolve uncertainty collect`
+
+Usage:
+
+```shell
+deconvolve uncertainty collect DESIGN_DIR
+                                [-B<int>]
+                                [-S<int>]
+                                [--n-bins <int>]
+                                [--data-seed <int>]
+                                [--init-seed <int>]
+```
+
+Decomposes a finished design and writes an uncertainty table, `.npz`, and figure for it.
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `DESIGN_DIR` | `Path` | Design directory to collect. |
+
+| Long option | Short | Type | Default |
+| :--- | :--- | :--- | :--- |
+| `--n-datasets` | `-B` | `int` | Value from `design.json`. |
+| `--n-seeds` | `-S` | `int` | Value from `design.json`. |
+| `--n-bins` | | `int` | Value from `design.json`. |
+| `--data-seed` | | `int` | Value from `design.json`. |
+| `--init-seed` | | `int` | Value from `design.json`. |
 
 ---
 
 ## `deconvolve config show`
 
-Prints the resolved value of every setting next to the file, variable, or default it
-came from.
+Prints the resolved value of every setting and its source.
 
 ```shell
-deconvolve config show [COMMAND] [OPTIONS]
+deconvolve config show [COMMAND] [--json]
 ```
 
-| Argument/option | Type | Default | Description |
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `COMMAND` | `str` | Scope the listing to one command, e.g. `deconvolve config show train`. |
+
+| Long option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `command` (positional, optional) | `str` | `None` | Scope the listing to one command, e.g. `deconvolve config show train`. |
-| `--json` | `bool` | `False` | Emit the same content as JSON, for scripting. |
+| `--json` | `bool` | `False` | Emit the same content as machine-readable JSON. |

@@ -12,11 +12,11 @@ from typer.core import TyperGroup, TyperOption
 
 from .baselines import ibu_evaluate_runs, omnifold_evaluate_runs
 from .config import ConfigError, default_map, discover, load, origins_for
+from .config_show import render
 from .config_spec import build_spec
 from .coretypes import (
     DEFAULT_PURITY_THRESHOLD,
     POISON_SENTINEL,
-    RUN_DIR,
     SUBSTRUCTURE_VARIABLES,
     DatasetName,
     LogLevel,
@@ -24,6 +24,7 @@ from .coretypes import (
 from .evaluation import evaluate_runs
 from .instrumentation import configure_logging
 from .reporting import build_report
+from .uncertainty import DesignSpec, collect, freeze_design, load_frozen, run_cell
 from .workflows import run, run_leakage_check
 
 if TYPE_CHECKING:
@@ -260,7 +261,13 @@ def train_command(
 
 
 @app.command(name="evaluate")
-def evaluate_command(run_dir: Path = RUN_DIR, force: bool = False) -> None:
+def evaluate_command(
+    run_dir: Annotated[
+        Path,
+        typer.Argument(help="Run directory to report on."),
+    ],
+    force: bool = False,
+) -> None:
     evaluate_runs(run_dir, force)
 
 
@@ -284,7 +291,9 @@ def report_command(
 
 @baseline_app.command(name="ibu")
 def ibu_command(
-    run_dir: Path = RUN_DIR,
+    run_dir: Annotated[
+        Path, typer.Argument(help="Run directory to add the IBU baseline to.")
+    ],
     force: bool = False,
     n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 10,
     purity_threshold: float = DEFAULT_PURITY_THRESHOLD,
@@ -299,7 +308,9 @@ def ibu_command(
 
 @baseline_app.command(name="omnifold")
 def omnifold_command(
-    run_dir: Path = RUN_DIR,
+    run_dir: Annotated[
+        Path, typer.Argument(help="Run directory to add the OmniFold baseline to.")
+    ],
     force: bool = False,
     n_iterations: Annotated[int, typer.Option("--niter", "-i", min=1)] = 3,
     n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 50,
@@ -316,7 +327,7 @@ def omnifold_command(
 @uncertainty_app.command(name="freeze")
 def uncertainty_freeze_command(
     ctx: typer.Context,
-    design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
+    design_dir: Annotated[Path, typer.Argument(help="Design directory to freeze.")],
     force: Annotated[bool, typer.Option("--force")] = False,
     n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
     n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
@@ -344,8 +355,6 @@ def uncertainty_freeze_command(
     submitting the array. Cells read this file instead of the config layers, so
     editing `deconvolve.toml` mid-array cannot split a design.
     """
-    from .uncertainty import freeze_design
-
     names: tuple[str, ...] = tuple(
         sorted(_spec().children["uncertainty"].children["freeze"].options)
     )
@@ -428,27 +437,31 @@ def _require_complete(frozen: dict[str, Any], design_dir: Path, /) -> None:
 @uncertainty_app.command(name="run")
 def uncertainty_run_command(
     ctx: typer.Context,
-    cell: Annotated[int, typer.Option("--cell", "-c", min=0)],
-    design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
-    n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
-    n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
-    n_eval: Annotated[int, typer.Option(min=1)] = 100_000,
-    dataset: Annotated[DatasetName, typer.Option("--dataset", "-D")] = DatasetName.jets,
+    cell: Annotated[int, typer.Argument(help="Cell number to train.", min=0)],
+    design_dir: Annotated[
+        Path, typer.Argument(help="Design directory to read options from.")
+    ],
+    n_datasets: Annotated[int | None, typer.Option("--n-datasets", "-B", min=2)] = None,
+    n_seeds: Annotated[int | None, typer.Option("--n-seeds", "-S", min=2)] = None,
+    n_eval: Annotated[int | None, typer.Option(min=1)] = None,
+    dataset: Annotated[DatasetName | None, typer.Option("--dataset", "-D")] = None,
     variable: Annotated[list[str] | None, typer.Option("--var", "-v")] = None,
     config: Annotated[Path | None, typer.Option()] = None,
-    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 1024,
-    n_samples: Annotated[int, typer.Option("--n-samples", "-n", min=1)] = 500_000,
+    batch_size: Annotated[int | None, typer.Option("--batch-size", "-b", min=1)] = None,
+    n_samples: Annotated[int | None, typer.Option("--n-samples", "-n", min=1)] = None,
     hidden_units: Annotated[int, typer.Option("--hidden-units", "-u", min=1)] = 64,
-    n_layers: Annotated[int, typer.Option("--n-layers", "-l", min=1)] = 2,
-    n_epochs: Annotated[int, typer.Option("--n-epochs", "-e", min=1)] = 100,
-    n_disc_steps: Annotated[int, typer.Option("--n-disc-steps", "-k", min=1)] = 5,
-    lr_g: Annotated[float, typer.Option("--lr-g", min=0.0)] = 3e-5,
-    lr_d: Annotated[float, typer.Option("--lr-d", min=0.0)] = 1e-4,
+    n_layers: Annotated[int | None, typer.Option("--n-layers", "-l", min=1)] = None,
+    n_epochs: Annotated[int | None, typer.Option("--n-epochs", "-e", min=1)] = None,
+    n_disc_steps: Annotated[
+        int | None, typer.Option("--n-disc-steps", "-k", min=1)
+    ] = None,
+    lr_g: Annotated[float | None, typer.Option("--lr-g", min=0.0)] = None,
+    lr_d: Annotated[float | None, typer.Option("--lr-d", min=0.0)] = None,
     lambda_dispersion: Annotated[
-        float, typer.Option("--lambda-dispersion", min=0.0)
-    ] = 0.015,
-    data_seed: Annotated[int, typer.Option()] = 42,
-    init_seed: Annotated[int, typer.Option()] = 0,
+        float | None, typer.Option("--lambda-dispersion", min=0.0)
+    ] = None,
+    data_seed: Annotated[int | None, typer.Option()] = None,
+    init_seed: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Train one (bootstrap dataset, init seed) cell of the design.
 
@@ -456,8 +469,6 @@ def uncertainty_run_command(
     layers: an edited `deconvolve.toml` must not be able to change what cell 30 of a
     64-cell array measures. An explicit flag still wins.
     """
-    from .uncertainty import DesignSpec, load_frozen, run_cell
-
     # Every option below is read back out of `settings`, not by name: that is
     # what lets an explicit flag override one frozen value without the other
     # sixteen falling back to their bare code defaults. They still have to be
@@ -522,12 +533,12 @@ def uncertainty_run_command(
 @uncertainty_app.command(name="collect")
 def uncertainty_collect_command(
     ctx: typer.Context,
-    design_dir: Annotated[Path, typer.Option("--design-dir", "-d")],
-    n_datasets: Annotated[int, typer.Option("--n-datasets", "-B", min=2)] = 8,
-    n_seeds: Annotated[int, typer.Option("--n-seeds", "-S", min=2)] = 8,
-    n_bins: Annotated[int, typer.Option("--n-bins", min=2)] = 20,
-    data_seed: int = 42,
-    init_seed: int = 0,
+    design_dir: Annotated[Path, typer.Argument(help="Design directory to collect.")],
+    n_datasets: Annotated[int | None, typer.Option("--n-datasets", "-B", min=2)] = None,
+    n_seeds: Annotated[int | None, typer.Option("--n-seeds", "-S", min=2)] = None,
+    n_bins: Annotated[int | None, typer.Option(min=2)] = None,
+    data_seed: Annotated[int | None, typer.Option()] = None,
+    init_seed: Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """Decompose a finished design and write its table, npz and figure.
 
@@ -538,8 +549,6 @@ def uncertainty_collect_command(
     the reverse). A flag typed on this line still wins, exactly as it does
     for `uncertainty run`.
     """
-    from .uncertainty import DesignSpec, collect, load_frozen
-
     # Read back out of `settings`, not by name: see the matching note on
     # `uncertainty_run_command`.
     _ = (n_datasets, n_seeds, data_seed, init_seed)
@@ -583,7 +592,6 @@ def config_show_command(
     as_json: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
 ) -> None:
     """Show what the config files said, and where each value came from."""
-    from .config_show import render
 
     # The root callback tolerates a `ConfigError` only for this command, and
     # stashes whichever of the two this invocation produced -- never both --

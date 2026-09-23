@@ -1,6 +1,6 @@
 # Timing & Profiling
 
-RAN includes a zero-dependency, low-overhead microsecond timing harness in `deconvolve.instrumentation.timing`.
+Deconvolve includes a zero-dependency, low-overhead microsecond timing harness in `deconvolve.instrumentation.timing`.
 
 ---
 

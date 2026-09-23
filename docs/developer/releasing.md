@@ -1,6 +1,6 @@
 # Releasing & Versioning
 
-RAN uses [`rooster`](https://github.com/astral-sh/rooster) for automated changelog generation and SemVer release management.
+Deconvolve uses [`rooster`](https://github.com/astral-sh/rooster) for automated changelog generation and SemVer release management.
 
 ---
 

@@ -1,6 +1,6 @@
 # Contributing & Tooling
 
-RAN enforces rigorous code quality, formatting, typing, and testing standards.
+Deconvolve enforces rigorous code quality, formatting, typing, and testing standards.
 
 ---
 

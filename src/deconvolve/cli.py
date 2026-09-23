@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from logging import Logger
     from typing import Any
 
+    from typer._click.core import ParameterSource
+
     from .config import Resolved
     from .config_spec import CommandSpec
 
@@ -193,7 +195,10 @@ def train_command(
         plots=plots,
         run_dir=run_dir,
         origins=origins_for(
-            ctx, resolved, ("train",), names=sorted(_spec().children["train"].options)
+            ctx,
+            resolved,
+            path=("train",),
+            names=sorted(_spec().children["train"].options),
         ),
     )
 
@@ -335,7 +340,7 @@ def _resolve_cell_settings(
     """
 
     def _from_commandline(name: str, /) -> bool:
-        source = ctx.get_parameter_source(name)
+        source: ParameterSource | None = ctx.get_parameter_source(name)
         return source is not None and source.name == "COMMANDLINE"
 
     return {
@@ -437,12 +442,12 @@ def uncertainty_run_command(
         cell,
         design_dir,
         DesignSpec(
-            settings["n_datasets"],
-            settings["n_seeds"],
-            settings["data_seed"],
-            settings["init_seed"],
+            n_datasets=settings["n_datasets"],
+            n_seeds=settings["n_seeds"],
+            data_seed=settings["data_seed"],
+            init_seed=settings["init_seed"],
         ),
-        dataset=DatasetName(settings["dataset"]),
+        dataset=DatasetName(value=settings["dataset"]),
         variables=_canonical_variables(settings["variable"]),
         config=Path(config_setting) if config_setting is not None else None,
         n_samples=settings["n_samples"],
